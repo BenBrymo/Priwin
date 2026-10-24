@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -99,6 +98,7 @@ fun FixturesScreen(
 
 @Composable
 private fun TopPicksList(state: AppUiState, onOpenTopPick: (TopPick) -> Unit) {
+    var folded by rememberSaveable { mutableStateOf(emptySet<String>()) }
     if (state.topPicksLoading && state.topPicks.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = IndigoPrimary)
@@ -123,49 +123,103 @@ private fun TopPicksList(state: AppUiState, onOpenTopPick: (TopPick) -> Unit) {
         item {
             AppCard(
                 title = "Top ${state.topPicks.size} picks",
-                subtitle = "Strongest consensus pick of each upcoming fixture, across all leagues · tap to open the analysis",
+                subtitle = "Ranked by strength across all leagues, grouped by week · tap a card to open the analysis",
                 accentColor = WinGreen
             ) {}
         }
-        itemsIndexed(state.topPicks, key = { _, p -> "${p.leagueId}|${p.date}|${p.home}|${p.away}" }) { index, tp ->
-            val pick = tp.pick
-            AppCard(onClick = { onOpenTopPick(tp) }) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "#${index + 1}",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = if (index < 3) WinGreen else TextSecondary,
-                        modifier = Modifier.width(48.dp)
-                    )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "${tp.homeDisplay} v ${tp.awayDisplay}",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = TextPrimary,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            tp.leagueName + " · " + DateUtils.kickoffLabelWithYear(tp.date, tp.time),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = TextMuted
+        // Same week groups as the league list: Monday-Sunday, foldable, games side by side.
+        val thisWeek = ReportBuilder.weekStartOf(LocalDate.now().toString())
+        val ranked = state.topPicks.mapIndexed { i, tp -> (i + 1) to tp }
+        val groups = ranked.groupBy { ReportBuilder.weekStartOf(it.second.date) }
+            .entries.sortedBy { it.key?.toEpochDay() ?: Long.MAX_VALUE }
+        val fmt = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
+        for ((week, list) in groups) {
+            val key = "t|${week ?: "none"}"
+            val open = key !in folded
+            val title = when {
+                week == null -> "Date TBC"
+                week == thisWeek -> "This week"
+                thisWeek != null && week == thisWeek.plusWeeks(1) -> "Next week"
+                else -> "Week of ${week.format(fmt)}"
+            }
+            val range = if (week != null) "${week.format(fmt)} - ${week.plusDays(6).format(fmt)}" else ""
+            item(key = "wk_$key") {
+                AppCard(onClick = { folded = if (key in folded) folded - key else folded + key }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(title, style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                            Text(
+                                listOf(range, "${list.size} ${if (list.size == 1) "pick" else "picks"}")
+                                    .filter { it.isNotBlank() }.joinToString(" · "),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextMuted
+                            )
+                        }
+                        Icon(
+                            if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                            contentDescription = if (open) "Fold" else "Unfold",
+                            tint = TextSecondary
                         )
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-                Text(pick.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = WinGreen)
+            }
+            if (open) {
+                item(key = "row_$key") {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(end = 16.dp)
+                    ) {
+                        items(
+                            list.sortedBy { DateUtils.sortKey(it.second.date, it.second.time) },
+                            key = { (_, p) -> "${p.leagueId}|${p.date}|${p.home}|${p.away}" }
+                        ) { (rank, tp) ->
+                            TopPickCard(rank, tp, onClick = { onOpenTopPick(tp) }, modifier = Modifier.width(300.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopPickCard(rank: Int, tp: TopPick, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val pick = tp.pick
+    AppCard(modifier = modifier, onClick = onClick) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "#$rank",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = if (rank <= 3) WinGreen else TextSecondary,
+                modifier = Modifier.width(48.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    if (pick.isSingleModel) {
-                        "${pick.backers[0].model} only · ${pick.backers[0].confidence.roundToInt()}%"
-                    } else {
-                        "${pick.backers.joinToString(", ") { it.model }} (${pick.backers.size} of ${pick.modelCount}) · avg ${pick.averageConfidence.roundToInt()}%"
-                    },
+                    "${tp.homeDisplay} v ${tp.awayDisplay}",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = TextPrimary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    tp.leagueName + " · " + DateUtils.kickoffLabelWithYear(tp.date, tp.time),
                     style = MaterialTheme.typography.labelMedium,
-                    color = TextSecondary
+                    color = TextMuted
                 )
             }
         }
+        Spacer(Modifier.height(8.dp))
+        Text(pick.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = WinGreen)
+        Text(
+            if (pick.isSingleModel) {
+                "${pick.backers[0].model} only · ${pick.backers[0].confidence.roundToInt()}%"
+            } else {
+                "${pick.backers.joinToString(", ") { it.model }} (${pick.backers.size} of ${pick.modelCount}) · avg ${pick.averageConfidence.roundToInt()}%"
+            },
+            style = MaterialTheme.typography.labelMedium,
+            color = TextSecondary
+        )
     }
 }
 
