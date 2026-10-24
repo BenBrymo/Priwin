@@ -1,4 +1,4 @@
-# Predict Engines
+# Priwin
 
 Native Android app (Kotlin + Jetpack Compose) that runs **three prediction models side by side**
 on any fixture, with a modern dark card UI.
@@ -133,7 +133,7 @@ sample_data/                   files for testing the phone import
    folder, use Add file → Create new file, type `.github/workflows/build-apk.yml` as the name and paste
    the file's contents.
 3. Open the **Actions** tab → *Build APK* → wait for the green tick (about 5 minutes).
-4. Open the finished run, download the **PredictEngines-debug-apk** artifact, unzip it, and send
+4. Open the finished run, download the **Priwin-debug-apk** artifact, unzip it, and send
    `app-debug.apk` to your phone. Tap it and allow "install from unknown sources".
 5. If the run fails, open it and copy the red error lines; they show exactly what to fix.
 

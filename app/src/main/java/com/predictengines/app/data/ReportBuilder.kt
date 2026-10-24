@@ -101,7 +101,7 @@ object ReportBuilder {
     /** Plain-text report for sharing. */
     fun toText(week: WeekReport): String {
         val sb = StringBuilder()
-        sb.append("Predict Engines · week ").append(weekLabel(week.weekStart)).append('\n')
+        sb.append("Priwin · week ").append(weekLabel(week.weekStart)).append('\n')
         sb.append("Marked: ").append(week.total)
             .append(" · Correct: ").append(week.correct)
             .append(" · Wrong: ").append(week.wrong)

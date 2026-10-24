@@ -114,6 +114,26 @@ class LeagueRepository(context: Context) {
         return all.take(base.size) + all.drop(base.size).filter { have.add("${it.date}|${it.homeTeam}|${it.awayTeam}") }
     }
 
+    /**
+     * Changes whenever anything a league's loaded data is built from changes: its own files, the shared stats
+     * files, the name links, the built-in asset file it uses, or the app itself being updated.
+     */
+    fun fingerprint(league: League): String {
+        fun stamp(f: File) = if (f.exists()) "${f.length()}:${f.lastModified()}" else "-"
+        val installed = try {
+            appContext.packageManager.getPackageInfo(appContext.packageName, 0).lastUpdateTime
+        } catch (e: Exception) {
+            0L
+        }
+        val dir = File(root, league.id)
+        return listOf(
+            "v$CACHE_VERSION", installed.toString(), league.assetFile.orEmpty(),
+            stamp(File(dir, "matches.csv")), stamp(File(dir, "fixtures.csv")), stamp(File(dir, "added_results.csv")),
+            stamp(statsFile), stamp(deletedFile), stamp(ledgerFile),
+            stamp(File(appContext.filesDir, "name_links.json"))
+        ).joinToString("|")
+    }
+
     // ---- scores added in the app -----------------------------------------------------------
 
     private fun addedFile(league: League) = File(File(root, league.id), "added_results.csv")
@@ -488,6 +508,7 @@ class LeagueRepository(context: Context) {
         const val KEY_LAST_LEAGUE = "last_league"
         const val KEY_STATS_INFO = "info_stats"
         const val BUILT_IN_STATS = "stats/statschecker_2026_2027.csv"
+        const val CACHE_VERSION = 1
         const val MAX_FILE_BYTES = 20 * 1024 * 1024
     }
 }

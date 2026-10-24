@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "PredictEngines"
+rootProject.name = "Priwin"
 include(":app")

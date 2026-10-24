@@ -23,6 +23,8 @@ import com.predictengines.app.data.TrackablePick
 import com.predictengines.app.data.TopPick
 import com.predictengines.app.data.StatDelta
 import com.predictengines.app.data.LedgerEntry
+import com.predictengines.app.data.LeagueDiskCache
+import com.predictengines.app.data.LoadedData
 import com.predictengines.app.data.fixtureKey
 import com.predictengines.app.data.scoreKey
 import com.predictengines.app.engine.StatsUpdater
@@ -93,21 +95,10 @@ data class AppUiState(
     val message: String? = null
 )
 
-private class LoadedData(
-    val matches: List<Match>,
-    val teams: List<String>,
-    val fixtures: List<FixtureItem>,
-    val matchesImport: ImportInfo?,
-    val fixturesImport: ImportInfo?,
-    val builtInFixtures: Boolean,
-    val stats: List<StatRow>,
-    val statsImport: ImportInfo?,
-    val added: List<Match>
-)
-
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repo = LeagueRepository(application)
+    private val disk = LeagueDiskCache(application)
     private val results = ResultsStore(application)
     private val linksStore = NameLinksStore(application)
     private val _state = MutableStateFlow(AppUiState())
@@ -118,6 +109,52 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var ledger: List<LedgerEntry> = emptyList()
     private var loadJob: Job? = null
     private var topJob: Job? = null
+
+    // Everything a league needs, kept for the whole session so going back to a league is instant.
+    // Any change to data (an import, a score, a stats edit, a name link) clears it, because stats and
+    // name links are shared by every league. [cacheGen] stops a slow background load that started
+    // before a change from putting its out-of-date result back.
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, LoadedData>()
+    private val cacheGen = java.util.concurrent.atomic.AtomicInteger(0)
+    private var topCache: List<TopPick>? = null
+
+    private fun invalidateCache() {
+        cacheGen.incrementAndGet()
+        cache.clear()
+        topCache = null
+        topJob?.cancel()
+    }
+
+    /** Reads and scores one league (slow: parses files and predicts every fixture). Cached by [load]. */
+    private fun computeLeague(league: League): LoadedData {
+        val gen = cacheGen.get()
+        // Same inputs as last time (nothing edited, app not updated)? Reuse what was worked out then.
+        val fingerprint = repo.fingerprint(league)
+        disk.load(league.id, fingerprint)?.let { saved ->
+            if (gen == cacheGen.get()) cache[league.id] = saved
+            return saved
+        }
+        val m = repo.loadMatches(league)
+        val teams = m.flatMap { listOf(it.homeTeam, it.awayTeam) }.distinct().sorted()
+        val st = repo.loadStats()
+        val led = repo.loadLedger()
+        val items = buildFixtureItems(repo.loadFixtures(league), m, teams, st, league.id, led)
+        val data = LoadedData(
+            m, teams, items,
+            repo.importInfo(league, DataKind.MATCHES),
+            repo.importInfo(league, DataKind.FIXTURES),
+            repo.hasBuiltInFixtures(league),
+            st,
+            repo.statsInfo(),
+            repo.loadAddedResults(league),
+            led
+        )
+        if (gen == cacheGen.get()) {
+            cache[league.id] = data
+            disk.save(league.id, fingerprint, data)
+        }
+        return data
+    }
 
     init {
         val leagues = repo.leagues()
@@ -146,29 +183,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         load(league, resetTeams = true)
     }
 
-    private fun load(league: League, resetTeams: Boolean): Job {
+    private fun load(league: League, resetTeams: Boolean, fresh: Boolean = false): Job {
         loadJob?.cancel()
+        if (fresh) invalidateCache()
         val job = viewModelScope.launch {
-            _state.update { it.copy(isLoading = true) }
-            val data = withContext(Dispatchers.IO) {
-                val m = repo.loadMatches(league)
-                val teams = m.flatMap { listOf(it.homeTeam, it.awayTeam) }.distinct().sorted()
-                val st = repo.loadStats()
-                val led = repo.loadLedger()
-                ledger = led
-                val items = buildFixtureItems(repo.loadFixtures(league), m, teams, st, league.id, led)
-                LoadedData(
-                    m, teams, items,
-                    repo.importInfo(league, DataKind.MATCHES),
-                    repo.importInfo(league, DataKind.FIXTURES),
-                    repo.hasBuiltInFixtures(league),
-                    st,
-                    repo.statsInfo(),
-                    repo.loadAddedResults(league)
-                )
+            val cached = cache[league.id]
+            if (cached == null) _state.update { it.copy(isLoading = true) }
+            val data = cached ?: withContext(Dispatchers.IO) {
+                computeLeague(league)
             }
             matches = data.matches
             stats = data.stats
+            ledger = data.ledger
             val (usedMarkets, ignoredMarkets) = StatsEngine.marketSupport(data.stats)
             _state.update { s ->
                 val keepHome = s.homeTeam?.takeIf { it in data.teams && !resetTeams }
@@ -219,26 +245,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Re-scores every league's fixtures in the background and keeps the 20 strongest picks. */
     private fun refreshTopPicks() {
+        topCache?.let { cached ->
+            // games that kicked off since the list was built drop out
+            val live = cached.filter { !DateUtils.isPlayed(it.date, it.time) }
+            _state.update { it.copy(topPicks = live, topPicksLoading = false) }
+            return
+        }
         topJob?.cancel()
         topJob = viewModelScope.launch {
             _state.update { it.copy(topPicksLoading = true) }
             val leagues = _state.value.leagues
+            val gen = cacheGen.get()
             val top = withContext(Dispatchers.Default) {
-                val st = repo.loadStats()
                 val all = ArrayList<TopPick>()
                 for (league in leagues) {
                     try {
-                        val m = repo.loadMatches(league)
-                        val fixtures = repo.loadFixtures(league)
-                        if (m.isEmpty() || fixtures.isEmpty()) continue
-                        val teams = m.flatMap { listOf(it.homeTeam, it.awayTeam) }.distinct().sorted()
-                        all += TopPicksEngine.candidates(league, buildFixtureItems(fixtures, m, teams, st))
+                        // Uses (and fills) the same per-league cache, so the other leagues are ready before you open them.
+                        val data = cache[league.id] ?: computeLeague(league)
+                        if (data.matches.isEmpty() || data.fixtures.isEmpty()) continue
+                        all += TopPicksEngine.candidates(league, data.fixtures)
                     } catch (e: Exception) {
                         // one unreadable league must not hide the others
                     }
                 }
                 TopPicksEngine.rank(all)
             }
+            if (gen == cacheGen.get()) topCache = top
             _state.update { it.copy(topPicks = top, topPicksLoading = false) }
         }
     }
@@ -306,7 +338,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val skipped = if (result.info.skipped > 0) " (${result.info.skipped} rows skipped)" else ""
                     val columns = result.note?.let { " · $it" }.orEmpty()
                     postMessage("Loaded ${result.info.rows} $what from ${result.info.fileName}$skipped$columns")
-                    load(league, resetTeams = kind == DataKind.MATCHES)
+                    load(league, resetTeams = kind == DataKind.MATCHES, fresh = true)
                 }
                 is ImportResult.Failure -> postMessage(result.message)
             }
@@ -328,7 +360,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     DataKind.STATS -> "Back to the built-in stats"
                 }
             )
-            load(league, resetTeams = kind == DataKind.MATCHES)
+            load(league, resetTeams = kind == DataKind.MATCHES, fresh = true)
         }
     }
 
@@ -345,6 +377,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteLeague(league: League) {
         if (!league.isCustom) return
         repo.deleteCustomLeague(league)
+        invalidateCache()
         val leagues = repo.leagues()
         _state.update { it.copy(leagues = leagues) }
         if (_state.value.selected?.id == league.id) selectLeague(leagues.first().id)
@@ -431,7 +464,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val reopen = _state.value.openFixtureId
         val hadManual = _state.value.manualAnalysis != null
         viewModelScope.launch {
-            load(league, resetTeams = false).join()
+            load(league, resetTeams = false, fresh = true).join()
             if (reopen != null) openFixture(reopen)
             if (hadManual) runManual()
         }

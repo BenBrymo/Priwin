@@ -113,7 +113,7 @@ fun AppRoot(vm: AppViewModel) {
             if (!detailOpen) {
                 Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp)) {
                     Text(
-                        "Predict Engines",
+                        "Priwin",
                         style = MaterialTheme.typography.headlineMedium,
                         color = TextPrimary
                     )

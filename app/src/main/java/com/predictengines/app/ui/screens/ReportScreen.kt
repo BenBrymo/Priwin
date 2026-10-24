@@ -90,7 +90,7 @@ private fun WeekCard(week: WeekReport) {
             IconButton(onClick = {
                 val send = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
-                    putExtra(Intent.EXTRA_SUBJECT, "Predict Engines weekly report: $title")
+                    putExtra(Intent.EXTRA_SUBJECT, "Priwin weekly report: $title")
                     putExtra(Intent.EXTRA_TEXT, ReportBuilder.toText(week))
                 }
                 context.startActivity(Intent.createChooser(send, "Share report"))
