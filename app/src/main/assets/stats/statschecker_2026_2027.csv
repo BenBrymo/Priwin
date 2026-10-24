@@ -1,0 +1,841 @@
+market,season,rank,team,stat_value,games,percentage
+Total Wins,2026/2027,1,Man City,7,7,100
+Total Wins,2026/2027,2,FC Barcelona,9,9,100
+Total Wins,2026/2027,3,Porto,8,8,100
+Total Wins,2026/2027,4,Pyramids FC,7,7,100
+Total Wins,2026/2027,5,Wellington Phoenix,1,1,100
+Total Wins,2026/2027,6,Macarthur,1,1,100
+Total Wins,2026/2027,7,Auckland,1,1,100
+Total Wins,2026/2027,8,Bengaluru,2,2,100
+Total Wins,2026/2027,9,NorthEast United,2,2,100
+Total Wins,2026/2027,10,East Bengal,1,1,100
+Total Draws,2026/2027,1,Sydney,1,1,100
+Total Draws,2026/2027,2,Central Coast Mariners,1,1,100
+Total Draws,2026/2027,3,Newcastle Jets,1,1,100
+Total Draws,2026/2027,4,Western Sydney Wanderers,1,1,100
+Total Draws,2026/2027,5,RSB Berkane,3,3,100
+Total Draws,2026/2027,6,Goa,1,1,100
+Total Draws,2026/2027,7,Clermont,7,9,78
+Total Draws,2026/2027,8,Moghreb Tetouan,3,4,75
+Total Draws,2026/2027,9,Cesena,5,7,71
+Total Draws,2026/2027,10,Olympic El Qanah,5,7,71
+Away Wins,2026/2027,1,Al Sadd,2,2,100
+Away Wins,2026/2027,2,Man City,3,3,100
+Away Wins,2026/2027,3,Lazio,4,4,100
+Away Wins,2026/2027,4,Celtic,4,4,100
+Away Wins,2026/2027,5,Feyenoord,5,5,100
+Away Wins,2026/2027,6,Ajax,4,4,100
+Away Wins,2026/2027,7,FSV Mainz 05,3,3,100
+Away Wins,2026/2027,8,Sporting Charleroi,4,4,100
+Away Wins,2026/2027,9,Union Saint-Gilloise,4,4,100
+Away Wins,2026/2027,10,Lugano,4,4,100
+Home Draws,2026/2027,1,Al-Arabi SC,2,2,100
+Home Draws,2026/2027,2,Holstein Kiel,4,4,100
+Home Draws,2026/2027,3,Cesena,4,4,100
+Home Draws,2026/2027,4,Olympic El Qanah,3,3,100
+Home Draws,2026/2027,5,Sydney,1,1,100
+Home Draws,2026/2027,6,Central Coast Mariners,1,1,100
+Home Draws,2026/2027,7,Moghreb Tetouan,2,2,100
+Home Draws,2026/2027,8,RSB Berkane,1,1,100
+Home Draws,2026/2027,9,Goa,1,1,100
+Home Draws,2026/2027,10,Lyngby Boldklub,5,6,
+Away Draws,2026/2027,1,Everton,3,3,100
+Away Draws,2026/2027,2,Brentford,3,3,100
+Away Draws,2026/2027,3,St. Pauli,4,4,100
+Away Draws,2026/2027,4,Celta de Vigo,4,4,100
+Away Draws,2026/2027,5,Golden Arrows,3,3,100
+Away Draws,2026/2027,6,Newcastle Jets,1,1,100
+Away Draws,2026/2027,7,Western Sydney Wanderers,1,1,100
+Away Draws,2026/2027,8,RSB Berkane,2,2,100
+Away Draws,2026/2027,9,FAR Rabat,1,1,100
+Away Draws,2026/2027,10,Raja Casablanca,2,2,100
+Total Lost,2026/2027,1,Borussia Monchengladbach,6,6,100
+Total Lost,2026/2027,2,Perth Glory,1,1,100
+Total Lost,2026/2027,3,Melbourne City,1,1,100
+Total Lost,2026/2027,4,Melbourne Victory,1,1,100
+Total Lost,2026/2027,5,Sporting Delhi,2,2,100
+Total Lost,2026/2027,6,Zlin,10,11,91
+Total Lost,2026/2027,7,Boluspor,9,10,90
+Total Lost,2026/2027,8,Albacete,9,10,90
+Total Lost,2026/2027,9,KV Kortrijk,7,8,88
+Total Lost,2026/2027,10,Eyupspor,7,8,
+Home Lost,2026/2027,1,Borussia Monchengladbach,3,3,100
+Home Lost,2026/2027,2,Zlin,6,6,100
+Home Lost,2026/2027,3,Qatar SC,2,2,100
+Home Lost,2026/2027,4,Rizespor,3,3,100
+Home Lost,2026/2027,5,Kruger United,4,4,100
+Home Lost,2026/2027,6,Casa Pia,4,4,100
+Home Lost,2026/2027,7,Bani Yas,4,4,100
+Home Lost,2026/2027,8,Hatta,3,3,100
+Home Lost,2026/2027,9,Albacete,4,4,100
+Home Lost,2026/2027,10,Hai Phong,2,2,100
+Away Lost,2026/2027,1,Al Gharafa,2,2,100
+Away Lost,2026/2027,2,Al-Ahli Doha,2,2,100
+Away Lost,2026/2027,3,Al Sailiya,3,3,100
+Away Lost,2026/2027,4,Genoa,3,3,100
+Away Lost,2026/2027,5,Venezia,3,3,100
+Away Lost,2026/2027,6,RB Leipzig,3,3,100
+Away Lost,2026/2027,7,Parma,3,3,100
+Away Lost,2026/2027,8,Nice,3,3,100
+Away Lost,2026/2027,9,Darmstadt 98,4,4,100
+Away Lost,2026/2027,10,Borussia Monchengladbach,3,3,100
+Home Win to Nill,2026/2027,1,RB Leipzig,3,3,100
+Home Win to Nill,2026/2027,2,Orlando Pirates,4,4,100
+Home Win to Nill,2026/2027,3,AEK Athens,3,3,100
+Home Win to Nill,2026/2027,4,FAR Rabat,1,1,100
+Home Win to Nill,2026/2027,5,Raja Casablanca,1,1,100
+Home Win to Nill,2026/2027,6,Mlada Boleslav,4,5,80
+Home Win to Nill,2026/2027,7,FC Tokyo,4,5,80
+Home Win to Nill,2026/2027,8,Levski Sofia,4,5,80
+Home Win to Nill,2026/2027,9,Brighton,3,4,75
+Home Win to Nill,2026/2027,10,Club Brugge,3,4,75
+Away Win to Nill,2026/2027,1,Zamalek,3,3,100
+Away Win to Nill,2026/2027,2,Cong an Ha Noi,2,2,100
+Away Win to Nill,2026/2027,3,Wydad Casablanca,1,1,100
+Away Win to Nill,2026/2027,4,Kawkab Marrakech,2,2,100
+Away Win to Nill,2026/2027,5,East Bengal,1,1,100
+Away Win to Nill,2026/2027,6,Kayserispor,5,6,83
+Away Win to Nill,2026/2027,7,Slavia Praha,4,5,80
+Away Win to Nill,2026/2027,8,Al-Qadsiah,4,5,80
+Away Win to Nill,2026/2027,9,Arsenal,3,4,75
+Away Win to Nill,2026/2027,10,Lazio,3,4,75
+Win or Draw,2026/2027,1,Al Duhail,6,6,100
+Win or Draw,2026/2027,2,Al-Arabi SC,6,6,100
+Win or Draw,2026/2027,3,Al Rayyan,6,6,100
+Win or Draw,2026/2027,4,Man City,7,7,100
+Win or Draw,2026/2027,5,Roma,7,7,100
+Win or Draw,2026/2027,6,Lazio,7,7,100
+Win or Draw,2026/2027,7,Salzburg,9,9,100
+Win or Draw,2026/2027,8,Borussia Dortmund,6,6,100
+Win or Draw,2026/2027,9,Feyenoord,9,9,100
+Win or Draw,2026/2027,10,Walsall,11,11,100
+Home Win or Draw,2026/2027,1,Al Duhail,3,3,100
+Home Win or Draw,2026/2027,2,Al-Arabi SC,2,2,100
+Home Win or Draw,2026/2027,3,Lusail City,2,2,100
+Home Win or Draw,2026/2027,4,Al Rayyan,3,3,100
+Home Win or Draw,2026/2027,5,Man City,4,4,100
+Home Win or Draw,2026/2027,6,Charlton Athletic,5,5,100
+Home Win or Draw,2026/2027,7,Middlesbrough,6,6,100
+Home Win or Draw,2026/2027,8,Birmingham City,6,6,100
+Home Win or Draw,2026/2027,9,Chelsea,3,3,100
+Home Win or Draw,2026/2027,10,Arsenal,3,3,100
+Away W or D,2026/2027,1,Al Duhail,3,3,100
+Away W or D,2026/2027,2,Al-Arabi SC,4,4,100
+Away W or D,2026/2027,3,Al Shamal SC,3,3,100
+Away W or D,2026/2027,4,Al Rayyan,3,3,100
+Away W or D,2026/2027,5,Al Sadd,2,2,100
+Away W or D,2026/2027,6,Man City,3,3,100
+Away W or D,2026/2027,7,West Ham United,6,6,100
+Away W or D,2026/2027,8,Liverpool,4,4,100
+Away W or D,2026/2027,9,Everton,3,3,100
+Away W or D,2026/2027,10,Roma,3,3,100
+Total BTTS,2026/2027,1,Al Sadd,6,6,100
+Total BTTS,2026/2027,2,Werder Bremen,6,6,100
+Total BTTS,2026/2027,3,Barnet,10,10,100
+Total BTTS,2026/2027,4,Go Ahead Eagles,9,9,100
+Total BTTS,2026/2027,5,Sassuolo,7,7,100
+Total BTTS,2026/2027,6,TSG Hoffenheim,6,6,100
+Total BTTS,2026/2027,7,Rayo Vallecano,8,8,100
+Total BTTS,2026/2027,8,Richards Bay,8,8,100
+Total BTTS,2026/2027,9,Dubai United,6,6,100
+Total BTTS,2026/2027,10,Ittihad Tanger,4,4,100
+Home BTTS,2026/2027,1,Al Sadd,4,4,100
+Home BTTS,2026/2027,2,Blackburn Rovers,5,5,100
+Home BTTS,2026/2027,3,Al Wakrah,3,3,100
+Home BTTS,2026/2027,4,Chelsea,3,3,100
+Home BTTS,2026/2027,5,Burnley,6,6,100
+Home BTTS,2026/2027,6,Crystal Palace,3,3,100
+Home BTTS,2026/2027,7,Cardiff City,5,5,100
+Home BTTS,2026/2027,8,Werder Bremen,3,3,100
+Home BTTS,2026/2027,9,Rotherham United,6,6,100
+Home BTTS,2026/2027,10,Urawa Reds,4,4,100
+Away BTTS,2026/2027,1,Al Gharafa,2,2,100
+Away BTTS,2026/2027,2,Al Shahaniya,3,3,100
+Away BTTS,2026/2027,3,Al Sadd,2,2,100
+Away BTTS,2026/2027,4,Bournemouth,3,3,100
+Away BTTS,2026/2027,5,Nottingham Forest,3,3,100
+Away BTTS,2026/2027,6,Werder Bremen,3,3,100
+Away BTTS,2026/2027,7,FC Augsburg,3,3,100
+Away BTTS,2026/2027,8,AC Milan,4,4,100
+Away BTTS,2026/2027,9,Luton Town,5,5,100
+Away BTTS,2026/2027,10,Bristol City,5,5,100
+First to Score,2026/2027,1,AEK Athens,7,6,117
+First to Score,2026/2027,2,Ceramica Cleopatra,7,6,117
+First to Score,2026/2027,3,Brentford,8,7,114
+First to Score,2026/2027,4,Saint-Etienne,9,9,100
+First to Score,2026/2027,5,Pogon Szczecin,10,10,100
+First to Score,2026/2027,6,FC Tokyo,10,10,100
+First to Score,2026/2027,7,Orlando Pirates,8,8,100
+First to Score,2026/2027,8,Kayserispor,11,11,100
+First to Score,2026/2027,9,Perth Glory,1,1,100
+First to Score,2026/2027,10,Central Coast Mariners,1,1,100
+FTS Home,2026/2027,1,Dubai United,3,2,150
+FTS Home,2026/2027,2,Da Nang,3,2,150
+FTS Home,2026/2027,3,AEK Athens,4,3,133
+FTS Home,2026/2027,4,Pogon Szczecin,7,6,117
+FTS Home,2026/2027,5,Al-Arabi SC,2,2,100
+FTS Home,2026/2027,6,Al Rayyan,3,3,100
+FTS Home,2026/2027,7,Chelsea,3,3,100
+FTS Home,2026/2027,8,Lazio,3,3,100
+FTS Home,2026/2027,9,Salzburg,5,5,100
+FTS Home,2026/2027,10,AZ Alkmaar,4,4,100
+FTS Away,2026/2027,1,Kawkab Marrakech,3,2,150
+FTS Away,2026/2027,2,Brentford,4,3,133
+FTS Away,2026/2027,3,Ceramica Cleopatra,4,3,133
+FTS Away,2026/2027,4,Kayserispor,7,6,117
+FTS Away,2026/2027,5,Al Sadd,2,2,100
+FTS Away,2026/2027,6,Man City,3,3,100
+FTS Away,2026/2027,7,Middlesbrough,5,5,100
+FTS Away,2026/2027,8,Nottingham Forest,3,3,100
+FTS Away,2026/2027,9,Leeds,3,3,100
+FTS Away,2026/2027,10,Feyenoord,5,5,100
+Over 1.5,2026/2027,1,Al Duhail,6,6,100
+Over 1.5,2026/2027,2,Al Sadd,6,6,100
+Over 1.5,2026/2027,3,Al Wakrah,6,6,100
+Over 1.5,2026/2027,4,Al Sailiya,6,6,100
+Over 1.5,2026/2027,5,Chelsea,7,7,100
+Over 1.5,2026/2027,6,Burnley,11,11,100
+Over 1.5,2026/2027,7,Brighton,7,7,100
+Over 1.5,2026/2027,8,Werder Bremen,6,6,100
+Over 1.5,2026/2027,9,FC Augsburg,6,6,100
+Over 1.5,2026/2027,10,York City,11,11,100
+Over 1.5 Home,2026/2027,1,Al Duhail,3,3,100
+Over 1.5 Home,2026/2027,2,Al Shamal SC,3,3,100
+Over 1.5 Home,2026/2027,3,Al Sadd,4,4,100
+Over 1.5 Home,2026/2027,4,Blackburn Rovers,5,5,100
+Over 1.5 Home,2026/2027,5,Portsmouth,5,5,100
+Over 1.5 Home,2026/2027,6,Al Wakrah,3,3,100
+Over 1.5 Home,2026/2027,7,West Ham United,5,5,100
+Over 1.5 Home,2026/2027,8,Al Sailiya,3,3,100
+Over 1.5 Home,2026/2027,9,Birmingham City,6,6,100
+Over 1.5 Home,2026/2027,10,Chelsea,3,3,100
+Over 1.5 Away,2026/2027,1,Al Duhail,3,3,100
+Over 1.5 Away,2026/2027,2,Al Gharafa,2,2,100
+Over 1.5 Away,2026/2027,3,Al-Ahli Doha,2,2,100
+Over 1.5 Away,2026/2027,4,Al-Arabi SC,4,4,100
+Over 1.5 Away,2026/2027,5,Al Shahaniya,3,3,100
+Over 1.5 Away,2026/2027,6,Al Sadd,2,2,100
+Over 1.5 Away,2026/2027,7,Al Wakrah,3,3,100
+Over 1.5 Away,2026/2027,8,Al Sailiya,3,3,100
+Over 1.5 Away,2026/2027,9,Charlton Athletic,6,6,100
+Over 1.5 Away,2026/2027,10,Sunderland,4,4,100
+Under 1.5 Home,2026/2027,1,Olympiacos F.C.,3,3,100
+Under 1.5 Home,2026/2027,2,FAR Rabat,1,1,100
+Under 1.5 Home,2026/2027,3,Widad Temara,2,2,100
+Under 1.5 Home,2026/2027,4,CODM Meknes,2,2,100
+Under 1.5 Home,2026/2027,5,Raja Casablanca,1,1,100
+Under 1.5 Home,2026/2027,6,Nottingham Forest,3,4,75
+Under 1.5 Home,2026/2027,7,VfL Bochum 1848,3,4,75
+Under 1.5 Home,2026/2027,8,El Geish,3,4,75
+Under 1.5 Home,2026/2027,9,Bristol City,4,6,67
+Under 1.5 Home,2026/2027,10,Salford City,4,6,67
+Under 1.5 Away,2026/2027,1,Benevento,2,2,100
+Under 1.5 Away,2026/2027,2,Bac Ninh,2,2,100
+Under 1.5 Away,2026/2027,3,Kawkab Marrakech,2,2,100
+Under 1.5 Away,2026/2027,4,UTS Rabat,2,2,100
+Under 1.5 Away,2026/2027,5,Sporting Charleroi,3,4,75
+Under 1.5 Away,2026/2027,6,Al Ettifaq,3,4,75
+Under 1.5 Away,2026/2027,7,Smouha,3,4,75
+Under 1.5 Away,2026/2027,8,Exeter City,4,6,67
+Under 1.5 Away,2026/2027,9,Bologna,2,3,67
+Under 1.5 Away,2026/2027,10,Al Wahda,2,3,67
+Over 2.5,2026/2027,1,Al Sadd,7,7,100
+Over 2.5,2026/2027,2,FC Augsburg,6,6,100
+Over 2.5,2026/2027,3,Borussia Monchengladbach,6,6,100
+Over 2.5,2026/2027,4,FC Utrecht,9,9,100
+Over 2.5,2026/2027,5,Excelsior,9,9,100
+Over 2.5,2026/2027,6,TSG Hoffenheim,6,6,100
+Over 2.5,2026/2027,7,Vaduz,10,10,100
+Over 2.5,2026/2027,8,Ajman,6,6,100
+Over 2.5,2026/2027,9,Hoang Anh Gia Lai,4,4,100
+Over 2.5,2026/2027,10,Da Nang,4,4,100
+Over 2.5 Home,2026/2027,1,Al Sadd,4,4,100
+Over 2.5 Home,2026/2027,2,Blackburn Rovers,5,5,100
+Over 2.5 Home,2026/2027,3,Al Wakrah,3,3,100
+Over 2.5 Home,2026/2027,4,Chelsea,3,3,100
+Over 2.5 Home,2026/2027,5,Arsenal,3,3,100
+Over 2.5 Home,2026/2027,6,Olympique Marseille,3,3,100
+Over 2.5 Home,2026/2027,7,Crystal Palace,3,3,100
+Over 2.5 Home,2026/2027,8,Werder Bremen,3,3,100
+Over 2.5 Home,2026/2027,9,FC Augsburg,3,3,100
+Over 2.5 Home,2026/2027,10,RB Leipzig,3,3,100
+Over 2.5 Away,2026/2027,1,Al Gharafa,2,2,100
+Over 2.5 Away,2026/2027,2,Al-Ahli Doha,3,3,100
+Over 2.5 Away,2026/2027,3,Al Sadd,3,3,100
+Over 2.5 Away,2026/2027,4,Bournemouth,3,3,100
+Over 2.5 Away,2026/2027,5,Nottingham Forest,3,3,100
+Over 2.5 Away,2026/2027,6,Schalke 04,3,3,100
+Over 2.5 Away,2026/2027,7,FC Augsburg,3,3,100
+Over 2.5 Away,2026/2027,8,Fiorentina,3,3,100
+Over 2.5 Away,2026/2027,9,Luton Town,5,5,100
+Over 2.5 Away,2026/2027,10,Lens,4,4,100
+Under 2.5,2026/2027,1,Olympiacos F.C.,7,7,100
+Under 2.5,2026/2027,2,Chennaiyin,2,2,100
+Under 2.5,2026/2027,3,Inter Kashi,2,2,100
+Under 2.5,2026/2027,4,Goa,1,1,100
+Under 2.5,2026/2027,5,Northampton Town,9,10,90
+Under 2.5,2026/2027,6,Smouha,6,7,86
+Under 2.5,2026/2027,7,Abu Qir Fertilizers,6,7,86
+Under 2.5,2026/2027,8,Arges,10,12,83
+Under 2.5,2026/2027,9,Lokomotiv Plovdiv,9,11,82
+Under 2.5,2026/2027,10,Port Vale,8,10,80
+Under 2.5 Home,2026/2027,1,Al Duhail,3,3,100
+Under 2.5 Home,2026/2027,2,Sunderland,3,3,100
+Under 2.5 Home,2026/2027,3,Dundee United,4,4,100
+Under 2.5 Home,2026/2027,4,Cagliari,3,3,100
+Under 2.5 Home,2026/2027,5,VfL Bochum 1848,4,4,100
+Under 2.5 Home,2026/2027,6,Getafe,5,5,100
+Under 2.5 Home,2026/2027,7,Arges,6,6,100
+Under 2.5 Home,2026/2027,8,Petrolul 52,6,6,100
+Under 2.5 Home,2026/2027,9,Kidderminster Harriers,7,7,100
+Under 2.5 Home,2026/2027,10,AmaZulu,3,3,100
+Under 2.5 Away,2026/2027,1,Northampton Town,5,5,100
+Under 2.5 Away,2026/2027,2,Lokomotiv Plovdiv,6,6,100
+Under 2.5 Away,2026/2027,3,Jablonec,5,5,100
+Under 2.5 Away,2026/2027,4,NEOM SC,5,5,100
+Under 2.5 Away,2026/2027,5,Durban City,4,4,100
+Under 2.5 Away,2026/2027,6,Benevento,2,2,100
+Under 2.5 Away,2026/2027,7,Carrarese,3,3,100
+Under 2.5 Away,2026/2027,8,Panathinaikos,3,3,100
+Under 2.5 Away,2026/2027,9,Olympiacos F.C.,4,4,100
+Under 2.5 Away,2026/2027,10,Al Ahly,3,3,100
+Over 3.5,2026/2027,1,Al Sadd,7,7,100
+Over 3.5,2026/2027,2,Melbourne City,1,1,100
+Over 3.5,2026/2027,3,Central Coast Mariners,1,1,100
+Over 3.5,2026/2027,4,Newcastle Jets,1,1,100
+Over 3.5,2026/2027,5,Auckland,1,1,100
+Over 3.5,2026/2027,6,East Bengal,1,1,100
+Over 3.5,2026/2027,7,Young Boys,9,10,90
+Over 3.5,2026/2027,8,Westerlo,7,8,88
+Over 3.5,2026/2027,9,Werder Bremen,5,6,83
+Over 3.5,2026/2027,10,FC Augsburg,5,6,83
+Over 3.5 Home,2026/2027,1,Al Sadd,4,4,100
+Over 3.5 Home,2026/2027,2,Chelsea,3,3,100
+Over 3.5 Home,2026/2027,3,Crystal Palace,3,3,100
+Over 3.5 Home,2026/2027,4,Werder Bremen,3,3,100
+Over 3.5 Home,2026/2027,5,Westerlo,4,4,100
+Over 3.5 Home,2026/2027,6,FC Bayern Munchen,3,3,100
+Over 3.5 Home,2026/2027,7,Young Boys,5,5,100
+Over 3.5 Home,2026/2027,8,FC Utrecht,4,4,100
+Over 3.5 Home,2026/2027,9,Telstar,5,5,100
+Over 3.5 Home,2026/2027,10,Levante,4,4,100
+Over 3.5 Away,2026/2027,1,Al Gharafa,2,2,100
+Over 3.5 Away,2026/2027,2,Al Sadd,3,3,100
+Over 3.5 Away,2026/2027,3,FC Augsburg,3,3,100
+Over 3.5 Away,2026/2027,4,Eintracht Frankfurt,3,3,100
+Over 3.5 Away,2026/2027,5,FC Union Berlin,2,2,100
+Over 3.5 Away,2026/2027,6,Bayer 04 Leverkusen,3,3,100
+Over 3.5 Away,2026/2027,7,Auxerre,4,4,100
+Over 3.5 Away,2026/2027,8,FC Barcelona,5,5,100
+Over 3.5 Away,2026/2027,9,Kalba,3,3,100
+Over 3.5 Away,2026/2027,10,Dubai United,4,4,100
+Under 3.5,2026/2027,1,Arsenal,7,7,100
+Under 3.5,2026/2027,2,Lokomotiv Plovdiv,11,11,100
+Under 3.5,2026/2027,3,Parma,7,7,100
+Under 3.5,2026/2027,4,Torino,7,7,100
+Under 3.5,2026/2027,5,VfL Bochum 1848,8,8,100
+Under 3.5,2026/2027,6,Gent,8,8,100
+Under 3.5,2026/2027,7,Kocaelispor,8,8,100
+Under 3.5,2026/2027,8,Getafe,9,9,100
+Under 3.5,2026/2027,9,Juve Stabia,7,7,100
+Under 3.5,2026/2027,10,Carrarese,7,7,100
+Under 3.5 Home,2026/2027,1,Al Duhail,3,3,100
+Under 3.5 Home,2026/2027,2,Al Rayyan,3,3,100
+Under 3.5 Home,2026/2027,3,Sunderland,3,3,100
+Under 3.5 Home,2026/2027,4,Arsenal,3,3,100
+Under 3.5 Home,2026/2027,5,Notts County,5,5,100
+Under 3.5 Home,2026/2027,6,Ipswich Town,3,3,100
+Under 3.5 Home,2026/2027,7,Bristol City,6,6,100
+Under 3.5 Home,2026/2027,8,Salford City,6,6,100
+Under 3.5 Home,2026/2027,9,Brentford,4,4,100
+Under 3.5 Home,2026/2027,10,Dundee United,4,4,100
+Under 3.5 Away,2026/2027,1,Arsenal,4,4,100
+Under 3.5 Away,2026/2027,2,Lazio,4,4,100
+Under 3.5 Away,2026/2027,3,Southampton,5,5,100
+Under 3.5 Away,2026/2027,4,Hibernian,4,4,100
+Under 3.5 Away,2026/2027,5,Leeds,3,3,100
+Under 3.5 Away,2026/2027,6,Genoa,3,3,100
+Under 3.5 Away,2026/2027,7,Oldham Athletic,5,5,100
+Under 3.5 Away,2026/2027,8,Northampton Town,5,5,100
+Under 3.5 Away,2026/2027,9,Dundee,4,4,100
+Under 3.5 Away,2026/2027,10,Viking,12,12,100
+Corners Over 8.5,2026/2027,1,Celtic,9,9,100
+Corners Over 8.5,2026/2027,2,Rangers,9,9,100
+Corners Over 8.5,2026/2027,3,Wycombe Wanderers,11,11,100
+Corners Over 8.5,2026/2027,4,Grimsby Town,12,12,100
+Corners Over 8.5,2026/2027,5,RB Leipzig,6,6,100
+Corners Over 8.5,2026/2027,6,FC Bayern Munchen,6,6,100
+Corners Over 8.5,2026/2027,7,VfL Wolfsburg,8,8,100
+Corners Over 8.5,2026/2027,8,FC Twente,9,9,100
+Corners Over 8.5,2026/2027,9,Napoli,7,7,100
+Corners Over 8.5,2026/2027,10,Le Havre,7,7,100
+Corners Over 8.5 Home,2026/2027,1,Al Duhail,3,3,100
+Corners Over 8.5 Home,2026/2027,2,Al-Arabi SC,2,2,100
+Corners Over 8.5 Home,2026/2027,3,Lusail City,2,2,100
+Corners Over 8.5 Home,2026/2027,4,Al Sadd,4,4,100
+Corners Over 8.5 Home,2026/2027,5,Portsmouth,5,5,100
+Corners Over 8.5 Home,2026/2027,6,Charlton Athletic,5,5,100
+Corners Over 8.5 Home,2026/2027,7,Derby County,6,6,100
+Corners Over 8.5 Home,2026/2027,8,Celtic,5,5,100
+Corners Over 8.5 Home,2026/2027,9,Barnsley,5,5,100
+Corners Over 8.5 Home,2026/2027,10,Rangers,4,4,100
+Corners Over 8.5 Away,2026/2027,1,Al Gharafa,2,2,100
+Corners Over 8.5 Away,2026/2027,2,Al Shamal SC,3,3,100
+Corners Over 8.5 Away,2026/2027,3,Blackburn Rovers,6,6,100
+Corners Over 8.5 Away,2026/2027,4,West Bromwich Albion,5,5,100
+Corners Over 8.5 Away,2026/2027,5,Birmingham City,5,5,100
+Corners Over 8.5 Away,2026/2027,6,Everton,3,3,100
+Corners Over 8.5 Away,2026/2027,7,Wigan Athletic,5,5,100
+Corners Over 8.5 Away,2026/2027,8,Blackpool,5,5,100
+Corners Over 8.5 Away,2026/2027,9,Wolverhampton Wanderers,6,6,100
+Corners Over 8.5 Away,2026/2027,10,Lazio,4,4,100
+Corners Under 8.5,2026/2027,1,Al Rayyan,6,6,100
+Corners Under 8.5,2026/2027,2,AC Milan,7,7,100
+Corners Under 8.5,2026/2027,3,Da Nang,4,4,100
+Corners Under 8.5,2026/2027,4,FUS Rabat,4,4,100
+Corners Under 8.5,2026/2027,5,Sydney,1,1,100
+Corners Under 8.5,2026/2027,6,Perth Glory,1,1,100
+Corners Under 8.5,2026/2027,7,Western Sydney Wanderers,1,1,100
+Corners Under 8.5,2026/2027,8,Macarthur,1,1,100
+Corners Under 8.5,2026/2027,9,UTS Rabat,4,4,100
+Corners Under 8.5,2026/2027,10,FAR Rabat,2,2,100
+Corners Under 8.5 Home,2026/2027,1,Al Rayyan,3,3,100
+Corners Under 8.5 Home,2026/2027,2,Aston Villa,3,3,100
+Corners Under 8.5 Home,2026/2027,3,AC Milan,3,3,100
+Corners Under 8.5 Home,2026/2027,4,Ipswich Town,3,3,100
+Corners Under 8.5 Home,2026/2027,5,Coventry,3,3,100
+Corners Under 8.5 Home,2026/2027,6,Paris Saint Germain,2,2,100
+Corners Under 8.5 Home,2026/2027,7,Paris,4,4,100
+Corners Under 8.5 Home,2026/2027,8,Qatar SC,2,2,100
+Corners Under 8.5 Home,2026/2027,9,Erzurumspor FK,4,4,100
+Corners Under 8.5 Home,2026/2027,10,Atletico de Madrid,4,4,100
+Corners Under 8.5 Away,2026/2027,1,Al Rayyan,3,3,100
+Corners Under 8.5 Away,2026/2027,2,Genoa,3,3,100
+Corners Under 8.5 Away,2026/2027,3,Fiorentina,3,3,100
+Corners Under 8.5 Away,2026/2027,4,AC Milan,4,4,100
+Corners Under 8.5 Away,2026/2027,5,Torino,4,4,100
+Corners Under 8.5 Away,2026/2027,6,Mito Hollyhock,5,5,100
+Corners Under 8.5 Away,2026/2027,7,Istanbul Basaksehir,3,3,100
+Corners Under 8.5 Away,2026/2027,8,FC Barcelona,5,5,100
+Corners Under 8.5 Away,2026/2027,9,Abha,5,5,100
+Corners Under 8.5 Away,2026/2027,10,Maritimo,4,4,100
+Corners Over 9.5,2026/2027,1,FC Bayern Munchen,6,6,100
+Corners Over 9.5,2026/2027,2,VfL Wolfsburg,8,8,100
+Corners Over 9.5,2026/2027,3,Auxerre,7,7,100
+Corners Over 9.5,2026/2027,4,Melbourne City,1,1,100
+Corners Over 9.5,2026/2027,5,Central Coast Mariners,1,1,100
+Corners Over 9.5,2026/2027,6,Newcastle Jets,1,1,100
+Corners Over 9.5,2026/2027,7,Melbourne Victory,1,1,100
+Corners Over 9.5,2026/2027,8,Wellington Phoenix,1,1,100
+Corners Over 9.5,2026/2027,9,Auckland,1,1,100
+Corners Over 9.5,2026/2027,10,NorthEast United,2,2,100
+Corners Over 9.5 Home,2026/2027,1,Al-Arabi SC,2,2,100
+Corners Over 9.5 Home,2026/2027,2,Lusail City,2,2,100
+Corners Over 9.5 Home,2026/2027,3,Al Sadd,4,4,100
+Corners Over 9.5 Home,2026/2027,4,Barnsley,5,5,100
+Corners Over 9.5 Home,2026/2027,5,Rangers,4,4,100
+Corners Over 9.5 Home,2026/2027,6,Olympique Lyonnais,4,4,100
+Corners Over 9.5 Home,2026/2027,7,FC Augsburg,3,3,100
+Corners Over 9.5 Home,2026/2027,8,Wycombe Wanderers,6,6,100
+Corners Over 9.5 Home,2026/2027,9,Dundee United,4,4,100
+Corners Over 9.5 Home,2026/2027,10,AFC Wimbledon,5,5,100
+Corners Over 9.5 Away,2026/2027,1,Al Gharafa,2,2,100
+Corners Over 9.5 Away,2026/2027,2,Al Shamal SC,3,3,100
+Corners Over 9.5 Away,2026/2027,3,Blackburn Rovers,6,6,100
+Corners Over 9.5 Away,2026/2027,4,West Bromwich Albion,5,5,100
+Corners Over 9.5 Away,2026/2027,5,Everton,3,3,100
+Corners Over 9.5 Away,2026/2027,6,Celtic,4,4,100
+Corners Over 9.5 Away,2026/2027,7,Werder Bremen,3,3,100
+Corners Over 9.5 Away,2026/2027,8,Plymouth Argyle,6,6,100
+Corners Over 9.5 Away,2026/2027,9,Grimsby Town,6,6,100
+Corners Over 9.5 Away,2026/2027,10,Dundee,4,4,100
+Corners Under 9.5,2026/2027,1,Al Rayyan,6,6,100
+Corners Under 9.5,2026/2027,2,AC Milan,7,7,100
+Corners Under 9.5,2026/2027,3,Torino,7,7,100
+Corners Under 9.5,2026/2027,4,Abha,8,8,100
+Corners Under 9.5,2026/2027,5,Maritimo,8,8,100
+Corners Under 9.5,2026/2027,6,Ceramica Cleopatra,7,7,100
+Corners Under 9.5,2026/2027,7,Da Nang,4,4,100
+Corners Under 9.5,2026/2027,8,FUS Rabat,4,4,100
+Corners Under 9.5,2026/2027,9,Sydney,1,1,100
+Corners Under 9.5,2026/2027,10,Perth Glory,1,1,100
+Corners Under 9.5 Home,2026/2027,1,Al Rayyan,3,3,100
+Corners Under 9.5 Home,2026/2027,2,Aston Villa,3,3,100
+Corners Under 9.5 Home,2026/2027,3,Stoke City,5,5,100
+Corners Under 9.5 Home,2026/2027,4,Swansea City,6,6,100
+Corners Under 9.5 Home,2026/2027,5,Werder Bremen,3,3,100
+Corners Under 9.5 Home,2026/2027,6,Notts County,5,5,100
+Corners Under 9.5 Home,2026/2027,7,AC Milan,3,3,100
+Corners Under 9.5 Home,2026/2027,8,Ipswich Town,3,3,100
+Corners Under 9.5 Home,2026/2027,9,Coventry,3,3,100
+Corners Under 9.5 Home,2026/2027,10,Brest,3,3,100
+Corners Under 9.5 Away,2026/2027,1,Al Rayyan,3,3,100
+Corners Under 9.5 Away,2026/2027,2,Al Sadd,3,3,100
+Corners Under 9.5 Away,2026/2027,3,Burnley,5,5,100
+Corners Under 9.5 Away,2026/2027,4,Roma,3,3,100
+Corners Under 9.5 Away,2026/2027,5,Genoa,3,3,100
+Corners Under 9.5 Away,2026/2027,6,Saint-Etienne,5,5,100
+Corners Under 9.5 Away,2026/2027,7,Fiorentina,3,3,100
+Corners Under 9.5 Away,2026/2027,8,AC Milan,4,4,100
+Corners Under 9.5 Away,2026/2027,9,Toulouse,4,4,100
+Corners Under 9.5 Away,2026/2027,10,Legia Warszawa,6,6,100
+Corners Over 10.5,2026/2027,1,FC Bayern Munchen,6,6,100
+Corners Over 10.5,2026/2027,2,VfL Wolfsburg,8,8,100
+Corners Over 10.5,2026/2027,3,Auxerre,7,7,100
+Corners Over 10.5,2026/2027,4,Central Coast Mariners,1,1,100
+Corners Over 10.5,2026/2027,5,Newcastle Jets,1,1,100
+Corners Over 10.5,2026/2027,6,Melbourne Victory,1,1,100
+Corners Over 10.5,2026/2027,7,Wellington Phoenix,1,1,100
+Corners Over 10.5,2026/2027,8,NorthEast United,2,2,100
+Corners Over 10.5,2026/2027,9,Barnsley,9,10,90
+Corners Over 10.5,2026/2027,10,Darmstadt 98,7,8,88
+Corners Over 10.5 Home,2026/2027,1,Al-Arabi SC,2,2,100
+Corners Over 10.5 Home,2026/2027,2,Barnsley,5,5,100
+Corners Over 10.5 Home,2026/2027,3,FC Augsburg,3,3,100
+Corners Over 10.5 Home,2026/2027,4,Dundee United,4,4,100
+Corners Over 10.5 Home,2026/2027,5,AFC Wimbledon,5,5,100
+Corners Over 10.5 Home,2026/2027,6,Darmstadt 98,4,4,100
+Corners Over 10.5 Home,2026/2027,7,FC Bayern Munchen,3,3,100
+Corners Over 10.5 Home,2026/2027,8,VfL Wolfsburg,4,4,100
+Corners Over 10.5 Home,2026/2027,9,Fortuna Sittard,4,4,100
+Corners Over 10.5 Home,2026/2027,10,FC Volendam,5,5,100
+Corners Over 10.5 Away,2026/2027,1,Al Shamal SC,3,3,100
+Corners Over 10.5 Away,2026/2027,2,Everton,3,3,100
+Corners Over 10.5 Away,2026/2027,3,Celtic,4,4,100
+Corners Over 10.5 Away,2026/2027,4,Werder Bremen,3,3,100
+Corners Over 10.5 Away,2026/2027,5,Dundee,4,4,100
+Corners Over 10.5 Away,2026/2027,6,FC Bayern Munchen,3,3,100
+Corners Over 10.5 Away,2026/2027,7,VfL Wolfsburg,4,4,100
+Corners Over 10.5 Away,2026/2027,8,Go Ahead Eagles,5,5,100
+Corners Over 10.5 Away,2026/2027,9,FC Union Berlin,2,2,100
+Corners Over 10.5 Away,2026/2027,10,Sporting Charleroi,4,4,100
+Corners Under 10.5,2026/2027,1,Al Rayyan,6,6,100
+Corners Under 10.5,2026/2027,2,AC Milan,7,7,100
+Corners Under 10.5,2026/2027,3,Coventry,7,7,100
+Corners Under 10.5,2026/2027,4,Paris Saint Germain,7,7,100
+Corners Under 10.5,2026/2027,5,Torino,7,7,100
+Corners Under 10.5,2026/2027,6,Pau,9,9,100
+Corners Under 10.5,2026/2027,7,Konyaspor,8,8,100
+Corners Under 10.5,2026/2027,8,Abha,8,8,100
+Corners Under 10.5,2026/2027,9,Al Faisaly,9,9,100
+Corners Under 10.5,2026/2027,10,Moreirense,8,8,100
+Corners Under 10.5 Home,2026/2027,1,Al Rayyan,3,3,100
+Corners Under 10.5 Home,2026/2027,2,Aston Villa,3,3,100
+Corners Under 10.5 Home,2026/2027,3,Arsenal,3,3,100
+Corners Under 10.5 Home,2026/2027,4,Stoke City,5,5,100
+Corners Under 10.5 Home,2026/2027,5,Swansea City,6,6,100
+Corners Under 10.5 Home,2026/2027,6,Olympique Marseille,3,3,100
+Corners Under 10.5 Home,2026/2027,7,Werder Bremen,3,3,100
+Corners Under 10.5 Home,2026/2027,8,Vitesse,5,5,100
+Corners Under 10.5 Home,2026/2027,9,Notts County,5,5,100
+Corners Under 10.5 Home,2026/2027,10,AC Milan,3,3,100
+Corners Under 10.5 Away,2026/2027,1,Al Rayyan,3,3,100
+Corners Under 10.5 Away,2026/2027,2,Al Sadd,3,3,100
+Corners Under 10.5 Away,2026/2027,3,Burnley,5,5,100
+Corners Under 10.5 Away,2026/2027,4,Roma,3,3,100
+Corners Under 10.5 Away,2026/2027,5,Nantes,4,4,100
+Corners Under 10.5 Away,2026/2027,6,Genoa,3,3,100
+Corners Under 10.5 Away,2026/2027,7,Saint-Etienne,5,5,100
+Corners Under 10.5 Away,2026/2027,8,Fiorentina,3,3,100
+Corners Under 10.5 Away,2026/2027,9,AC Milan,4,4,100
+Corners Under 10.5 Away,2026/2027,10,Coventry,4,4,100
+Corners Over 11.5,2026/2027,1,Melbourne Victory,1,1,100
+Corners Over 11.5,2026/2027,2,Wellington Phoenix,1,1,100
+Corners Over 11.5,2026/2027,3,NorthEast United,2,2,100
+Corners Over 11.5,2026/2027,4,Darmstadt 98,7,8,88
+Corners Over 11.5,2026/2027,5,VfL Wolfsburg,7,8,88
+Corners Over 11.5,2026/2027,6,FC Augsburg,5,6,83
+Corners Over 11.5,2026/2027,7,VfB Stuttgart,5,6,83
+Corners Over 11.5,2026/2027,8,Energie Cottbus,6,8,75
+Corners Over 11.5,2026/2027,9,Cardiff City,8,11,73
+Corners Over 11.5,2026/2027,10,Bradford City,8,11,73
+Corners Over 11.5 Home,2026/2027,1,FC Augsburg,3,3,100
+Corners Over 11.5 Home,2026/2027,2,Darmstadt 98,4,4,100
+Corners Over 11.5 Home,2026/2027,3,Fortuna Sittard,4,4,100
+Corners Over 11.5 Home,2026/2027,4,FC Koln,3,3,100
+Corners Over 11.5 Home,2026/2027,5,Vicenza,3,3,100
+Corners Over 11.5 Home,2026/2027,6,Bani Yas,4,4,100
+Corners Over 11.5 Home,2026/2027,7,Petrojet,3,3,100
+Corners Over 11.5 Home,2026/2027,8,Wellington Phoenix,1,1,100
+Corners Over 11.5 Home,2026/2027,9,RSB Berkane,1,1,100
+Corners Over 11.5 Home,2026/2027,10,NorthEast United,2,2,100
+Corners Over 11.5 Away,2026/2027,1,Dundee,4,4,100
+Corners Over 11.5 Away,2026/2027,2,VfL Wolfsburg,4,4,100
+Corners Over 11.5 Away,2026/2027,3,VfB Stuttgart,4,4,100
+Corners Over 11.5 Away,2026/2027,4,Energie Cottbus,4,4,100
+Corners Over 11.5 Away,2026/2027,5,Benevento,2,2,100
+Corners Over 11.5 Away,2026/2027,6,Wadi Degla,3,3,100
+Corners Over 11.5 Away,2026/2027,7,Melbourne Victory,1,1,100
+Corners Over 11.5 Away,2026/2027,8,Blackburn Rovers,5,6,83
+Corners Over 11.5 Away,2026/2027,9,Cardiff City,5,6,83
+Corners Over 11.5 Away,2026/2027,10,Bradford City,5,6,83
+Corners Under 11.5,2026/2027,1,Al Rayyan,6,6,100
+Corners Under 11.5,2026/2027,2,AC Milan,7,7,100
+Corners Under 11.5,2026/2027,3,Coventry,7,7,100
+Corners Under 11.5,2026/2027,4,Brest,7,7,100
+Corners Under 11.5,2026/2027,5,Paris Saint Germain,7,7,100
+Corners Under 11.5,2026/2027,6,Torino,7,7,100
+Corners Under 11.5,2026/2027,7,Strasbourg,7,7,100
+Corners Under 11.5,2026/2027,8,LOSC Lille,7,7,100
+Corners Under 11.5,2026/2027,9,Jagiellonia Bialystok,10,10,100
+Corners Under 11.5,2026/2027,10,Hajduk Split,10,10,100
+Corners Under 11.5 Home,2026/2027,1,Al-Arabi SC,2,2,100
+Corners Under 11.5 Home,2026/2027,2,Al Rayyan,3,3,100
+Corners Under 11.5 Home,2026/2027,3,Man City,4,4,100
+Corners Under 11.5 Home,2026/2027,4,Aston Villa,3,3,100
+Corners Under 11.5 Home,2026/2027,5,Wigan Athletic,5,5,100
+Corners Under 11.5 Home,2026/2027,6,Arsenal,3,3,100
+Corners Under 11.5 Home,2026/2027,7,Newcastle,4,4,100
+Corners Under 11.5 Home,2026/2027,8,Sheffield United,5,5,100
+Corners Under 11.5 Home,2026/2027,9,Stoke City,5,5,100
+Corners Under 11.5 Home,2026/2027,10,Swansea City,6,6,100
+Corners Under 11.5 Away,2026/2027,1,Al Rayyan,3,3,100
+Corners Under 11.5 Away,2026/2027,2,Al Sadd,3,3,100
+Corners Under 11.5 Away,2026/2027,3,Sunderland,4,4,100
+Corners Under 11.5 Away,2026/2027,4,Burnley,5,5,100
+Corners Under 11.5 Away,2026/2027,5,Norwich City,5,5,100
+Corners Under 11.5 Away,2026/2027,6,Roma,3,3,100
+Corners Under 11.5 Away,2026/2027,7,Bournemouth,3,3,100
+Corners Under 11.5 Away,2026/2027,8,Nantes,4,4,100
+Corners Under 11.5 Away,2026/2027,9,Hibernian,4,4,100
+Corners Under 11.5 Away,2026/2027,10,Olympique Lyonnais,3,3,100
+Cards Over 3.5,2026/2027,1,Al Shamal SC,6,6,100
+Cards Over 3.5,2026/2027,2,Nacional,33,33,100
+Cards Over 3.5,2026/2027,3,VfL Bochum 1848,8,8,100
+Cards Over 3.5,2026/2027,4,Holstein Kiel,8,8,100
+Cards Over 3.5,2026/2027,5,Getafe,9,9,100
+Cards Over 3.5,2026/2027,6,Kalamata,7,7,100
+Cards Over 3.5,2026/2027,7,Kifisia,7,7,100
+Cards Over 3.5,2026/2027,8,Volos NFC,7,7,100
+Cards Over 3.5,2026/2027,9,Ittihad Tanger,4,4,100
+Cards Over 3.5,2026/2027,10,Real Oviedo,10,10,100
+Cards Over 3.5 Home,2026/2027,1,Al-Arabi SC,2,2,100
+Cards Over 3.5 Home,2026/2027,2,Al Shamal SC,3,3,100
+Cards Over 3.5 Home,2026/2027,3,Lusail City,2,2,100
+Cards Over 3.5 Home,2026/2027,4,Al Rayyan,3,3,100
+Cards Over 3.5 Home,2026/2027,5,Al Wakrah,3,3,100
+Cards Over 3.5 Home,2026/2027,6,Man United,3,3,100
+Cards Over 3.5 Home,2026/2027,7,Aston Villa,3,3,100
+Cards Over 3.5 Home,2026/2027,8,Chelsea,3,3,100
+Cards Over 3.5 Home,2026/2027,9,Newcastle,4,4,100
+Cards Over 3.5 Home,2026/2027,10,Nantes,5,5,100
+Cards Over 3.5 Away,2026/2027,1,Al Duhail,3,3,100
+Cards Over 3.5 Away,2026/2027,2,Al Shahaniya,3,3,100
+Cards Over 3.5 Away,2026/2027,3,Al Shamal SC,3,3,100
+Cards Over 3.5 Away,2026/2027,4,Hull,4,4,100
+Cards Over 3.5 Away,2026/2027,5,Nottingham Forest,3,3,100
+Cards Over 3.5 Away,2026/2027,6,Borussia Dortmund,3,3,100
+Cards Over 3.5 Away,2026/2027,7,Shrewsbury Town,6,6,100
+Cards Over 3.5 Away,2026/2027,8,Brentford,3,3,100
+Cards Over 3.5 Away,2026/2027,9,Venezia,3,3,100
+Cards Over 3.5 Away,2026/2027,10,Hearts,5,5,100
+Cards Under 3.5,2026/2027,1,Napoli,7,7,100
+Cards Under 3.5,2026/2027,2,Go Ahead Eagles,9,9,100
+Cards Under 3.5,2026/2027,3,Khorfakkan Club,6,6,100
+Cards Under 3.5,2026/2027,4,Hai Phong,4,4,100
+Cards Under 3.5,2026/2027,5,Melbourne Victory,1,1,100
+Cards Under 3.5,2026/2027,6,Wellington Phoenix,1,1,100
+Cards Under 3.5,2026/2027,7,Hassania Agadir,4,4,100
+Cards Under 3.5,2026/2027,8,FAR Rabat,2,2,100
+Cards Under 3.5,2026/2027,9,Kerala Blasters,2,2,100
+Cards Under 3.5,2026/2027,10,Mumbai City,2,2,100
+Cards Under 3.5 Home,2026/2027,1,Al Shahaniya,4,4,100
+Cards Under 3.5 Home,2026/2027,2,Man City,4,4,100
+Cards Under 3.5 Home,2026/2027,3,Charlton Athletic,5,5,100
+Cards Under 3.5 Home,2026/2027,4,Hull,3,3,100
+Cards Under 3.5 Home,2026/2027,5,AZ Alkmaar,4,4,100
+Cards Under 3.5 Home,2026/2027,6,Rangers,4,4,100
+Cards Under 3.5 Home,2026/2027,7,FC Augsburg,3,3,100
+Cards Under 3.5 Home,2026/2027,8,Swindon Town,6,6,100
+Cards Under 3.5 Home,2026/2027,9,Kashiwa Reysol,5,5,100
+Cards Under 3.5 Home,2026/2027,10,Milton Keynes Dons,5,5,100
+Cards Under 3.5 Away,2026/2027,1,Al Sailiya,3,3,100
+Cards Under 3.5 Away,2026/2027,2,Newcastle,3,3,100
+Cards Under 3.5 Away,2026/2027,3,Olympique Lyonnais,3,3,100
+Cards Under 3.5 Away,2026/2027,4,Werder Bremen,3,3,100
+Cards Under 3.5 Away,2026/2027,5,Brest,4,4,100
+Cards Under 3.5 Away,2026/2027,6,FC Eindhoven,5,5,100
+Cards Under 3.5 Away,2026/2027,7,Udinese,3,3,100
+Cards Under 3.5 Away,2026/2027,8,Cagliari,4,4,100
+Cards Under 3.5 Away,2026/2027,9,FC Twente,4,4,100
+Cards Under 3.5 Away,2026/2027,10,Napoli,4,4,100
+Cards Over 4.5,2026/2027,1,Sydney,1,1,100
+Cards Over 4.5,2026/2027,2,Central Coast Mariners,1,1,100
+Cards Over 4.5,2026/2027,3,Newcastle Jets,1,1,100
+Cards Over 4.5,2026/2027,4,Western Sydney Wanderers,1,1,100
+Cards Over 4.5,2026/2027,5,Espanyol,8,9,89
+Cards Over 4.5,2026/2027,6,Holstein Kiel,7,8,88
+Cards Over 4.5,2026/2027,7,Juventud,29,33,88
+Cards Over 4.5,2026/2027,8,Benfica,7,8,88
+Cards Over 4.5,2026/2027,9,Kifisia,6,7,86
+Cards Over 4.5,2026/2027,10,Liverpool,28,33,85
+Cards Over 4.5 Home,2026/2027,1,Al-Arabi SC,2,2,100
+Cards Over 4.5 Home,2026/2027,2,Lusail City,2,2,100
+Cards Over 4.5 Home,2026/2027,3,Newcastle,4,4,100
+Cards Over 4.5 Home,2026/2027,4,Crawley Town,5,5,100
+Cards Over 4.5 Home,2026/2027,5,Montpellier,4,4,100
+Cards Over 4.5 Home,2026/2027,6,Eintracht Braunschweig,4,4,100
+Cards Over 4.5 Home,2026/2027,7,Real Betis,5,5,100
+Cards Over 4.5 Home,2026/2027,8,Tamworth,6,6,100
+Cards Over 4.5 Home,2026/2027,9,Stellenbosch,3,3,100
+Cards Over 4.5 Home,2026/2027,10,Esenler Erokspor,5,5,100
+Cards Over 4.5 Away,2026/2027,1,Al Shamal SC,3,3,100
+Cards Over 4.5 Away,2026/2027,2,Hull,4,4,100
+Cards Over 4.5 Away,2026/2027,3,Borussia Dortmund,3,3,100
+Cards Over 4.5 Away,2026/2027,4,Shrewsbury Town,6,6,100
+Cards Over 4.5 Away,2026/2027,5,Jong Ajax,5,5,100
+Cards Over 4.5 Away,2026/2027,6,Holstein Kiel,4,4,100
+Cards Over 4.5 Away,2026/2027,7,Getafe,4,4,100
+Cards Over 4.5 Away,2026/2027,8,Espanyol,4,4,100
+Cards Over 4.5 Away,2026/2027,9,Real Madrid,4,4,100
+Cards Over 4.5 Away,2026/2027,10,Corvinul Hunedoara,6,6,100
+Cards Under 4.5,2026/2027,1,Al Sailiya,6,6,100
+Cards Under 4.5,2026/2027,2,Werder Bremen,6,6,100
+Cards Under 4.5,2026/2027,3,Stockport County,11,11,100
+Cards Under 4.5,2026/2027,4,Swindon Town,12,12,100
+Cards Under 4.5,2026/2027,5,FC Bayern Munchen,6,6,100
+Cards Under 4.5,2026/2027,6,Cagliari,7,7,100
+Cards Under 4.5,2026/2027,7,FC Twente,9,9,100
+Cards Under 4.5,2026/2027,8,Napoli,7,7,100
+Cards Under 4.5,2026/2027,9,Go Ahead Eagles,9,9,100
+Cards Under 4.5,2026/2027,10,Atalanta,7,7,100
+Cards Under 4.5 Home,2026/2027,1,Al Shahaniya,4,4,100
+Cards Under 4.5 Home,2026/2027,2,Man City,4,4,100
+Cards Under 4.5 Home,2026/2027,3,Tottenham,4,4,100
+Cards Under 4.5 Home,2026/2027,4,Al Sailiya,3,3,100
+Cards Under 4.5 Home,2026/2027,5,Charlton Athletic,5,5,100
+Cards Under 4.5 Home,2026/2027,6,Hull,3,3,100
+Cards Under 4.5 Home,2026/2027,7,Swansea City,6,6,100
+Cards Under 4.5 Home,2026/2027,8,AZ Alkmaar,4,4,100
+Cards Under 4.5 Home,2026/2027,9,Rangers,4,4,100
+Cards Under 4.5 Home,2026/2027,10,Nottingham Forest,4,4,100
+Cards Under 4.5 Away,2026/2027,1,Al Gharafa,2,2,100
+Cards Under 4.5 Away,2026/2027,2,Al-Ahli Doha,3,3,100
+Cards Under 4.5 Away,2026/2027,3,Al Sadd,3,3,100
+Cards Under 4.5 Away,2026/2027,4,Al Sailiya,3,3,100
+Cards Under 4.5 Away,2026/2027,5,Newcastle,3,3,100
+Cards Under 4.5 Away,2026/2027,6,Brighton,3,3,100
+Cards Under 4.5 Away,2026/2027,7,Olympique Lyonnais,3,3,100
+Cards Under 4.5 Away,2026/2027,8,Werder Bremen,3,3,100
+Cards Under 4.5 Away,2026/2027,9,FC Kobenhavn,6,6,100
+Cards Under 4.5 Away,2026/2027,10,Plymouth Argyle,6,6,100
+Cards Over 5.5,2026/2027,1,Sydney,1,1,100
+Cards Over 5.5,2026/2027,2,Western Sydney Wanderers,1,1,100
+Cards Over 5.5,2026/2027,3,Real Valladolid,8,10,80
+Cards Over 5.5,2026/2027,4,Getafe,7,9,78
+Cards Over 5.5,2026/2027,5,Difaa El Jadida,3,4,75
+Cards Over 5.5,2026/2027,6,CODM Meknes,3,4,75
+Cards Over 5.5,2026/2027,7,Kalamata,5,7,71
+Cards Over 5.5,2026/2027,8,Kifisia,5,7,71
+Cards Over 5.5,2026/2027,9,Volos NFC,5,7,71
+Cards Over 5.5,2026/2027,10,Crawley Town,7,10,70
+Cards Over 5.5 Home,2026/2027,1,Al-Arabi SC,2,2,100
+Cards Over 5.5 Home,2026/2027,2,Real Betis,5,5,100
+Cards Over 5.5 Home,2026/2027,3,Volos NFC,3,3,100
+Cards Over 5.5 Home,2026/2027,4,Bac Ninh,2,2,100
+Cards Over 5.5 Home,2026/2027,5,Sydney,1,1,100
+Cards Over 5.5 Home,2026/2027,6,CODM Meknes,2,2,100
+Cards Over 5.5 Home,2026/2027,7,Sporting Delhi,1,1,100
+Cards Over 5.5 Home,2026/2027,8,Grimsby Town,5,6,83
+Cards Over 5.5 Home,2026/2027,9,Ceuta,5,6,83
+Cards Over 5.5 Home,2026/2027,10,Crawley Town,4,5,80
+Cards Over 5.5 Away,2026/2027,1,Borussia Dortmund,3,3,100
+Cards Over 5.5 Away,2026/2027,2,Getafe,4,4,100
+Cards Over 5.5 Away,2026/2027,3,Hellas Verona,3,3,100
+Cards Over 5.5 Away,2026/2027,4,Wydad Casablanca,1,1,100
+Cards Over 5.5 Away,2026/2027,5,Western Sydney Wanderers,1,1,100
+Cards Over 5.5 Away,2026/2027,6,Difaa El Jadida,1,1,100
+Cards Over 5.5 Away,2026/2027,7,Cherno More,5,6,83
+Cards Over 5.5 Away,2026/2027,8,Castellon,5,6,83
+Cards Over 5.5 Away,2026/2027,9,Corinthians,12,15,80
+Cards Over 5.5 Away,2026/2027,10,Real Sociedad,4,5,80
+Cards Under 5.5,2026/2027,1,Al-Ahli Doha,7,7,100
+Cards Under 5.5,2026/2027,2,Al Sadd,7,7,100
+Cards Under 5.5,2026/2027,3,Al Sailiya,6,6,100
+Cards Under 5.5,2026/2027,4,Reading,11,11,100
+Cards Under 5.5,2026/2027,5,Swansea City,11,11,100
+Cards Under 5.5,2026/2027,6,Crystal Palace,7,7,100
+Cards Under 5.5,2026/2027,7,Celtic,9,9,100
+Cards Under 5.5,2026/2027,8,Sheffield Wednesday,10,10,100
+Cards Under 5.5,2026/2027,9,Feyenoord,9,9,100
+Cards Under 5.5,2026/2027,10,Werder Bremen,6,6,100
+Cards Under 5.5 Home,2026/2027,1,Al-Ahli Doha,4,4,100
+Cards Under 5.5 Home,2026/2027,2,Al Shahaniya,4,4,100
+Cards Under 5.5 Home,2026/2027,3,Al Rayyan,3,3,100
+Cards Under 5.5 Home,2026/2027,4,Al Sadd,4,4,100
+Cards Under 5.5 Home,2026/2027,5,Man City,4,4,100
+Cards Under 5.5 Home,2026/2027,6,Tottenham,4,4,100
+Cards Under 5.5 Home,2026/2027,7,Al Sailiya,3,3,100
+Cards Under 5.5 Home,2026/2027,8,Charlton Athletic,5,5,100
+Cards Under 5.5 Home,2026/2027,9,Fulham,4,4,100
+Cards Under 5.5 Home,2026/2027,10,Birmingham City,6,6,100
+Cards Under 5.5 Away,2026/2027,1,Al Duhail,3,3,100
+Cards Under 5.5 Away,2026/2027,2,Al Gharafa,2,2,100
+Cards Under 5.5 Away,2026/2027,3,Al-Ahli Doha,3,3,100
+Cards Under 5.5 Away,2026/2027,4,Lusail City,4,4,100
+Cards Under 5.5 Away,2026/2027,5,Al Sadd,3,3,100
+Cards Under 5.5 Away,2026/2027,6,Al Sailiya,3,3,100
+Cards Under 5.5 Away,2026/2027,7,Middlesbrough,5,5,100
+Cards Under 5.5 Away,2026/2027,8,Everton,3,3,100
+Cards Under 5.5 Away,2026/2027,9,Newcastle,3,3,100
+Cards Under 5.5 Away,2026/2027,10,Reading,5,5,100
+Cards Over 6.5,2026/2027,1,Sydney,1,1,100
+Cards Over 6.5,2026/2027,2,Western Sydney Wanderers,1,1,100
+Cards Over 6.5,2026/2027,3,Kifisia,5,7,71
+Cards Over 6.5,2026/2027,4,Atromitos,4,6,67
+Cards Over 6.5,2026/2027,5,Arouca,5,8,63
+Cards Over 6.5,2026/2027,6,SD Eibar,6,10,60
+Cards Over 6.5,2026/2027,7,Real Valladolid,6,10,60
+Cards Over 6.5,2026/2027,8,Olympiacos F.C.,4,7,57
+Cards Over 6.5,2026/2027,9,Volos NFC,4,7,57
+Cards Over 6.5,2026/2027,10,Getafe,5,9,56
+Cards Over 6.5 Home,2026/2027,1,Al-Arabi SC,2,2,100
+Cards Over 6.5 Home,2026/2027,2,Volos NFC,3,3,100
+Cards Over 6.5 Home,2026/2027,3,Sydney,1,1,100
+Cards Over 6.5 Home,2026/2027,4,CODM Meknes,2,2,100
+Cards Over 6.5 Home,2026/2027,5,Ceuta,5,6,83
+Cards Over 6.5 Home,2026/2027,6,Queretaro,4,5,80
+Cards Over 6.5 Home,2026/2027,7,SD Eibar,4,5,80
+Cards Over 6.5 Home,2026/2027,8,Arouca,3,4,75
+Cards Over 6.5 Home,2026/2027,9,Kifisia,3,4,75
+Cards Over 6.5 Home,2026/2027,10,Cordoba,3,4,75
+Cards Over 6.5 Away,2026/2027,1,Wydad Casablanca,1,1,100
+Cards Over 6.5 Away,2026/2027,2,Western Sydney Wanderers,1,1,100
+Cards Over 6.5 Away,2026/2027,3,Difaa El Jadida,1,1,100
+Cards Over 6.5 Away,2026/2027,4,Real Valladolid,4,5,80
+Cards Over 6.5 Away,2026/2027,5,FC Andorra,4,5,80
+Cards Over 6.5 Away,2026/2027,6,Getafe,3,4,75
+Cards Over 6.5 Away,2026/2027,7,Vitoria Guimaraes,3,4,75
+Cards Over 6.5 Away,2026/2027,8,Girona,3,4,75
+Cards Over 6.5 Away,2026/2027,9,Celta Fortuna,3,4,75
+Cards Over 6.5 Away,2026/2027,10,Al Shahaniya,2,3,67
+Cards Under 6.5,2026/2027,1,Al-Ahli Doha,7,7,100
+Cards Under 6.5,2026/2027,2,Lusail City,6,6,100
+Cards Under 6.5,2026/2027,3,Al Sadd,7,7,100
+Cards Under 6.5,2026/2027,4,Al Wakrah,6,6,100
+Cards Under 6.5,2026/2027,5,West Ham United,11,11,100
+Cards Under 6.5,2026/2027,6,Al Sailiya,6,6,100
+Cards Under 6.5,2026/2027,7,Middlesbrough,11,11,100
+Cards Under 6.5,2026/2027,8,Fulham,7,7,100
+Cards Under 6.5,2026/2027,9,Hull,7,7,100
+Cards Under 6.5,2026/2027,10,Reading,11,11,100
+Cards Under 6.5 Home,2026/2027,1,Al-Ahli Doha,4,4,100
+Cards Under 6.5 Home,2026/2027,2,Al Shahaniya,4,4,100
+Cards Under 6.5 Home,2026/2027,3,Lusail City,2,2,100
+Cards Under 6.5 Home,2026/2027,4,Al Rayyan,3,3,100
+Cards Under 6.5 Home,2026/2027,5,Al Sadd,4,4,100
+Cards Under 6.5 Home,2026/2027,6,Al Wakrah,3,3,100
+Cards Under 6.5 Home,2026/2027,7,Man City,4,4,100
+Cards Under 6.5 Home,2026/2027,8,West Ham United,5,5,100
+Cards Under 6.5 Home,2026/2027,9,Tottenham,4,4,100
+Cards Under 6.5 Home,2026/2027,10,Al Sailiya,3,3,100
+Cards Under 6.5 Away,2026/2027,1,Al Duhail,3,3,100
+Cards Under 6.5 Away,2026/2027,2,Al Gharafa,2,2,100
+Cards Under 6.5 Away,2026/2027,3,Al-Ahli Doha,3,3,100
+Cards Under 6.5 Away,2026/2027,4,Al-Arabi SC,4,4,100
+Cards Under 6.5 Away,2026/2027,5,Lusail City,4,4,100
+Cards Under 6.5 Away,2026/2027,6,Al Sadd,3,3,100
+Cards Under 6.5 Away,2026/2027,7,Al Wakrah,3,3,100
+Cards Under 6.5 Away,2026/2027,8,West Ham United,6,6,100
+Cards Under 6.5 Away,2026/2027,9,Al Sailiya,3,3,100
+Cards Under 6.5 Away,2026/2027,10,Sunderland,4,4,100
