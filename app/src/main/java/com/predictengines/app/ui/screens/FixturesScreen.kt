@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -20,6 +22,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
@@ -45,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import com.predictengines.app.data.DateUtils
 import com.predictengines.app.data.FixtureItem
 import com.predictengines.app.data.PredictionRecord
+import com.predictengines.app.data.ReportBuilder
 import com.predictengines.app.data.TopPick
 import com.predictengines.app.data.TrackablePick
 import com.predictengines.app.ui.components.AppCard
@@ -59,6 +64,9 @@ import com.predictengines.app.ui.theme.TextPrimary
 import com.predictengines.app.ui.theme.TextSecondary
 import com.predictengines.app.ui.theme.WinGreen
 import com.predictengines.app.viewmodel.AppUiState
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.time.LocalDateTime
 import kotlin.math.roundToInt
 
@@ -139,7 +147,7 @@ private fun TopPicksList(state: AppUiState, onOpenTopPick: (TopPick) -> Unit) {
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            tp.leagueName + " · " + DateUtils.kickoffLabel(tp.date, tp.time),
+                            tp.leagueName + " · " + DateUtils.kickoffLabelWithYear(tp.date, tp.time),
                             style = MaterialTheme.typography.labelMedium,
                             color = TextMuted
                         )
@@ -206,6 +214,8 @@ private fun LeagueFixtures(
     played.reverse() // most recent first
     var showPlayed by rememberSaveable { mutableStateOf(false) }
     var showNotReady by rememberSaveable { mutableStateOf(false) }
+    // Week groups the user has folded or unfolded (flips the default for that group).
+    var flipped by rememberSaveable { mutableStateOf(emptySet<String>()) }
     // The fixture name the user tapped "Link" on; the picker shows the matches file's teams.
     var linking by remember { mutableStateOf<String?>(null) }
 
@@ -251,47 +261,34 @@ private fun LeagueFixtures(
             }
         }
 
-        var lastDay: String? = null
-        for (fx in upcoming) {
-            val day = DateUtils.dayLabel(fx.fixture.date)
-            if (day != lastDay) {
-                lastDay = day
-                item(key = "day_$day") {
-                    Text(
-                        day,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = TextSecondary,
-                        modifier = Modifier.padding(top = 8.dp, start = 4.dp)
-                    )
-                }
-            }
-            item(key = "fx_${fx.id}") {
-                FixtureCard(fx, state.marks, leagueId, showMarks = false, onMark = onMark, onLinkName = { linking = it }, onClick = { onOpen(fx.id) })
-            }
+        val thisWeek = ReportBuilder.weekStartOf(LocalDate.now().toString())
+        val card: @Composable (FixtureItem, Boolean, Modifier) -> Unit = { fx, marksOn, mod ->
+            FixtureCard(
+                fx, state.marks, leagueId, showMarks = marksOn, onMark = onMark,
+                onLinkName = { linking = it }, onClick = { onOpen(fx.id) }, modifier = mod
+            )
         }
 
-        if (played.isNotEmpty()) {
-            if (showPlayed) {
-                item(key = "hdr_played") {
-                    Text("Played (most recent first)", style = MaterialTheme.typography.labelLarge, color = TextSecondary,
-                        modifier = Modifier.padding(top = 8.dp, start = 4.dp))
-                }
-                items(played, key = { "fx_${it.id}" }) { fx ->
-                    FixtureCard(fx, state.marks, leagueId, showMarks = true, onMark = onMark, onLinkName = { linking = it }, onClick = { onOpen(fx.id) })
-                }
-            }
+        // Played weeks come first (most recent week on top), then upcoming weeks, then not-ready games.
+        if (showPlayed) {
+            weekGroups(
+                prefix = "p", fixtures = played, thisWeek = thisWeek, flipped = flipped,
+                onFlip = { flipped = if (it in flipped) flipped - it else flipped + it },
+                defaultOpen = { index, _ -> index == 0 }, showMarks = true, card = card
+            )
         }
-
-        if (notReady.isNotEmpty()) {
-            if (showNotReady) {
-                item(key = "hdr_notready") {
-                    Text("Not ready", style = MaterialTheme.typography.labelLarge, color = TextSecondary,
-                        modifier = Modifier.padding(top = 8.dp, start = 4.dp))
-                }
-                items(notReady, key = { "fx_${it.id}" }) { fx ->
-                    FixtureCard(fx, state.marks, leagueId, showMarks = false, onMark = onMark, onLinkName = { linking = it }, onClick = { onOpen(fx.id) })
-                }
-            }
+        weekGroups(
+            prefix = "u", fixtures = upcoming, thisWeek = thisWeek, flipped = flipped,
+            onFlip = { flipped = if (it in flipped) flipped - it else flipped + it },
+            defaultOpen = { _, week -> week == null || thisWeek == null || !week.isAfter(thisWeek.plusWeeks(1)) },
+            showMarks = false, card = card
+        )
+        if (showNotReady && notReady.isNotEmpty()) {
+            weekGroups(
+                prefix = "n", fixtures = notReady, thisWeek = thisWeek, flipped = flipped,
+                onFlip = { flipped = if (it in flipped) flipped - it else flipped + it },
+                defaultOpen = { _, _ -> true }, showMarks = false, card = card, singleGroupTitle = "Not ready"
+            )
         }
     }
 
@@ -306,6 +303,70 @@ private fun LeagueFixtures(
             },
             onDismiss = { linking = null }
         )
+    }
+}
+
+/**
+ * Lays fixtures out as Monday-Sunday week groups. Each group has a foldable header and its games
+ * sit side by side in a horizontally scrolling row. [defaultOpen] decides which groups start unfolded
+ * (index within this list, week start); tapping a header flips that group.
+ */
+private fun LazyListScope.weekGroups(
+    prefix: String,
+    fixtures: List<FixtureItem>,
+    thisWeek: LocalDate?,
+    flipped: Set<String>,
+    onFlip: (String) -> Unit,
+    defaultOpen: (index: Int, week: LocalDate?) -> Boolean,
+    showMarks: Boolean,
+    card: @Composable (FixtureItem, Boolean, Modifier) -> Unit,
+    singleGroupTitle: String? = null
+) {
+    val groups = LinkedHashMap<LocalDate?, MutableList<FixtureItem>>()
+    for (fx in fixtures) groups.getOrPut(ReportBuilder.weekStartOf(fx.fixture.date)) { ArrayList() }.add(fx)
+    val fmt = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
+    groups.entries.forEachIndexed { index, (week, list) ->
+        val key = "$prefix|${week ?: "none"}"
+        val open = defaultOpen(index, week) != (key in flipped)
+        val ordered = list.sortedBy { DateUtils.sortKey(it.fixture.date, it.fixture.time) }
+        val title = singleGroupTitle ?: when {
+            week == null -> "Date TBC"
+            week == thisWeek -> "This week"
+            thisWeek != null && week == thisWeek.plusWeeks(1) -> "Next week"
+            thisWeek != null && week == thisWeek.minusWeeks(1) -> "Last week"
+            else -> "Week of ${week.format(fmt)}"
+        }
+        val range = if (week != null) "${week.format(fmt)} - ${week.plusDays(6).format(fmt)}" else ""
+        item(key = "wk_$key") {
+            AppCard(onClick = { onFlip(key) }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(title, style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                        Text(
+                            listOf(range, "${list.size} ${if (list.size == 1) "game" else "games"}")
+                                .filter { it.isNotBlank() }.joinToString(" · "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextMuted
+                        )
+                    }
+                    Icon(
+                        if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                        contentDescription = if (open) "Fold" else "Unfold",
+                        tint = TextSecondary
+                    )
+                }
+            }
+        }
+        if (open) {
+            item(key = "row_$key") {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(end = 16.dp)
+                ) {
+                    items(ordered, key = { "fx_${it.id}" }) { fx -> card(fx, showMarks, Modifier.width(300.dp)) }
+                }
+            }
+        }
     }
 }
 
@@ -328,10 +389,11 @@ private fun FixtureCard(
     showMarks: Boolean,
     onMark: (date: String, home: String, away: String, pick: TrackablePick, correct: Boolean?) -> Unit,
     onLinkName: (String) -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val summary = item.summary
-    AppCard(onClick = if (summary != null) onClick else null) {
+    AppCard(modifier = modifier, onClick = if (summary != null) onClick else null) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -350,9 +412,9 @@ private fun FixtureCard(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            if (item.fixture.time.isNotBlank()) {
+            if (item.fixture.time.isNotBlank() || item.fixture.date.isNotBlank()) {
                 Spacer(Modifier.width(12.dp))
-                TagChip(item.fixture.time, IndigoPrimary)
+                TagChip(DateUtils.kickoffLabel(item.fixture.date, item.fixture.time), IndigoPrimary)
             }
         }
 

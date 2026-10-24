@@ -62,6 +62,13 @@ object DateUtils {
         return d.format(DateTimeFormatter.ofPattern("EEE, d MMM yyyy", Locale.getDefault()))
     }
 
+    /** Kickoff label with the year, e.g. "Sat 17 Oct 2026 · 15:00". */
+    fun kickoffLabelWithYear(date: String, time: String): String {
+        val d = parse(date)
+        val day = d?.format(DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.getDefault())) ?: date
+        return listOf(day, time).filter { it.isNotBlank() }.joinToString(" · ")
+    }
+
     /** Short kickoff label, e.g. "Sat 17 Oct · 15:00". */
     fun kickoffLabel(date: String, time: String): String {
         val d = parse(date)
