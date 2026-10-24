@@ -47,6 +47,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.predictengines.app.data.DateUtils
 import com.predictengines.app.data.FixtureItem
+import com.predictengines.app.data.Match
+import com.predictengines.app.data.scoreKey
+import com.predictengines.app.ui.components.ScoreDialog
 import com.predictengines.app.data.PredictionRecord
 import com.predictengines.app.data.ReportBuilder
 import com.predictengines.app.data.TopPick
@@ -77,7 +80,9 @@ fun FixturesScreen(
     onGoToData: () -> Unit,
     onMark: (date: String, home: String, away: String, pick: TrackablePick, correct: Boolean?) -> Unit,
     onLink: (name: String, target: String) -> Unit,
-    onOpenTopPick: (TopPick) -> Unit
+    onOpenTopPick: (TopPick) -> Unit,
+    onSaveScore: (fixtureId: Int, home: Int, away: Int) -> Unit,
+    onRemoveScore: (fixtureId: Int) -> Unit
 ) {
     var section by rememberSaveable { mutableIntStateOf(0) }
     if (state.openFixtureId != null) {
@@ -90,7 +95,7 @@ fun FixturesScreen(
             Tab(selected = section == 1, onClick = { section = 1 }, text = { Text("Top 20 picks") })
         }
         Box(Modifier.weight(1f)) {
-            if (section == 0) LeagueFixtures(state, onOpen, onGoToData, onMark, onLink)
+            if (section == 0) LeagueFixtures(state, onOpen, onGoToData, onMark, onLink, onSaveScore, onRemoveScore)
             else TopPicksList(state, onOpenTopPick)
         }
     }
@@ -122,16 +127,16 @@ private fun TopPicksList(state: AppUiState, onOpenTopPick: (TopPick) -> Unit) {
     ) {
         item {
             AppCard(
-                title = "Top ${state.topPicks.size} picks",
-                subtitle = "Ranked by strength across all leagues, grouped by week · tap a card to open the analysis",
+                title = "Top 20 picks of each week",
+                subtitle = "${state.topPicks.size} picks · best 20 per week across all leagues, ranked within the week · tap a card to open the analysis",
                 accentColor = WinGreen
             ) {}
         }
         // Same week groups as the league list: Monday-Sunday, foldable, games side by side.
         val thisWeek = ReportBuilder.weekStartOf(LocalDate.now().toString())
-        val ranked = state.topPicks.mapIndexed { i, tp -> (i + 1) to tp }
-        val groups = ranked.groupBy { ReportBuilder.weekStartOf(it.second.date) }
-            .entries.sortedBy { it.key?.toEpochDay() ?: Long.MAX_VALUE }
+        // The list arrives week by week, strongest first inside each week: rank = position within the week.
+        val groups = state.topPicks.groupBy { ReportBuilder.weekStartOf(it.date) }
+            .map { (week, picks) -> week to picks.mapIndexed { i, tp -> (i + 1) to tp } }
         val fmt = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
         for ((week, list) in groups) {
             val key = "t|${week ?: "none"}"
@@ -170,7 +175,7 @@ private fun TopPicksList(state: AppUiState, onOpenTopPick: (TopPick) -> Unit) {
                         contentPadding = PaddingValues(end = 16.dp)
                     ) {
                         items(
-                            list.sortedBy { DateUtils.sortKey(it.second.date, it.second.time) },
+                            list,
                             key = { (_, p) -> "${p.leagueId}|${p.date}|${p.home}|${p.away}" }
                         ) { (rank, tp) ->
                             TopPickCard(rank, tp, onClick = { onOpenTopPick(tp) }, modifier = Modifier.width(300.dp))
@@ -229,7 +234,9 @@ private fun LeagueFixtures(
     onOpen: (Int) -> Unit,
     onGoToData: () -> Unit,
     onMark: (date: String, home: String, away: String, pick: TrackablePick, correct: Boolean?) -> Unit,
-    onLink: (name: String, target: String) -> Unit
+    onLink: (name: String, target: String) -> Unit,
+    onSaveScore: (fixtureId: Int, home: Int, away: Int) -> Unit,
+    onRemoveScore: (fixtureId: Int) -> Unit
 ) {
     val leagueName = state.selected?.name.orEmpty()
     if (state.isLoading) {
@@ -272,6 +279,8 @@ private fun LeagueFixtures(
     var flipped by rememberSaveable { mutableStateOf(emptySet<String>()) }
     // The fixture name the user tapped "Link" on; the picker shows the matches file's teams.
     var linking by remember { mutableStateOf<String?>(null) }
+    // The played fixture whose score is being typed in.
+    var scoring by remember { mutableStateOf<FixtureItem?>(null) }
 
     fun markId(fx: FixtureItem, key: String) =
         PredictionRecord.idOf(leagueId, fx.fixture.date, fx.home.orEmpty(), fx.away.orEmpty(), "Consensus", key)
@@ -317,9 +326,11 @@ private fun LeagueFixtures(
 
         val thisWeek = ReportBuilder.weekStartOf(LocalDate.now().toString())
         val card: @Composable (FixtureItem, Boolean, Modifier) -> Unit = { fx, marksOn, mod ->
+            val sk = scoreKey(fx.fixture.date, fx.home.orEmpty(), fx.away.orEmpty())
             FixtureCard(
                 fx, state.marks, leagueId, showMarks = marksOn, onMark = onMark,
-                onLinkName = { linking = it }, onClick = { onOpen(fx.id) }, modifier = mod
+                onLinkName = { linking = it }, onClick = { onOpen(fx.id) }, modifier = mod,
+                score = state.scores[sk], scoreEditable = sk in state.addedScoreKeys, onScore = { scoring = fx }
             )
         }
 
@@ -344,6 +355,19 @@ private fun LeagueFixtures(
                 defaultOpen = { _, _ -> true }, showMarks = false, card = card, singleGroupTitle = "Not ready"
             )
         }
+    }
+
+    scoring?.let { fx ->
+        val sk = scoreKey(fx.fixture.date, fx.home.orEmpty(), fx.away.orEmpty())
+        val current = state.scores[sk]
+        ScoreDialog(
+            home = fx.home.orEmpty(), away = fx.away.orEmpty(),
+            initial = current?.let { it.homeGoals to it.awayGoals },
+            canRemove = sk in state.addedScoreKeys,
+            onSave = { h, a -> onSaveScore(fx.id, h, a); scoring = null },
+            onRemove = { onRemoveScore(fx.id); scoring = null },
+            onDismiss = { scoring = null }
+        )
     }
 
     linking?.let { name ->
@@ -444,7 +468,10 @@ private fun FixtureCard(
     onMark: (date: String, home: String, away: String, pick: TrackablePick, correct: Boolean?) -> Unit,
     onLinkName: (String) -> Unit,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    score: Match? = null,
+    scoreEditable: Boolean = false,
+    onScore: () -> Unit = {}
 ) {
     val summary = item.summary
     AppCard(modifier = modifier, onClick = if (summary != null) onClick else null) {
@@ -469,6 +496,17 @@ private fun FixtureCard(
             if (item.fixture.time.isNotBlank() || item.fixture.date.isNotBlank()) {
                 Spacer(Modifier.width(12.dp))
                 TagChip(DateUtils.kickoffLabel(item.fixture.date, item.fixture.time), IndigoPrimary)
+            }
+        }
+
+        if (showMarks && item.home != null && item.away != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (score != null) {
+                    TagChip("Final ${score.homeGoals} - ${score.awayGoals}", WinGreen)
+                    if (scoreEditable) TextButton(onClick = onScore) { Text("Edit score", color = IndigoPrimary) }
+                } else {
+                    TextButton(onClick = onScore) { Text("Add score", color = IndigoPrimary) }
+                }
             }
         }
 

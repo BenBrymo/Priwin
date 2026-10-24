@@ -21,6 +21,11 @@ import com.predictengines.app.data.PredictionRecord
 import com.predictengines.app.data.ResultsStore
 import com.predictengines.app.data.TrackablePick
 import com.predictengines.app.data.TopPick
+import com.predictengines.app.data.StatDelta
+import com.predictengines.app.data.LedgerEntry
+import com.predictengines.app.data.fixtureKey
+import com.predictengines.app.data.scoreKey
+import com.predictengines.app.engine.StatsUpdater
 import com.predictengines.app.engine.TopPicksEngine
 import com.predictengines.app.data.StatRow
 import com.predictengines.app.data.TeamMatcher
@@ -49,6 +54,12 @@ data class AppUiState(
     /** True when this league ships with its own fixtures file. */
     val builtInFixtures: Boolean = false,
     val fixtures: List<FixtureItem> = emptyList(),
+    /** Known final scores of this league's games, keyed by [scoreKey] (matches file + scores added in the app). */
+    val scores: Map<String, Match> = emptyMap(),
+    /** The subset of [scores] the user typed in (these can be edited or removed). */
+    val addedScoreKeys: Set<String> = emptySet(),
+    /** Every row of the stats data in use (built-in + the user's edits), for the Stats editor. */
+    val statsRows: List<StatRow> = emptyList(),
 
     // Stats model data (global: one stats file covers every league)
     val statsImport: ImportInfo? = null,
@@ -90,7 +101,8 @@ private class LoadedData(
     val fixturesImport: ImportInfo?,
     val builtInFixtures: Boolean,
     val stats: List<StatRow>,
-    val statsImport: ImportInfo?
+    val statsImport: ImportInfo?,
+    val added: List<Match>
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -103,6 +115,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private var matches: List<Match> = emptyList()
     private var stats: List<StatRow> = emptyList()
+    private var ledger: List<LedgerEntry> = emptyList()
     private var loadJob: Job? = null
     private var topJob: Job? = null
 
@@ -141,14 +154,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val m = repo.loadMatches(league)
                 val teams = m.flatMap { listOf(it.homeTeam, it.awayTeam) }.distinct().sorted()
                 val st = repo.loadStats()
-                val items = buildFixtureItems(repo.loadFixtures(league), m, teams, st)
+                val led = repo.loadLedger()
+                ledger = led
+                val items = buildFixtureItems(repo.loadFixtures(league), m, teams, st, league.id, led)
                 LoadedData(
                     m, teams, items,
                     repo.importInfo(league, DataKind.MATCHES),
                     repo.importInfo(league, DataKind.FIXTURES),
                     repo.hasBuiltInFixtures(league),
                     st,
-                    repo.statsInfo()
+                    repo.statsInfo(),
+                    repo.loadAddedResults(league)
                 )
             }
             matches = data.matches
@@ -169,6 +185,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     statsUsedMarkets = usedMarkets,
                     statsIgnoredMarkets = ignoredMarkets,
                     fixtures = data.fixtures,
+                    scores = data.matches.associateBy { m -> scoreKey(m.date, m.homeTeam, m.awayTeam) },
+                    addedScoreKeys = data.added.map { m -> scoreKey(m.date, m.homeTeam, m.awayTeam) }.toSet(),
+                    statsRows = data.stats,
                     homeTeam = keepHome ?: data.teams.getOrNull(0),
                     awayTeam = keepAway ?: data.teams.getOrNull(1),
                     openFixtureId = null,
@@ -181,6 +200,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         loadJob = job
         return job
+    }
+
+    private fun matchesBefore(all: List<Match>, date: String): List<Match> =
+        if (date.isBlank()) all else all.filter { it.date.isBlank() || it.date < date }
+
+    private fun statsAsOf(
+        leagueId: String, date: String, home: String, away: String, rows: List<StatRow>, led: List<LedgerEntry>
+    ): List<StatRow> {
+        if (led.isEmpty()) return rows
+        val fx = fixtureKey(leagueId, date, home, away)
+        val mine = led.filter { it.fx == fx }
+        if (mine.isEmpty()) return rows
+        val undone = StatsUpdater.apply(rows, mine.map { StatDelta(it.rowKey, it.dv, it.dg, it.tag) }, sign = -1)
+        val byKey = undone.associateBy { StatsUpdater.rowKey(it) }
+        return rows.map { byKey[StatsUpdater.rowKey(it)] ?: it }
     }
 
     /** Re-scores every league's fixtures in the background and keeps the 20 strongest picks. */
@@ -230,19 +264,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         fixtures: List<Fixture>,
         matches: List<Match>,
         teams: List<String>,
-        statRows: List<StatRow>
+        statRows: List<StatRow>,
+        leagueId: String = "",
+        led: List<LedgerEntry> = emptyList()
     ): List<FixtureItem> {
         val sorted = fixtures.sortedBy { DateUtils.sortKey(it.date, it.time) }
         return sorted.mapIndexed { index, f ->
             val home = TeamMatcher.resolve(f.homeTeam, teams)
             val away = TeamMatcher.resolve(f.awayTeam, teams)
             val summary = if (home != null && away != null && home != away) {
+                // A fixture is always predicted from what was known BEFORE it: earlier games only, and the
+                // stats without the changes this very game made to them (once its score is in).
+                val before = matchesBefore(matches, f.date)
+                val st = statsAsOf(leagueId, f.date, home, away, statRows, led)
                 FixtureSummary(
                     ConsensusEngine.compute(
                         home, away,
-                        BrymoEngine.predict(home, away, matches),
-                        PoissonEngine.predict(home, away, matches),
-                        StatsEngine.predict(home, away, statRows)
+                        BrymoEngine.predict(home, away, before),
+                        PoissonEngine.predict(home, away, before),
+                        StatsEngine.predict(home, away, st)
                     )
                 )
             } else null
@@ -414,6 +454,101 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         _state.update { it.copy(marks = updated) }
         viewModelScope.launch(Dispatchers.IO) { results.save(updated.values) }
+        if (pick.source == "Stats") updateStatsFromTick(league, date, home, away, pick, correct)
+    }
+
+    // ---- keeping matches and stats current -------------------------------------------------
+
+    /**
+     * Ticking a Stats pick for corners, cards or first-to-score feeds that result into the stats data
+     * (a score can't say). Picks the score decides are updated when the score is entered instead.
+     */
+    private fun updateStatsFromTick(league: League, date: String, home: String, away: String, pick: TrackablePick, correct: Boolean?) {
+        if (StatsUpdater.isScoreDecided(pick.key)) {
+            if (correct != null && !_state.value.scores.containsKey(scoreKey(date, home, away))) {
+                postMessage("Add this game's score to update the Stats data")
+            }
+            return
+        }
+        viewModelScope.launch {
+            val fx = fixtureKey(league.id, date, home, away)
+            val tag = "tick:${pick.key}"
+            val score = _state.value.scores[scoreKey(date, home, away)]
+            val changed = withContext(Dispatchers.IO) {
+                val deltas = if (correct == null) emptyList()
+                else StatsUpdater.tickDeltas(pick.key, correct, home, away, score, repo.loadStats())
+                repo.updateStatsForFixture(fx, { it == tag }, deltas)
+            }
+            if (correct != null) postMessage(if (changed > 0) "Stats data updated ($changed rows)" else "No stats rows to update for this pick")
+            reloadKeepingView(league)
+        }
+    }
+
+    /** Saves a fixture's final score into this league's matches and updates every stat the score settles. */
+    fun saveScore(fixtureId: Int, homeGoals: Int, awayGoals: Int) {
+        val league = _state.value.selected ?: return
+        val item = _state.value.fixtures.firstOrNull { it.id == fixtureId } ?: return
+        val home = item.home ?: return
+        val away = item.away ?: return
+        val date = item.fixture.date
+        if (date.isBlank()) { postMessage("This fixture has no date, so its score can't be saved"); return }
+        viewModelScope.launch {
+            val changed = withContext(Dispatchers.IO) {
+                repo.saveResult(league, Match(date, home, away, homeGoals, awayGoals))
+                val deltas = StatsUpdater.scoreDeltas(home, away, homeGoals, awayGoals, repo.loadStats())
+                repo.updateStatsForFixture(fixtureKey(league.id, date, home, away), { it == "score" }, deltas)
+            }
+            postMessage("Saved $home $homeGoals-$awayGoals $away · $changed stats rows updated")
+            reloadKeepingView(league)
+        }
+    }
+
+    fun removeScore(fixtureId: Int) {
+        val league = _state.value.selected ?: return
+        val item = _state.value.fixtures.firstOrNull { it.id == fixtureId } ?: return
+        val home = item.home ?: return
+        val away = item.away ?: return
+        val date = item.fixture.date
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                repo.removeResult(league, Match(date, home, away, 0, 0))
+                repo.updateStatsForFixture(fixtureKey(league.id, date, home, away), { it == "score" }, emptyList())
+            }
+            postMessage("Score removed; its stats changes were taken back")
+            reloadKeepingView(league)
+        }
+    }
+
+    // ---- stats editor ----------------------------------------------------------------------
+
+    fun editStat(row: StatRow, value: Double, games: Int) = statsChange("Updated ${row.team} · ${row.market}") { repo.editStatRow(row, value, games) }
+
+    fun addStat(row: StatRow) = statsChange("Added ${row.team} · ${row.market}") { repo.addStatRow(row) }
+
+    fun deleteStats(rows: List<StatRow>) =
+        statsChange(if (rows.size == 1) "Deleted ${rows[0].team} · ${rows[0].market}" else "Deleted ${rows.size} records") { repo.deleteStatRows(rows) }
+
+    private fun statsChange(message: String, block: () -> Unit) {
+        val league = _state.value.selected ?: return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { block() }
+            postMessage(message)
+            reloadKeepingView(league)
+        }
+    }
+
+    fun exportStats(uri: Uri) = export(uri) { repo.statsCsv() }
+
+    fun exportMatches(uri: Uri) {
+        val league = _state.value.selected ?: return
+        export(uri) { repo.matchesCsv(league) }
+    }
+
+    private fun export(uri: Uri, text: () -> String) {
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) { repo.writeTo(uri, text()) }
+            postMessage(if (ok) "File saved" else "Couldn't save the file")
+        }
     }
 
     private fun analyze(
@@ -423,10 +558,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         date: String = "",
         forFixture: Boolean = false
     ): Analysis {
-        val m = matches
+        val m = if (forFixture) matchesBefore(matches, date) else matches
+        val league = _state.value.selected?.id.orEmpty()
+        val statRows = if (forFixture) statsAsOf(league, date, home, away, stats, ledger) else stats
         val brymo = BrymoEngine.predict(home, away, m)
         val poisson = PoissonEngine.predict(home, away, m)
-        val statsResult = StatsEngine.predict(home, away, stats)
+        val statsResult = StatsEngine.predict(home, away, statRows)
         val consensus = ConsensusEngine.compute(home, away, brymo, poisson, statsResult, DETAIL_MAX_PICKS)
         return Analysis(
             homeTeam = home,

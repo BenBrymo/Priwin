@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
@@ -70,9 +71,13 @@ fun DataScreen(
     onClear: (DataKind) -> Unit,
     onAddLeague: (String) -> Unit,
     onDeleteLeague: (League) -> Unit,
-    onUnlink: (NameLink) -> Unit
+    onUnlink: (NameLink) -> Unit,
+    onExportMatches: (Uri) -> Unit
 ) {
     val league = state.selected
+    val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
+        if (uri != null) onExportMatches(uri)
+    }
 
     // One system file picker, reused for both file types. Storage Access Framework:
     // no storage permission is needed, the user just picks the file.
@@ -110,6 +115,13 @@ fun DataScreen(
                 onLoad = { pick(DataKind.MATCHES) },
                 onReset = { onClear(DataKind.MATCHES) }
             )
+            if (state.addedScoreKeys.isNotEmpty() || state.matchCount > 0) {
+                SecondaryButton(
+                    text = "Export ${league.name} matches" + if (state.addedScoreKeys.isNotEmpty()) " (incl. ${state.addedScoreKeys.size} added scores)" else "",
+                    onClick = { exporter.launch("${league.id}_matches.csv") },
+                    icon = Icons.Filled.Download
+                )
+            }
 
             DataSourceCard(
                 title = "League fixtures",

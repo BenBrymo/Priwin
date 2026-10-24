@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.SportsSoccer
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -42,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import com.predictengines.app.ui.components.PillChip
 import com.predictengines.app.ui.screens.DataScreen
 import com.predictengines.app.ui.screens.FixturesScreen
+import com.predictengines.app.ui.screens.StatsEditorScreen
 import com.predictengines.app.ui.screens.MatchupScreen
 import com.predictengines.app.ui.screens.ReportScreen
 import com.predictengines.app.ui.theme.CardSurface
@@ -57,6 +59,7 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     FIXTURES("Fixtures", Icons.Filled.SportsSoccer),
     MATCHUP("Matchup", Icons.Filled.Insights),
     REPORTS("Reports", Icons.Filled.Assessment),
+    STATS("Stats", Icons.Filled.Edit),
     DATA("Data", Icons.Filled.Storage)
 }
 
@@ -145,7 +148,9 @@ fun AppRoot(vm: AppViewModel) {
                         onGoToData = { tabIndex = Tab.DATA.ordinal },
                         onMark = vm::setMark,
                         onLink = vm::linkNames,
-                        onOpenTopPick = vm::openTopPick
+                        onOpenTopPick = vm::openTopPick,
+                        onSaveScore = vm::saveScore,
+                        onRemoveScore = vm::removeScore
                     )
                     Tab.MATCHUP -> MatchupScreen(
                         state = state,
@@ -156,13 +161,21 @@ fun AppRoot(vm: AppViewModel) {
                         onLink = vm::linkNames
                     )
                     Tab.REPORTS -> ReportScreen(state)
+                    Tab.STATS -> StatsEditorScreen(
+                        state = state,
+                        onEdit = vm::editStat,
+                        onAdd = vm::addStat,
+                        onDelete = vm::deleteStats,
+                        onExport = vm::exportStats
+                    )
                     Tab.DATA -> DataScreen(
                         state = state,
                         onImport = vm::importFile,
                         onClear = vm::clearImport,
                         onAddLeague = vm::addLeague,
                         onDeleteLeague = vm::deleteLeague,
-                        onUnlink = vm::unlinkNames
+                        onUnlink = vm::unlinkNames,
+                        onExportMatches = vm::exportMatches
                     )
                 }
             }

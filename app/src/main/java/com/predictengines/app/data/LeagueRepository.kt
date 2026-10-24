@@ -3,6 +3,7 @@ package com.predictengines.app.data
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.predictengines.app.engine.StatsUpdater
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -106,7 +107,64 @@ class LeagueRepository(context: Context) {
             else -> return emptyList()
         }
         // One club, one name: "Man City" and "Manchester City" in the same file become one team.
-        return TeamNames.unifyMatches(CsvParser.parseMatches(text).rows)
+        // Scores the user added in the app are appended; a game already in the file is never counted twice.
+        val base = CsvParser.parseMatches(text).rows
+        val all = TeamNames.unifyMatches(base + loadAddedResults(league))
+        val have = all.take(base.size).map { "${it.date}|${it.homeTeam}|${it.awayTeam}" }.toHashSet()
+        return all.take(base.size) + all.drop(base.size).filter { have.add("${it.date}|${it.homeTeam}|${it.awayTeam}") }
+    }
+
+    // ---- scores added in the app -----------------------------------------------------------
+
+    private fun addedFile(league: League) = File(File(root, league.id), "added_results.csv")
+
+    /** Scores the user typed in for played fixtures (kept apart from the league's own matches file). */
+    fun loadAddedResults(league: League): List<Match> {
+        val f = addedFile(league)
+        if (!f.exists()) return emptyList()
+        return CsvParser.parseMatches(f.readText(Charsets.UTF_8)).rows
+    }
+
+    /** Adds or replaces the score of one game (same date + teams). */
+    fun saveResult(league: League, match: Match) {
+        val list = loadAddedResults(league).filterNot { sameGame(it, match) } + match
+        writeAdded(league, list)
+    }
+
+    fun removeResult(league: League, match: Match) {
+        writeAdded(league, loadAddedResults(league).filterNot { sameGame(it, match) })
+    }
+
+    private fun sameGame(a: Match, b: Match) = a.date == b.date && a.homeTeam == b.homeTeam && a.awayTeam == b.awayTeam
+
+    private fun writeAdded(league: League, list: List<Match>) {
+        val f = addedFile(league)
+        if (list.isEmpty()) { f.delete(); return }
+        f.parentFile?.mkdirs()
+        val sb = StringBuilder("Date,HomeTeam,AwayTeam,FTHG,FTAG\n")
+        for (m in list) sb.append(csvCell(m.date)).append(',').append(csvCell(m.homeTeam)).append(',')
+            .append(csvCell(m.awayTeam)).append(',').append(m.homeGoals).append(',').append(m.awayGoals).append('\n')
+        f.writeText(sb.toString(), Charsets.UTF_8)
+    }
+
+    private fun csvCell(s: String) =
+        if (s.any { it == ',' || it == '"' || it == '\n' }) "\"" + s.replace("\"", "\"\"") + "\"" else s
+
+    /** The league's matches (file + added scores) as CSV, for exporting an up-to-date file. */
+    fun matchesCsv(league: League): String {
+        val sb = StringBuilder("Date,HomeTeam,AwayTeam,FTHG,FTAG\n")
+        for (m in loadMatches(league)) sb.append(csvCell(m.date)).append(',').append(csvCell(m.homeTeam)).append(',')
+            .append(csvCell(m.awayTeam)).append(',').append(m.homeGoals).append(',').append(m.awayGoals).append('\n')
+        return sb.toString()
+    }
+
+    fun statsCsv(): String = serializeStats(loadStats())
+
+    /** Writes [text] to a file the user picked with the system "create document" dialog. */
+    fun writeTo(uri: Uri, text: String): Boolean = try {
+        appContext.contentResolver.openOutputStream(uri, "wt")?.use { it.write(text.toByteArray(Charsets.UTF_8)) } != null
+    } catch (e: Exception) {
+        false
     }
 
     /** Imported fixtures file if there is one, otherwise the league's built-in fixtures (if any). */
@@ -215,7 +273,110 @@ class LeagueRepository(context: Context) {
     /** The built-in stats with anything the user loaded on top (same market + season + team: theirs wins). */
     fun loadStats(): List<StatRow> {
         val builtIn = readAsset(BUILT_IN_STATS)?.let { CsvParser.parseStats(it).rows }.orEmpty()
-        return mergeStats(builtIn + loadImportedStats())
+        val gone = deletedKeys()
+        val merged = mergeStats(builtIn + loadImportedStats())
+        return if (gone.isEmpty()) merged else merged.filter { StatsUpdater.rowKey(it) !in gone }
+    }
+
+    // Rows the user deleted stay deleted even though the built-in file still contains them.
+    private val deletedFile: File get() = File(root, "stats_deleted.txt")
+
+    private fun deletedKeys(): Set<String> =
+        if (deletedFile.exists()) deletedFile.readLines().filter { it.isNotBlank() }.toSet() else emptySet()
+
+    private fun saveDeletedKeys(keys: Set<String>) {
+        if (keys.isEmpty()) { deletedFile.delete(); return }
+        deletedFile.parentFile?.mkdirs()
+        deletedFile.writeText(keys.sorted().joinToString("\n"), Charsets.UTF_8)
+    }
+
+    /** Saves full rows as the user's own copy (they win over the built-in rows) and un-deletes them. */
+    private fun saveUserRows(changed: List<StatRow>, fileName: String = "Edits made in the app") {
+        if (changed.isEmpty()) return
+        val merged = mergeStats(loadImportedStats() + changed)
+        statsFile.parentFile?.mkdirs()
+        statsFile.writeText(serializeStats(merged), Charsets.UTF_8)
+        val gone = deletedKeys() - changed.map { StatsUpdater.rowKey(it) }.toSet()
+        saveDeletedKeys(gone)
+        val keep = statsInfo()
+        val info = ImportInfo(keep?.fileName ?: fileName, merged.size, keep?.skipped ?: 0, System.currentTimeMillis())
+        prefs.edit().putString(KEY_STATS_INFO, toJson(info)).apply()
+    }
+
+    /** Changes the numbers of one row; the percentage is recalculated. */
+    fun editStatRow(row: StatRow, value: Double, games: Int) {
+        val g = games.coerceAtLeast(0)
+        val v = value.coerceIn(0.0, g.toDouble())
+        saveUserRows(listOf(row.copy(value = v, games = g, percent = StatsUpdater.percentOf(v, g) ?: row.percent)))
+    }
+
+    /** Adds a row (or replaces the same market + season + team). */
+    fun addStatRow(row: StatRow) {
+        val g = row.games.coerceAtLeast(0)
+        val v = row.value.coerceIn(0.0, g.toDouble())
+        saveUserRows(listOf(row.copy(value = v, games = g, percent = StatsUpdater.percentOf(v, g))))
+    }
+
+    fun deleteStatRows(rows: List<StatRow>) {
+        if (rows.isEmpty()) return
+        val keys = rows.map { StatsUpdater.rowKey(it) }.toSet()
+        val mine = loadImportedStats().filter { StatsUpdater.rowKey(it) !in keys }
+        if (statsFile.exists() || mine.isNotEmpty()) {
+            statsFile.parentFile?.mkdirs()
+            statsFile.writeText(serializeStats(mine), Charsets.UTF_8)
+        }
+        saveDeletedKeys(deletedKeys() + keys)
+        // a deleted row can no longer be changed by earlier fixtures
+        saveLedger(loadLedger().filter { it.rowKey !in keys })
+    }
+
+    // ---- stats ledger (what each fixture added to the stats) -------------------------------
+
+    private val ledgerFile: File get() = File(root, "stats_ledger.json")
+
+    fun loadLedger(): List<LedgerEntry> {
+        if (!ledgerFile.exists()) return emptyList()
+        return try {
+            val arr = JSONArray(ledgerFile.readText(Charsets.UTF_8))
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                LedgerEntry(o.getString("fx"), o.getString("row"), o.getInt("dv"), o.getInt("dg"), o.getString("tag"))
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun saveLedger(list: List<LedgerEntry>) {
+        if (list.isEmpty()) { ledgerFile.delete(); return }
+        val arr = JSONArray()
+        list.forEach {
+            arr.put(JSONObject().put("fx", it.fx).put("row", it.rowKey).put("dv", it.dv).put("dg", it.dg).put("tag", it.tag))
+        }
+        ledgerFile.parentFile?.mkdirs()
+        ledgerFile.writeText(arr.toString(), Charsets.UTF_8)
+    }
+
+    /**
+     * Replaces what fixture [fx] contributed under every tag that matches [replaceTag]: the old changes are taken
+     * back out of the stats, then [add] is applied. Returns how many stat rows now carry this fixture's changes.
+     */
+    fun updateStatsForFixture(fx: String, replaceTag: (String) -> Boolean, add: List<StatDelta>): Int {
+        val ledger = loadLedger()
+        val old = ledger.filter { it.fx == fx && replaceTag(it.tag) }
+        val rows = loadStats()
+        val undone = StatsUpdater.apply(
+            rows, old.map { StatDelta(it.rowKey, it.dv, it.dg, it.tag) }, sign = -1
+        )
+        val afterUndo = if (undone.isEmpty()) rows else {
+            val byKey = undone.associateBy { StatsUpdater.rowKey(it) }
+            rows.map { byKey[StatsUpdater.rowKey(it)] ?: it }
+        }
+        val applied = StatsUpdater.apply(afterUndo, add)
+        saveUserRows((undone + applied).associateBy { StatsUpdater.rowKey(it) }.values.toList())
+        val kept = ledger.filterNot { it.fx == fx && replaceTag(it.tag) }
+        saveLedger(kept + add.map { LedgerEntry(fx, it.rowKey, it.dv, it.dg, it.tag) })
+        return add.size
     }
 
     private fun loadImportedStats(): List<StatRow> {
@@ -248,6 +409,7 @@ class LeagueRepository(context: Context) {
 
         // Only the user's own rows are saved here; the built-in stats stay in the app and are merged on load.
         val merged = mergeStats(loadImportedStats() + parsed.rows)
+        saveDeletedKeys(deletedKeys() - TeamNames.unifyStats(parsed.rows).map { StatsUpdater.rowKey(it) }.toSet())
 
         try {
             statsFile.parentFile?.mkdirs()
@@ -262,6 +424,8 @@ class LeagueRepository(context: Context) {
 
     fun clearStats() {
         statsFile.delete()
+        deletedFile.delete()
+        ledgerFile.delete()
         prefs.edit().remove(KEY_STATS_INFO).apply()
     }
 

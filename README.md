@@ -136,3 +136,20 @@ sample_data/                   files for testing the phone import
 4. Open the finished run, download the **PredictEngines-debug-apk** artifact, unzip it, and send
    `app-debug.apk` to your phone. Tap it and allow "install from unknown sources".
 5. If the run fails, open it and copy the red error lines; they show exactly what to fix.
+
+
+## Keeping data current (no file editing)
+
+- **Add a score**: on a played fixture, tap *Add score*. It is saved into that league's matches (on the phone, next to
+  the built-in file, never counted twice) and the Brymo/Poisson models learn from it immediately. Use *Data > Export matches*
+  to get the combined CSV when you want to refresh the bundled file.
+- **Stats follow the score**: saving a score adds one game to every stat it settles for both teams (wins, draws,
+  losses, win to nil, win or draw, BTTS, goal lines) and one hit where it happened: Man City Total Wins 6/6 becomes 7/7.
+  Only each team's latest-season row changes, and teams missing from a market are skipped. Editing or removing a score takes its changes back exactly.
+- **Ticks feed the rest**: corners, cards and first-to-score can't be read from a score, so ticking a *Stats* pick for them updates
+  the stats (correct = the picked event happened, wrong = its opposite did, e.g. Over 9.5 corners wrong gives the Under 9.5 row the hit).
+  Clearing the tick takes it back. Picks a score decides are updated by the score, so they are never counted twice.
+- **Past games keep their original prediction**: a played fixture is always shown as predicted from the games and stats known before it.
+- **Stats tab**: search, edit a record's value/games (percentage recalculates), add a record, export the file. Records below 50% get a Delete
+  button (or *Delete all shown* with the "below 50%" filter); deleted records stay deleted even though the built-in file still has them.
+  Ranks are left as they are (the model doesn't use them).

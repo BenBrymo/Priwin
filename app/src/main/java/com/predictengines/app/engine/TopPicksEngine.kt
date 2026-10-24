@@ -3,6 +3,7 @@ package com.predictengines.app.engine
 import com.predictengines.app.data.DateUtils
 import com.predictengines.app.data.FixtureItem
 import com.predictengines.app.data.League
+import com.predictengines.app.data.ReportBuilder
 import com.predictengines.app.data.TopPick
 import java.time.LocalDateTime
 
@@ -30,11 +31,16 @@ object TopPicksEngine {
             )
         }
 
-    /** Strongest first; more backers, then earlier kickoff, break ties. */
-    fun rank(all: List<TopPick>, limit: Int = DEFAULT_LIMIT): List<TopPick> =
-        all.sortedWith(
-            compareByDescending<TopPick> { it.pick.strength }
-                .thenByDescending { it.pick.backers.size }
-                .thenBy { DateUtils.sortKey(it.date, it.time) }
-        ).take(limit)
+    /**
+     * The [limit] strongest picks of EACH Monday-Sunday week, across all leagues. Weeks run earliest first;
+     * inside a week the strongest comes first (more backers, then earlier kickoff, break ties).
+     */
+    fun rank(all: List<TopPick>, limit: Int = DEFAULT_LIMIT): List<TopPick> {
+        val strongestFirst = compareByDescending<TopPick> { it.pick.strength }
+            .thenByDescending { it.pick.backers.size }
+            .thenBy { DateUtils.sortKey(it.date, it.time) }
+        return all.groupBy { ReportBuilder.weekStartOf(it.date) }
+            .entries.sortedBy { it.key?.toEpochDay() ?: Long.MAX_VALUE }
+            .flatMap { (_, picks) -> picks.sortedWith(strongestFirst).take(limit) }
+    }
 }
