@@ -68,7 +68,8 @@ class LeagueDiskCache(context: Context) {
     private fun encodeFixture(fx: FixtureItem): JSONObject {
         val o = JSONObject()
             .put("id", fx.id)
-            .put("f", JSONArray().put(fx.fixture.date).put(fx.fixture.time).put(fx.fixture.homeTeam).put(fx.fixture.awayTeam))
+            .put("f", JSONArray().put(fx.fixture.date).put(fx.fixture.time).put(fx.fixture.homeTeam).put(fx.fixture.awayTeam)
+                .put(fx.fixture.homeGoals ?: JSONObject.NULL).put(fx.fixture.awayGoals ?: JSONObject.NULL))
             .put("h", fx.home ?: JSONObject.NULL)
             .put("a", fx.away ?: JSONObject.NULL)
         val c = fx.summary?.consensus
@@ -118,7 +119,11 @@ class LeagueDiskCache(context: Context) {
             } else null
             FixtureItem(
                 f.getInt("id"),
-                Fixture(fa.getString(0), fa.getString(1), fa.getString(2), fa.getString(3)),
+                Fixture(
+                    fa.getString(0), fa.getString(1), fa.getString(2), fa.getString(3),
+                    if (fa.length() > 5 && !fa.isNull(4)) fa.getInt(4) else null,
+                    if (fa.length() > 5 && !fa.isNull(5)) fa.getInt(5) else null
+                ),
                 if (f.isNull("h")) null else f.getString("h"),
                 if (f.isNull("a")) null else f.getString("a"),
                 summary

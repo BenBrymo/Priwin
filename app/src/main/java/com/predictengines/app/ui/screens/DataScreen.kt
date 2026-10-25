@@ -74,7 +74,8 @@ fun DataScreen(
     onUnlink: (NameLink) -> Unit,
     onExportMatches: (Uri) -> Unit,
     onBackup: (Uri) -> Unit,
-    onRestore: (Uri) -> Unit
+    onRestore: (Uri) -> Unit,
+    onSetAutoSettleFrom: (String) -> Unit
 ) {
     val league = state.selected
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
@@ -103,6 +104,7 @@ fun DataScreen(
     }
 
     var showAdd by remember { mutableStateOf(false) }
+    var editingSettleDate by remember { mutableStateOf(false) }
     var toDelete by remember { mutableStateOf<League?>(null) }
 
     Column(
@@ -233,6 +235,22 @@ fun DataScreen(
         }
 
         AppCard(
+            title = "Automatic settling",
+            subtitle = "When a newer matches file contains the score of a played fixture, its stats and picks are settled for you, once.",
+            accentColor = PoissonAccent
+        ) {
+            Text(
+                "Counting games played on or after ${state.autoSettleFrom.ifBlank { "today" }}",
+                style = MaterialTheme.typography.bodyLarge, color = TextPrimary
+            )
+            Text(
+                "Earlier games are left alone so results already counted in your stats file aren't counted twice.",
+                style = MaterialTheme.typography.bodyMedium, color = TextSecondary
+            )
+            TextButton(onClick = { editingSettleDate = true }) { Text("Change start date", color = IndigoPrimary) }
+        }
+
+        AppCard(
             title = "Backup & restore",
             subtitle = "Ticks and reports, name links, added scores, stats edits and loaded files in one file. Make one before uninstalling or changing phone.",
             accentColor = WinGreen
@@ -337,6 +355,28 @@ fun DataScreen(
             dismissButton = {
                 TextButton(onClick = { showAdd = false }) { Text("Cancel", color = TextSecondary) }
             }
+        )
+    }
+
+    if (editingSettleDate) {
+        var text by remember { mutableStateOf(state.autoSettleFrom) }
+        val valid = Regex("\\d{4}-\\d{2}-\\d{2}").matches(text) && runCatching { java.time.LocalDate.parse(text) }.isSuccess
+        AlertDialog(
+            onDismissRequest = { editingSettleDate = false },
+            containerColor = CardSurface, titleContentColor = TextPrimary, textContentColor = TextSecondary,
+            title = { Text("Settle games played from") },
+            text = {
+                OutlinedTextField(
+                    value = text, onValueChange = { text = it.take(10) }, singleLine = true,
+                    label = { Text("Date (yyyy-MM-dd)") }, colors = com.predictengines.app.ui.components.inputColors()
+                )
+            },
+            confirmButton = {
+                TextButton(enabled = valid, onClick = { onSetAutoSettleFrom(text); editingSettleDate = false }) {
+                    Text("Save", color = if (valid) IndigoPrimary else TextMuted)
+                }
+            },
+            dismissButton = { TextButton(onClick = { editingSettleDate = false }) { Text("Cancel", color = TextSecondary) } }
         )
     }
 

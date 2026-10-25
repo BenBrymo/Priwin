@@ -51,6 +51,20 @@ class LeagueRepository(context: Context) {
 
     fun lastLeagueId(): String? = prefs.getString(KEY_LAST_LEAGUE, null)
 
+    /**
+     * Games played on or after this date (yyyy-MM-dd) are settled automatically when their score turns up in a
+     * matches file. It starts as the day the feature is first used, so games already counted in a stats file
+     * you loaded are never counted a second time.
+     */
+    fun autoSettleFrom(): String =
+        prefs.getString(KEY_AUTO_SETTLE, null) ?: java.time.LocalDate.now().toString().also {
+            prefs.edit().putString(KEY_AUTO_SETTLE, it).apply()
+        }
+
+    fun setAutoSettleFrom(date: String) {
+        prefs.edit().putString(KEY_AUTO_SETTLE, date).apply()
+    }
+
     fun setLastLeague(id: String) {
         prefs.edit().putString(KEY_LAST_LEAGUE, id).apply()
     }
@@ -109,7 +123,7 @@ class LeagueRepository(context: Context) {
         // One club, one name: "Man City" and "Manchester City" in the same file become one team.
         // Scores the user added in the app are appended; a game already in the file is never counted twice.
         val base = CsvParser.parseMatches(text).rows
-        val all = TeamNames.unifyMatches(base + loadAddedResults(league))
+        val all = TeamNames.unifyMatches(base + loadAddedResults(league) + fixtureFileResults(league, base))
         val have = all.take(base.size).map { "${it.date}|${it.homeTeam}|${it.awayTeam}" }.toHashSet()
         return all.take(base.size) + all.drop(base.size).filter { have.add("${it.date}|${it.homeTeam}|${it.awayTeam}") }
     }
@@ -132,6 +146,24 @@ class LeagueRepository(context: Context) {
             stamp(statsFile), stamp(deletedFile), stamp(ledgerFile),
             stamp(File(appContext.filesDir, "name_links.json"))
         ).joinToString("|")
+    }
+
+    /**
+     * Scores written in the fixtures file's Result column. Only games whose two teams can be matched to teams
+     * already in the matches file are used (their names rewritten to the matches file's spelling), so a
+     * misspelt team never creates a phantom club.
+     */
+    private fun fixtureFileResults(league: League, base: List<Match>): List<Match> {
+        val teams = base.flatMap { listOf(it.homeTeam, it.awayTeam) }.distinct()
+        if (teams.isEmpty()) return emptyList()
+        return loadFixtures(league).mapNotNull { f ->
+            val hg = f.homeGoals ?: return@mapNotNull null
+            val ag = f.awayGoals ?: return@mapNotNull null
+            if (f.date.isBlank()) return@mapNotNull null
+            val h = TeamMatcher.resolve(f.homeTeam, teams) ?: return@mapNotNull null
+            val a = TeamMatcher.resolve(f.awayTeam, teams) ?: return@mapNotNull null
+            if (h == a) null else Match(f.date, h, a, hg, ag)
+        }
     }
 
     // ---- scores added in the app -----------------------------------------------------------
@@ -506,9 +538,10 @@ class LeagueRepository(context: Context) {
     private companion object {
         const val KEY_CUSTOM = "custom_leagues"
         const val KEY_LAST_LEAGUE = "last_league"
+        const val KEY_AUTO_SETTLE = "auto_settle_from"
         const val KEY_STATS_INFO = "info_stats"
         const val BUILT_IN_STATS = "stats/statschecker_2026_2027.csv"
-        const val CACHE_VERSION = 1
+        const val CACHE_VERSION = 2
         const val MAX_FILE_BYTES = 20 * 1024 * 1024
     }
 }

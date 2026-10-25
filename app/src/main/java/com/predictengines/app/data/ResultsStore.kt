@@ -30,7 +30,8 @@ class ResultsStore(context: Context) {
                     label = o.getString("label"),
                     group = o.optString("group", "Other"),
                     correct = o.getBoolean("correct"),
-                    markedAtMillis = o.optLong("markedAt")
+                    markedAtMillis = o.optLong("markedAt"),
+                    auto = o.optBoolean("auto", false)
                 )
                 out[r.id] = r
             }
@@ -48,7 +49,7 @@ class ResultsStore(context: Context) {
                     .put("id", r.id).put("leagueId", r.leagueId).put("leagueName", r.leagueName)
                     .put("date", r.date).put("home", r.home).put("away", r.away)
                     .put("source", r.source).put("key", r.key).put("label", r.label)
-                    .put("group", r.group).put("correct", r.correct).put("markedAt", r.markedAtMillis)
+                    .put("group", r.group).put("correct", r.correct).put("markedAt", r.markedAtMillis).put("auto", r.auto)
             )
         }
         try {

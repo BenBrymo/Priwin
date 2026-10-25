@@ -42,6 +42,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.predictengines.app.data.StatRow
+import com.predictengines.app.engine.StatsEngine
 import com.predictengines.app.engine.StatsUpdater
 import com.predictengines.app.ui.components.AppCard
 import com.predictengines.app.ui.components.LabeledDropdown
@@ -240,13 +241,15 @@ fun StatsEditorScreen(
     if (adding) {
         val season = remember(rows) { rows.maxOfOrNull { it.season } ?: "2026/2027" }
         var team by remember { mutableStateOf("") }
-        var mk by remember { mutableStateOf<String?>(markets.firstOrNull()) }
+        var mk by remember { mutableStateOf(markets.firstOrNull().orEmpty()) }
         var seasonText by remember { mutableStateOf(season) }
         var v by remember { mutableStateOf("") }
         var g by remember { mutableStateOf("") }
         val value = v.toDoubleOrNull()
         val games = g.toIntOrNull()
-        val valid = team.isNotBlank() && mk != null && seasonText.isNotBlank() && value != null && games != null && games > 0 && value <= games
+        val marketName = mk.trim()
+        val understood = marketName.isNotEmpty() && StatsEngine.classify(marketName) != null
+        val valid = team.isNotBlank() && marketName.isNotEmpty() && seasonText.isNotBlank() && value != null && games != null && games > 0 && value <= games
         AlertDialog(
             onDismissRequest = { adding = false },
             containerColor = CardSurface, titleContentColor = TextPrimary, textContentColor = TextSecondary,
@@ -255,7 +258,19 @@ fun StatsEditorScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(value = team, onValueChange = { team = it }, singleLine = true,
                         label = { Text("Team") }, colors = inputColors(), modifier = Modifier.fillMaxWidth())
-                    LabeledDropdown("Market", markets, mk, { mk = it }, Modifier.fillMaxWidth(), StatsAccent)
+                    if (markets.isNotEmpty()) {
+                        LabeledDropdown("Existing markets", markets, null, { mk = it }, Modifier.fillMaxWidth(), StatsAccent)
+                    }
+                    OutlinedTextField(value = mk, onValueChange = { mk = it }, singleLine = true,
+                        label = { Text("Market (pick above or type a new one)") }, colors = inputColors(), modifier = Modifier.fillMaxWidth())
+                    if (marketName.isNotEmpty()) {
+                        Text(
+                            if (understood) "New markets are fine. This one is understood by the Stats model."
+                            else "Not a market the Stats model understands (e.g. Home Wins, Over 2.5 Away, BTTS, Corners Over 9.5). It will be saved but ignored when predicting.",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (understood) WinGreen else TextMuted
+                        )
+                    }
                     OutlinedTextField(value = seasonText, onValueChange = { seasonText = it }, singleLine = true,
                         label = { Text("Season") }, colors = inputColors(), modifier = Modifier.fillMaxWidth())
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -270,7 +285,7 @@ fun StatsEditorScreen(
             },
             confirmButton = {
                 TextButton(enabled = valid, onClick = {
-                    onAdd(StatRow(mk!!, seasonText.trim(), null, team.trim(), value!!, games!!, StatsUpdater.percentOf(value!!, games!!)))
+                    onAdd(StatRow(marketName, seasonText.trim(), null, team.trim(), value!!, games!!, StatsUpdater.percentOf(value!!, games!!)))
                     adding = false
                 }) { Text("Add", color = if (valid) IndigoPrimary else TextMuted) }
             },

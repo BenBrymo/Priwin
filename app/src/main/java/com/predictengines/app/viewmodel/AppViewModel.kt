@@ -21,6 +21,10 @@ import com.predictengines.app.data.PredictionRecord
 import com.predictengines.app.data.ResultsStore
 import com.predictengines.app.data.TrackablePick
 import com.predictengines.app.data.TopPick
+import com.predictengines.app.data.MatchExtras
+import com.predictengines.app.data.ResultExtrasStore
+import com.predictengines.app.data.settleSignature
+import com.predictengines.app.engine.ResultJudge
 import com.predictengines.app.data.StatDelta
 import com.predictengines.app.data.LedgerEntry
 import com.predictengines.app.data.LeagueDiskCache
@@ -79,6 +83,11 @@ data class AppUiState(
     val topPicks: List<TopPick> = emptyList(),
     val topPicksLoading: Boolean = true,
 
+    /** Corners / cards / first scorer the user typed in for played games, keyed by fixture. */
+    val extras: Map<String, MatchExtras> = emptyMap(),
+    /** Played games from this date on are settled automatically when their score appears in a matches file. */
+    val autoSettleFrom: String = "",
+
     /** The user's ticks and crosses, keyed by [PredictionRecord.id]. */
     val marks: Map<String, PredictionRecord> = emptyMap(),
 
@@ -101,6 +110,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val repo = LeagueRepository(application)
     private val disk = LeagueDiskCache(application)
     private val backup = BackupManager(application)
+    private val extrasStore = ResultExtrasStore(application)
+    private val settling = java.util.concurrent.atomic.AtomicBoolean(false)
     private val results = ResultsStore(application)
     private val linksStore = NameLinksStore(application)
     private val _state = MutableStateFlow(AppUiState())
@@ -163,7 +174,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // The user's name links must be in place before any file is read, so every file sees the same names.
         val links = linksStore.load()
         TeamMatcher.setUserLinks(links.map { it.a to it.b })
-        _state.update { it.copy(leagues = leagues, marks = results.load(), nameLinks = links) }
+        _state.update { it.copy(leagues = leagues, marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom()) }
         val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
         selectLeague(start.id)
     }
@@ -225,6 +236,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             refreshTopPicks()
+            autoSettleLoaded(league)
         }
         loadJob = job
         return job
@@ -519,23 +531,91 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Saves a fixture's final score into this league's matches and updates every stat the score settles. */
-    fun saveScore(fixtureId: Int, homeGoals: Int, awayGoals: Int) {
+    // ---- scores, settling and auto-ticks ---------------------------------------------------
+
+    /** One score typed in for a fixture, with the optional extras. */
+    data class ScoreEntry(val fixtureId: Int, val homeGoals: Int, val awayGoals: Int, val extras: MatchExtras? = null)
+
+    fun saveScore(fixtureId: Int, homeGoals: Int, awayGoals: Int, extras: MatchExtras? = null) =
+        saveScores(listOf(ScoreEntry(fixtureId, homeGoals, awayGoals, extras)))
+
+    /**
+     * Saves scores into this league's matches, then settles each game: every stat the score decides is updated,
+     * and every pick the score (and extras) decide is ticked or crossed. Picks you ticked yourself are left alone.
+     */
+    fun saveScores(entries: List<ScoreEntry>) {
         val league = _state.value.selected ?: return
-        val item = _state.value.fixtures.firstOrNull { it.id == fixtureId } ?: return
-        val home = item.home ?: return
-        val away = item.away ?: return
-        val date = item.fixture.date
-        if (date.isBlank()) { postMessage("This fixture has no date, so its score can't be saved"); return }
+        if (entries.isEmpty()) return
         viewModelScope.launch {
-            val changed = withContext(Dispatchers.IO) {
-                repo.saveResult(league, Match(date, home, away, homeGoals, awayGoals))
-                val deltas = StatsUpdater.scoreDeltas(home, away, homeGoals, awayGoals, repo.loadStats())
-                repo.updateStatsForFixture(fixtureKey(league.id, date, home, away), { it == "score" }, deltas)
+            val result = withContext(Dispatchers.IO) {
+                val marks = _state.value.marks.toMutableMap()
+                val extrasMap = _state.value.extras.toMutableMap()
+                val settled = extrasStore.loadSettled().toMutableMap()
+                var rows = 0
+                var games = 0
+                for (e in entries) {
+                    val item = _state.value.fixtures.firstOrNull { it.id == e.fixtureId } ?: continue
+                    val home = item.home ?: continue
+                    val away = item.away ?: continue
+                    val date = item.fixture.date
+                    if (date.isBlank()) continue
+                    val fx = fixtureKey(league.id, date, home, away)
+                    repo.saveResult(league, Match(date, home, away, e.homeGoals, e.awayGoals))
+                    if (e.extras == null || e.extras.isEmpty) extrasMap.remove(fx) else extrasMap[fx] = e.extras
+                    rows += settleOne(league, date, home, away, e.homeGoals, e.awayGoals, extrasMap[fx], marks)
+                    settled[fx] = settleSignature(e.homeGoals, e.awayGoals, extrasMap[fx])
+                    games++
+                }
+                results.save(marks.values)
+                extrasStore.saveExtras(extrasMap)
+                extrasStore.saveSettled(settled)
+                Triple(games, rows, Pair(marks.toMap(), extrasMap.toMap()))
             }
-            postMessage("Saved $home $homeGoals-$awayGoals $away · $changed stats rows updated")
+            val (games, rows, state) = result
+            _state.update { it.copy(marks = state.first, extras = state.second) }
+            postMessage(
+                if (games == 0) "Nothing to save"
+                else "Saved $games ${if (games == 1) "score" else "scores"} · picks settled · $rows stats rows updated"
+            )
             reloadKeepingView(league)
         }
+    }
+
+    /**
+     * Settles one game: stats from the score, then each pick of the fixture that the result decides gets an
+     * automatic tick or cross. Returns how many stats rows were touched. [marks] is updated in place.
+     */
+    private fun settleOne(
+        league: League, date: String, home: String, away: String, hg: Int, ag: Int,
+        extras: MatchExtras?, marks: MutableMap<String, PredictionRecord>
+    ): Int {
+        val fx = fixtureKey(league.id, date, home, away)
+        var rows = repo.updateStatsForFixture(fx, { it == "score" }, StatsUpdater.scoreDeltas(home, away, hg, ag, repo.loadStats()))
+        val played = Match(date, home, away, hg, ag)
+        val analysis = analyze(home, away, null, date, true)
+        for (pick in analysis.trackable) {
+            val id = PredictionRecord.idOf(league.id, date, home, away, pick.source, pick.key)
+            val existing = marks[id]
+            if (existing != null && !existing.auto) continue // the user's own tick always wins
+            val verdict = ResultJudge.judge(pick.key, home, away, hg, ag, extras)
+            val statsFeed = pick.source == "Stats" && !StatsUpdater.isScoreDecided(pick.key)
+            if (verdict == null) {
+                if (existing != null) {
+                    marks.remove(id)
+                    if (statsFeed) rows += repo.updateStatsForFixture(fx, { it == "tick:${pick.key}" }, emptyList())
+                }
+                continue
+            }
+            marks[id] = PredictionRecord(
+                id, league.id, league.name, date, home, away, pick.source, pick.key, pick.label, pick.group,
+                verdict, System.currentTimeMillis(), auto = true
+            )
+            if (statsFeed) {
+                val deltas = StatsUpdater.tickDeltas(pick.key, verdict, home, away, played, repo.loadStats())
+                rows += repo.updateStatsForFixture(fx, { it == "tick:${pick.key}" }, deltas)
+            }
+        }
+        return rows
     }
 
     fun removeScore(fixtureId: Int) {
@@ -545,13 +625,87 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val away = item.away ?: return
         val date = item.fixture.date
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
+            val (marks, extras) = withContext(Dispatchers.IO) {
+                val fx = fixtureKey(league.id, date, home, away)
                 repo.removeResult(league, Match(date, home, away, 0, 0))
-                repo.updateStatsForFixture(fixtureKey(league.id, date, home, away), { it == "score" }, emptyList())
+                repo.updateStatsForFixture(fx, { it == "score" }, emptyList())
+                // take back what this score did: its automatic ticks (and the stats those fed)
+                val marks = _state.value.marks.toMutableMap()
+                val prefix = "${league.id}|$date|$home|$away|"
+                for (rec in marks.values.filter { it.id.startsWith(prefix) && it.auto }) {
+                    marks.remove(rec.id)
+                    if (rec.source == "Stats" && !StatsUpdater.isScoreDecided(rec.key)) {
+                        repo.updateStatsForFixture(fx, { it == "tick:${rec.key}" }, emptyList())
+                    }
+                }
+                results.save(marks.values)
+                val extras = _state.value.extras.toMutableMap().also { it.remove(fx) }
+                extrasStore.saveExtras(extras)
+                extrasStore.saveSettled(extrasStore.loadSettled().toMutableMap().also { it.remove(fx) })
+                marks.toMap() to extras.toMap()
             }
-            postMessage("Score removed; its stats changes were taken back")
+            _state.update { it.copy(marks = marks, extras = extras) }
+            postMessage("Score removed; its automatic ticks and stats changes were taken back")
             reloadKeepingView(league)
         }
+    }
+
+    /**
+     * Scores that arrived through a matches file are settled like typed ones: stats updated, picks ticked.
+     * Only games on or after [AppUiState.autoSettleFrom], once each, and only when the score changes.
+     */
+    private fun autoSettleLoaded(league: League) {
+        if (!settling.compareAndSet(false, true)) return
+        viewModelScope.launch {
+            try {
+                val st = _state.value
+                val since = st.autoSettleFrom.ifBlank { repo.autoSettleFrom() }
+                val now = java.time.LocalDateTime.now()
+                val todo = st.fixtures.filter { fx ->
+                    val h = fx.home; val a = fx.away
+                    h != null && a != null && fx.fixture.date.isNotBlank() && fx.fixture.date >= since &&
+                        DateUtils.isPlayed(fx.fixture.date, fx.fixture.time, now) &&
+                        st.scores.containsKey(scoreKey(fx.fixture.date, h, a))
+                }
+                if (todo.isEmpty()) return@launch
+                val changed = withContext(Dispatchers.IO) {
+                    val settled = extrasStore.loadSettled().toMutableMap()
+                    val marks = _state.value.marks.toMutableMap()
+                    var did = 0
+                    for (fx in todo) {
+                        val h = fx.home ?: continue
+                        val a = fx.away ?: continue
+                        val m = st.scores[scoreKey(fx.fixture.date, h, a)] ?: continue
+                        val key = fixtureKey(league.id, fx.fixture.date, h, a)
+                        val x = st.extras[key]
+                        val sig = settleSignature(m.homeGoals, m.awayGoals, x)
+                        if (settled[key] == sig) continue
+                        settleOne(league, fx.fixture.date, h, a, m.homeGoals, m.awayGoals, x, marks)
+                        settled[key] = sig
+                        did++
+                    }
+                    if (did > 0) {
+                        results.save(marks.values)
+                        extrasStore.saveSettled(settled)
+                    }
+                    did to marks.toMap()
+                }
+                if (changed.first > 0) {
+                    _state.update { it.copy(marks = changed.second) }
+                    postMessage("Settled ${changed.first} played ${if (changed.first == 1) "game" else "games"} from your matches file")
+                    reloadKeepingView(league)
+                }
+            } finally {
+                settling.set(false)
+            }
+        }
+    }
+
+    fun setAutoSettleFrom(date: String) {
+        repo.setAutoSettleFrom(date)
+        _state.update { it.copy(autoSettleFrom = date) }
+        postMessage("Played games from $date on are settled automatically")
+        _state.value.selected?.let { autoSettleLoaded(it) }
     }
 
     // ---- backup & restore ------------------------------------------------------------------
@@ -587,8 +741,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     TeamMatcher.setUserLinks(links.map { it.a to it.b })
                     val leagues = repo.leagues()
                     val marks = withContext(Dispatchers.IO) { results.load() }
+                    val extras = withContext(Dispatchers.IO) { extrasStore.loadExtras() }
                     invalidateCache()
-                    _state.update { it.copy(leagues = leagues, marks = marks, nameLinks = links) }
+                    _state.update { it.copy(leagues = leagues, marks = marks, nameLinks = links, extras = extras, autoSettleFrom = repo.autoSettleFrom()) }
                     val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
                     selectLeague(start.id)
                     postMessage("Backup restored (${result.files} files)")

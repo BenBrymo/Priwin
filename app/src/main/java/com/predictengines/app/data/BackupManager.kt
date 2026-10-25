@@ -48,7 +48,7 @@ class BackupManager(context: Context) {
                 }
             }
             val p = JSONObject()
-            for ((k, v) in prefs.all) if (v is String && (k == KEY_CUSTOM || k == KEY_LAST || k.startsWith("info_"))) p.put(k, v)
+            for ((k, v) in prefs.all) if (v is String && (k == KEY_CUSTOM || k == KEY_LAST || k == KEY_AUTO || k.startsWith("info_"))) p.put(k, v)
             put(PREFS_FILE, p.toString().toByteArray())
         }
         return count
@@ -92,8 +92,8 @@ class BackupManager(context: Context) {
             entries[PREFS_FILE]?.let { raw ->
                 val p = JSONObject(String(raw))
                 val edit = prefs.edit()
-                prefs.all.keys.filter { it == KEY_CUSTOM || it == KEY_LAST || it.startsWith("info_") }.forEach { edit.remove(it) }
-                for (k in p.keys()) if (k == KEY_CUSTOM || k == KEY_LAST || k.startsWith("info_")) edit.putString(k, p.getString(k))
+                prefs.all.keys.filter { it == KEY_CUSTOM || it == KEY_LAST || it == KEY_AUTO || it.startsWith("info_") }.forEach { edit.remove(it) }
+                for (k in p.keys()) if (k == KEY_CUSTOM || k == KEY_LAST || k == KEY_AUTO || k.startsWith("info_")) edit.putString(k, p.getString(k))
                 edit.commit()
             }
             return Restored.Ok(count)
@@ -112,9 +112,10 @@ class BackupManager(context: Context) {
         const val MARKER = "priwin_backup.json"
         const val PREFS_FILE = "settings.json"
         const val LEAGUE_DIR = "league_data"
-        val TOP_FILES = listOf("prediction_marks.json", "name_links.json")
+        val TOP_FILES = listOf("prediction_marks.json", "name_links.json", "result_extras.json", "settled_fixtures.json")
         const val KEY_CUSTOM = "custom_leagues"
         const val KEY_LAST = "last_league"
+        const val KEY_AUTO = "auto_settle_from"
         const val MAX_BYTES = 200L * 1024 * 1024
     }
 }

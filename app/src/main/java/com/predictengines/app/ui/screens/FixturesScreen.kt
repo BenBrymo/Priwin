@@ -33,6 +33,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import com.predictengines.app.ui.components.inputColors
+import com.predictengines.app.ui.components.PrimaryButton
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +54,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.predictengines.app.data.DateUtils
 import com.predictengines.app.data.FixtureItem
+import com.predictengines.app.data.MatchExtras
+import com.predictengines.app.data.fixtureKey
+import com.predictengines.app.viewmodel.AppViewModel
 import com.predictengines.app.data.Match
 import com.predictengines.app.data.scoreKey
 import com.predictengines.app.ui.components.ScoreDialog
@@ -82,8 +92,9 @@ fun FixturesScreen(
     onMark: (date: String, home: String, away: String, pick: TrackablePick, correct: Boolean?) -> Unit,
     onLink: (name: String, target: String) -> Unit,
     onOpenTopPick: (TopPick) -> Unit,
-    onSaveScore: (fixtureId: Int, home: Int, away: Int) -> Unit,
-    onRemoveScore: (fixtureId: Int) -> Unit
+    onSaveScore: (fixtureId: Int, home: Int, away: Int, extras: MatchExtras?) -> Unit,
+    onRemoveScore: (fixtureId: Int) -> Unit,
+    onSaveScores: (List<AppViewModel.ScoreEntry>) -> Unit
 ) {
     var section by rememberSaveable { mutableIntStateOf(0) }
     if (state.openFixtureId != null) {
@@ -94,10 +105,12 @@ fun FixturesScreen(
         TabRow(selectedTabIndex = section, containerColor = Color.Transparent, contentColor = IndigoPrimary) {
             Tab(selected = section == 0, onClick = { section = 0 }, text = { Text("This league") })
             Tab(selected = section == 1, onClick = { section = 1 }, text = { Text("Top 20 picks") })
+            Tab(selected = section == 2, onClick = { section = 2 }, text = { Text("Results") })
         }
         Box(Modifier.weight(1f)) {
             if (section == 0) LeagueFixtures(state, onOpen, onGoToData, onMark, onLink, onSaveScore, onRemoveScore)
-            else TopPicksList(state, onOpenTopPick)
+            else if (section == 1) TopPicksList(state, onOpenTopPick)
+            else ResultsEntry(state, onSaveScores)
         }
     }
 }
@@ -236,6 +249,120 @@ private fun TopPickCard(rank: Int, tp: TopPick, onClick: () -> Unit, modifier: M
     }
 }
 
+/**
+ * One list of every played game that has no score yet: type the scores down the list, save once, and the
+ * scores, stats updates and automatic ticks are all applied together.
+ */
+@Composable
+private fun ResultsEntry(state: AppUiState, onSaveScores: (List<AppViewModel.ScoreEntry>) -> Unit) {
+    val now = LocalDateTime.now()
+    val missing = state.fixtures.filter { fx ->
+        fx.home != null && fx.away != null && fx.fixture.date.isNotBlank() &&
+            DateUtils.isPlayed(fx.fixture.date, fx.fixture.time, now) &&
+            !state.scores.containsKey(scoreKey(fx.fixture.date, fx.home, fx.away))
+    }.sortedByDescending { DateUtils.sortKey(it.fixture.date, it.fixture.time) }
+
+    val homeText = remember { mutableStateMapOf<Int, String>() }
+    val awayText = remember { mutableStateMapOf<Int, String>() }
+    val ready = missing.filter { homeText[it.id]?.toIntOrNull() != null && awayText[it.id]?.toIntOrNull() != null }
+    val fmt = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
+
+    if (state.isLoading) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = IndigoPrimary) }
+        return
+    }
+    if (missing.isEmpty()) {
+        Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+            Text(
+                "No played games are waiting for a score in ${state.selected?.name.orEmpty()}.",
+                style = MaterialTheme.typography.bodyMedium, color = TextMuted
+            )
+        }
+        return
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        item {
+            AppCard(
+                title = "${missing.size} games need a score",
+                subtitle = "Type the scores, then save once. The stats update and every pick the score decides is ticked or crossed for you.",
+                accentColor = WinGreen
+            ) {
+                PrimaryButton(
+                    text = if (ready.isEmpty()) "Save scores" else "Save ${ready.size} ${if (ready.size == 1) "score" else "scores"}",
+                    onClick = {
+                        onSaveScores(ready.map { AppViewModel.ScoreEntry(it.id, homeText[it.id]!!.toInt(), awayText[it.id]!!.toInt()) })
+                        ready.forEach { homeText.remove(it.id); awayText.remove(it.id) }
+                    },
+                    enabled = ready.isNotEmpty(),
+                    color = WinGreen,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+        var lastWeek: java.time.LocalDate? = null
+        var first = true
+        for (fx in missing) {
+            val week = ReportBuilder.weekStartOf(fx.fixture.date)
+            if (first || week != lastWeek) {
+                first = false
+                lastWeek = week
+                item(key = "rw_${week ?: "none"}_${fx.id}") {
+                    Text(
+                        if (week != null) "Week of ${week.format(fmt)}" else "Date TBC",
+                        style = MaterialTheme.typography.labelLarge, color = TextSecondary,
+                        modifier = Modifier.padding(top = 6.dp, start = 4.dp)
+                    )
+                }
+            }
+            item(key = "re_${fx.id}") {
+                AppCard {
+                    Text(
+                        DateUtils.kickoffLabelWithYear(fx.fixture.date, fx.fixture.time),
+                        style = MaterialTheme.typography.labelMedium, color = TextMuted
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            fx.fixture.homeTeam, modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleSmall, color = TextPrimary,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis
+                        )
+                        OutlinedTextField(
+                            value = homeText[fx.id].orEmpty(),
+                            onValueChange = { homeText[fx.id] = it.filter(Char::isDigit).take(2) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                            colors = inputColors(),
+                            modifier = Modifier.width(64.dp)
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            fx.fixture.awayTeam, modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleSmall, color = TextPrimary,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis
+                        )
+                        OutlinedTextField(
+                            value = awayText[fx.id].orEmpty(),
+                            onValueChange = { awayText[fx.id] = it.filter(Char::isDigit).take(2) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                            colors = inputColors(),
+                            modifier = Modifier.width(64.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun LeagueFixtures(
     state: AppUiState,
@@ -243,7 +370,7 @@ private fun LeagueFixtures(
     onGoToData: () -> Unit,
     onMark: (date: String, home: String, away: String, pick: TrackablePick, correct: Boolean?) -> Unit,
     onLink: (name: String, target: String) -> Unit,
-    onSaveScore: (fixtureId: Int, home: Int, away: Int) -> Unit,
+    onSaveScore: (fixtureId: Int, home: Int, away: Int, extras: MatchExtras?) -> Unit,
     onRemoveScore: (fixtureId: Int) -> Unit
 ) {
     val leagueName = state.selected?.name.orEmpty()
@@ -371,8 +498,9 @@ private fun LeagueFixtures(
         ScoreDialog(
             home = fx.home.orEmpty(), away = fx.away.orEmpty(),
             initial = current?.let { it.homeGoals to it.awayGoals },
+            initialExtras = state.extras[fixtureKey(state.selected?.id.orEmpty(), fx.fixture.date, fx.home.orEmpty(), fx.away.orEmpty())],
             canRemove = sk in state.addedScoreKeys,
-            onSave = { h, a -> onSaveScore(fx.id, h, a); scoring = null },
+            onSave = { h, a, x -> onSaveScore(fx.id, h, a, x); scoring = null },
             onRemove = { onRemoveScore(fx.id); scoring = null },
             onDismiss = { scoring = null }
         )

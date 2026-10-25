@@ -14,7 +14,10 @@ data class Fixture(
     val date: String,
     val time: String,
     val homeTeam: String,
-    val awayTeam: String
+    val awayTeam: String,
+    /** Final score when the fixtures file has a Result column filled in for this game. */
+    val homeGoals: Int? = null,
+    val awayGoals: Int? = null
 )
 
 /**

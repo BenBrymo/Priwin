@@ -19,7 +19,9 @@ data class PredictionRecord(
     /** Market type: 1X2, Goals, Corners... */
     val group: String,
     val correct: Boolean,
-    val markedAtMillis: Long
+    val markedAtMillis: Long,
+    /** True when the app settled it from the score; false when the user ticked it. A user's own tick is never overwritten. */
+    val auto: Boolean = false
 ) {
     companion object {
         fun idOf(leagueId: String, date: String, home: String, away: String, source: String, key: String) =

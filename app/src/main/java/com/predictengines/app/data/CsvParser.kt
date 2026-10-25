@@ -216,6 +216,7 @@ object CsvParser {
         var timeI = -1
         var homeI = -1
         var awayI = -1
+        var resultI = -1
         var labels: List<String> = emptyList()
         for (r in 0 until minOf(table.size, HEADER_SCAN_ROWS)) {
             val h = table[r].map { normalizeHeader(it) }
@@ -225,6 +226,7 @@ object CsvParser {
             headerRow = r; homeI = home; awayI = away
             dateI = pick(h, DATE_KEYS)
             timeI = pick(h, TIME_KEYS).takeIf { it != dateI } ?: -1
+            resultI = pick(h, RESULT_KEYS).takeIf { it != dateI && it != homeI && it != awayI } ?: -1
             labels = table[r]
             break
         }
@@ -233,7 +235,7 @@ object CsvParser {
         var note: String? = null
         if (headerRow >= 0) {
             dataRows = table.drop(headerRow + 1)
-            note = usedNote(labels, listOf(dateI, timeI, homeI, awayI))
+            note = usedNote(labels, listOf(dateI, timeI, homeI, awayI, resultI))
         } else {
             val cols = table.first().size
             when {
@@ -266,7 +268,8 @@ object CsvParser {
                 date = parts[0]
                 time = parts.getOrElse(1) { "" }.take(5)
             }
-            out.add(Fixture(date, time, cleanName(home), cleanName(away)))
+            val score = if (resultI >= 0) parseResult(row.getOrNull(resultI)) else null
+            out.add(Fixture(date, time, cleanName(home), cleanName(away), score?.first, score?.second))
         }
         if (out.isEmpty()) {
             return Parsed(emptyList(), skipped, "No valid fixture rows found ($skipped rows skipped).")
@@ -277,6 +280,36 @@ object CsvParser {
     }
 
     // ---- helpers ---------------------------------------------------------------------------
+
+    private val RESULT_KEYS = listOf("result", "score", "finalscore", "fulltime", "ft")
+
+    private val MONTHS = mapOf(
+        "jan" to 1, "feb" to 2, "mar" to 3, "apr" to 4, "may" to 5, "jun" to 6,
+        "jul" to 7, "aug" to 8, "sep" to 9, "oct" to 10, "nov" to 11, "dec" to 12
+    )
+    private val PLAIN_SCORE = Regex("^(\\d{1,2})\\s*[-\u2013:]\\s*(\\d{1,2})$")
+    private val NUM_MONTH = Regex("^(\\d{1,2})\\s*-\\s*([A-Za-z]{3})[A-Za-z]*\\.?$")
+    private val MONTH_NUM = Regex("^([A-Za-z]{3})[A-Za-z]*\\.?\\s*-\\s*(\\d{1,2})$")
+
+    /**
+     * Reads a Result cell. Spreadsheets turn scores into dates, so a score written "1-2" comes out as "1-Feb",
+     * and "3-0" as "Mar-00". Decoded: a month name is its number (Jan=1 ... Dec=12), and "00" is 0.
+     * Normal scores ("0 - 1", "1-13") are kept as they are. Returns null for an empty or unreadable cell.
+     */
+    fun parseResult(raw: String?): Pair<Int, Int>? {
+        val s = raw?.trim().orEmpty()
+        if (s.isEmpty()) return null
+        PLAIN_SCORE.matchEntire(s)?.let { return it.groupValues[1].toInt() to it.groupValues[2].toInt() }
+        NUM_MONTH.matchEntire(s)?.let { m ->
+            val month = MONTHS[m.groupValues[2].lowercase()] ?: return null
+            return m.groupValues[1].toInt() to month
+        }
+        MONTH_NUM.matchEntire(s)?.let { m ->
+            val month = MONTHS[m.groupValues[1].lowercase()] ?: return null
+            return month to m.groupValues[2].toInt()
+        }
+        return null
+    }
 
     private val DATE_WITH_TIME = Regex("^(\\d[\\d/.\\-]*\\d)[ T]\\d{1,2}:\\d{2}.*$")
 

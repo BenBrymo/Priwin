@@ -149,8 +149,9 @@ fun AppRoot(vm: AppViewModel) {
                         onMark = vm::setMark,
                         onLink = vm::linkNames,
                         onOpenTopPick = vm::openTopPick,
-                        onSaveScore = vm::saveScore,
-                        onRemoveScore = vm::removeScore
+                        onSaveScore = { id, h, a, x -> vm.saveScore(id, h, a, x) },
+                        onRemoveScore = vm::removeScore,
+                        onSaveScores = vm::saveScores
                     )
                     Tab.MATCHUP -> MatchupScreen(
                         state = state,
@@ -177,7 +178,8 @@ fun AppRoot(vm: AppViewModel) {
                         onUnlink = vm::unlinkNames,
                         onExportMatches = vm::exportMatches,
                         onBackup = vm::backupTo,
-                        onRestore = vm::restoreFrom
+                        onRestore = vm::restoreFrom,
+                        onSetAutoSettleFrom = vm::setAutoSettleFrom
                     )
                 }
             }
