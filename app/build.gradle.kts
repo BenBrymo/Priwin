@@ -12,16 +12,31 @@ android {
         applicationId = "com.predictengines.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "2.0"
+        versionCode = 3
+        versionName = "3.0"
 
         vectorDrawables {
             useSupportLibrary = true
         }
     }
 
+    // One fixed signing key for every build (local or GitHub), so a new APK installs OVER the old one
+    // and keeps its data. Without this, each GitHub run signs with a different temporary key.
+    signingConfigs {
+        create("priwin") {
+            storeFile = file("priwin.keystore")
+            storePassword = "priwin-keystore"
+            keyAlias = "priwin"
+            keyPassword = "priwin-keystore"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("priwin")
+        }
         release {
+            signingConfig = signingConfigs.getByName("priwin")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

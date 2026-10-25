@@ -153,3 +153,10 @@ sample_data/                   files for testing the phone import
 - **Stats tab**: search, edit a record's value/games (percentage recalculates), add a record, export the file. Records below 50% get a Delete
   button (or *Delete all shown* with the "below 50%" filter); deleted records stay deleted even though the built-in file still has them.
   Ranks are left as they are (the model doesn't use them).
+
+## Updating the app without losing data
+
+Every build is signed with the same key (`app/priwin.keystore`, committed on purpose), so a new APK installs over the old one and keeps
+all your data. If Android says "App not installed / conflicting packages", the installed copy was signed with a different key:
+open **Data > Backup & restore > Back up** in it first (if it has that card), uninstall it once, install this build, then **Restore**.
+Never delete `app/priwin.keystore` or change its passwords, or future updates will conflict again.
