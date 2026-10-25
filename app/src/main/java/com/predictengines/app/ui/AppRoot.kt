@@ -175,7 +175,9 @@ fun AppRoot(vm: AppViewModel) {
                         onAddLeague = vm::addLeague,
                         onDeleteLeague = vm::deleteLeague,
                         onUnlink = vm::unlinkNames,
-                        onExportMatches = vm::exportMatches
+                        onExportMatches = vm::exportMatches,
+                        onBackup = vm::backupTo,
+                        onRestore = vm::restoreFrom
                     )
                 }
             }

@@ -6,6 +6,7 @@ import com.predictengines.app.data.ConsensusPick
 import com.predictengines.app.data.ConsensusResult
 import com.predictengines.app.data.ConsensusVote
 import com.predictengines.app.data.Outcome
+import com.predictengines.app.data.Prediction
 import com.predictengines.app.data.PoissonResult
 import com.predictengines.app.data.StatsResult
 import com.predictengines.app.data.TrackablePick
@@ -123,6 +124,42 @@ object ConsensusEngine {
             ops.entries.sortedByDescending { it.value.confidence }.take(MAX_TRACKED_PER_MODEL).forEach { (key, op) ->
                 out.add(TrackablePick(model, key, op.label, category(key), op.confidence))
             }
+        }
+        return out
+    }
+
+    const val BEST_PICKS_PER_MODEL = 3
+
+    const val POISSON_BEST_PICKS = 5
+
+    /** Every market Poisson has a probability for (no cut-off), so it can always fill its best five. */
+    private fun poissonAllOpinions(home: String, away: String, p: PoissonResult): Map<String, Opinion> {
+        val out = LinkedHashMap<String, Opinion>()
+        out.putAll(poissonOpinions(home, away, p)) // its 1X2 call comes first
+        listOf(
+            "O1.5" to p.over15Percent, "U1.5" to 100 - p.over15Percent,
+            "O2.5" to p.over25Percent, "U2.5" to p.under25Percent,
+            "O3.5" to p.over35Percent, "U3.5" to 100 - p.over35Percent,
+            "BTTS_Y" to p.bttsYesPercent, "BTTS_N" to p.bttsNoPercent,
+            "1X" to p.homeOrDrawPercent, "X2" to p.awayOrDrawPercent, "12" to p.homeOrAwayPercent
+        ).forEach { (k, v) -> if (k !in out) out[k] = Opinion(label(k, home, away), v) }
+        return out
+    }
+
+    /** Each model's highest-percentage picks for the fixture, whatever the level: Poisson five, the others three. */
+    fun modelBest(
+        home: String,
+        away: String,
+        brymo: BrymoResult,
+        poisson: PoissonResult?,
+        stats: StatsResult?
+    ): Map<String, List<Prediction>> {
+        val out = LinkedHashMap<String, List<Prediction>>()
+        for ((model, ops) in opinionsOf(home, away, brymo, poisson, stats)) {
+            val all = if (model == "Poisson" && poisson != null) poissonAllOpinions(home, away, poisson) else ops
+            val count = if (model == "Poisson") POISSON_BEST_PICKS else BEST_PICKS_PER_MODEL
+            out[model] = all.values.sortedByDescending { it.confidence }
+                .take(count).map { Prediction(it.label, it.confidence) }
         }
         return out
     }

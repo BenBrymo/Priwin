@@ -55,6 +55,7 @@ import com.predictengines.app.data.ReportBuilder
 import com.predictengines.app.data.TopPick
 import com.predictengines.app.data.TrackablePick
 import com.predictengines.app.ui.components.AppCard
+import com.predictengines.app.ui.components.BestPickChip
 import com.predictengines.app.ui.components.EmptyState
 import com.predictengines.app.ui.components.MarkButtons
 import com.predictengines.app.ui.components.NamePickerDialog
@@ -215,7 +216,14 @@ private fun TopPickCard(rank: Int, tp: TopPick, onClick: () -> Unit, modifier: M
             }
         }
         Spacer(Modifier.height(8.dp))
-        Text(pick.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = WinGreen)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                pick.label, modifier = Modifier.weight(1f, fill = false),
+                style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = WinGreen
+            )
+            Spacer(Modifier.width(8.dp))
+            BestPickChip(pick)
+        }
         Text(
             if (pick.isSingleModel) {
                 "${pick.backers[0].model} only · ${pick.backers[0].confidence.roundToInt()}%"
@@ -549,12 +557,19 @@ private fun FixtureCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        pick.label,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (i == 0) WinGreen else TextPrimary
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            pick.label,
+                            modifier = Modifier.weight(1f, fill = false),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (i == 0) WinGreen else TextPrimary
+                        )
+                        if (i == 0) {
+                            Spacer(Modifier.width(8.dp))
+                            BestPickChip(pick)
+                        }
+                    }
                     Text(
                         if (pick.isSingleModel) {
                             "${pick.backers[0].model} only · ${pick.backers[0].confidence.roundToInt()}%"

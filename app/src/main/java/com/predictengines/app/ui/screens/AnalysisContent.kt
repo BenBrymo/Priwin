@@ -28,12 +28,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.predictengines.app.data.Analysis
+import com.predictengines.app.ui.components.BestPickChip
 import com.predictengines.app.data.BrymoResult
 import com.predictengines.app.data.ConsensusPick
 import com.predictengines.app.data.Outcome
 import com.predictengines.app.data.PredictionRecord
 import com.predictengines.app.data.TrackablePick
 import com.predictengines.app.data.PoissonResult
+import com.predictengines.app.data.Prediction
 import com.predictengines.app.data.StatsResult
 import com.predictengines.app.ui.components.MarkButtons
 import com.predictengines.app.ui.components.NamePickerDialog
@@ -74,10 +76,10 @@ fun AnalysisContent(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         MatchBanner(analysis)
-        BrymoCard(analysis.brymo, analysis.homeTeam, analysis.awayTeam)
+        BrymoCard(analysis.brymo, analysis.homeTeam, analysis.awayTeam, analysis.modelBest["Brymo"])
         val poisson = analysis.poisson
         if (poisson != null) {
-            PoissonCard(poisson, analysis.homeTeam, analysis.awayTeam)
+            PoissonCard(poisson, analysis.homeTeam, analysis.awayTeam, analysis.modelBest["Poisson"])
         } else {
             AppCard(title = "Poisson Model", subtitle = "Not enough data", accentColor = PoissonAccent) {
                 Text(
@@ -88,7 +90,7 @@ fun AnalysisContent(
                 )
             }
         }
-        StatsCard(analysis.stats, analysis.homeTeam, analysis.awayTeam, statsTeams, onLinkStatsName)
+        StatsCard(analysis.stats, analysis.homeTeam, analysis.awayTeam, statsTeams, onLinkStatsName, analysis.modelBest["Stats"])
         ConsensusCard(analysis)
         if (onMark != null && analysis.trackable.isNotEmpty()) {
             ResultsCard(analysis, marks, leagueId, onMark)
@@ -291,7 +293,7 @@ private fun ConsensusPickRow(pick: ConsensusPick, best: Boolean) {
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold
             )
-            if (best) TagChip("Best pick", WinGreen)
+            if (best) BestPickChip(pick)
         }
         Spacer(Modifier.height(2.dp))
         Text(
@@ -356,13 +358,31 @@ private fun ResultsCard(
 
 // ---- Brymo -------------------------------------------------------------------------------
 
+/** A model's three best calls, shown at the top of its card. */
 @Composable
-private fun BrymoCard(brymo: BrymoResult, homeTeam: String, awayTeam: String) {
+private fun BestThree(top: List<Prediction>?, color: androidx.compose.ui.graphics.Color, count: Int = 3) {
+    val title = "Best $count picks (highest %)"
+    Text(title, style = MaterialTheme.typography.labelLarge, color = TextSecondary)
+    Spacer(Modifier.height(4.dp))
+    if (top.isNullOrEmpty()) {
+        Text(
+            "No pick available for this game.",
+            style = MaterialTheme.typography.bodyMedium, color = TextMuted
+        )
+    } else {
+        top.forEach { ConfidenceBar(it.label, it.confidencePercent, color) }
+    }
+    Spacer(Modifier.height(14.dp))
+}
+
+@Composable
+private fun BrymoCard(brymo: BrymoResult, homeTeam: String, awayTeam: String, top: List<Prediction>?) {
     AppCard(
         title = "Brymo Model",
         subtitle = "Tag-based heuristic engine",
         accentColor = BrymoAccent
     ) {
+        BestThree(top, color = BrymoAccent)
         Text("Team tags", style = MaterialTheme.typography.labelLarge, color = TextSecondary)
         Spacer(Modifier.height(8.dp))
         Text(homeTeam, style = MaterialTheme.typography.labelSmall, color = TextMuted)
@@ -417,12 +437,13 @@ private fun FlowChips(tags: List<String>) {
 // ---- Poisson -----------------------------------------------------------------------------
 
 @Composable
-private fun PoissonCard(p: PoissonResult, homeTeam: String, awayTeam: String) {
+private fun PoissonCard(p: PoissonResult, homeTeam: String, awayTeam: String, top: List<Prediction>?) {
     AppCard(
         title = "Poisson Model",
         subtitle = "Statistical goal-expectancy engine",
         accentColor = PoissonAccent
     ) {
+        BestThree(top, color = PoissonAccent, count = 5)
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             ExpectedGoals(homeTeam, p.expectedHomeGoals, Modifier.weight(1f))
             Text("xG", color = TextMuted, style = MaterialTheme.typography.labelLarge)
@@ -495,7 +516,8 @@ private fun StatsCard(
     homeTeam: String,
     awayTeam: String,
     statsTeams: List<String>,
-    onLink: ((name: String, target: String) -> Unit)?
+    onLink: ((name: String, target: String) -> Unit)?,
+    top: List<Prediction>?
 ) {
     var linking by remember { mutableStateOf<String?>(null) }
     AppCard(
@@ -513,6 +535,7 @@ private fun StatsCard(
             return@AppCard
         }
 
+        BestThree(top, color = StatsAccent)
         val missing = listOfNotNull(
             homeTeam.takeIf { stats.homeMatched == null },
             awayTeam.takeIf { stats.awayMatched == null }

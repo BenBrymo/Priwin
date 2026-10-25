@@ -24,6 +24,7 @@ import com.predictengines.app.data.TopPick
 import com.predictengines.app.data.StatDelta
 import com.predictengines.app.data.LedgerEntry
 import com.predictengines.app.data.LeagueDiskCache
+import com.predictengines.app.data.BackupManager
 import com.predictengines.app.data.LoadedData
 import com.predictengines.app.data.fixtureKey
 import com.predictengines.app.data.scoreKey
@@ -99,6 +100,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repo = LeagueRepository(application)
     private val disk = LeagueDiskCache(application)
+    private val backup = BackupManager(application)
     private val results = ResultsStore(application)
     private val linksStore = NameLinksStore(application)
     private val _state = MutableStateFlow(AppUiState())
@@ -552,6 +554,49 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // ---- backup & restore ------------------------------------------------------------------
+
+    fun backupTo(uri: Uri) {
+        viewModelScope.launch {
+            val n = withContext(Dispatchers.IO) {
+                try {
+                    getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { backup.write(it) }
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            postMessage(if (n != null) "Backup saved ($n files)" else "Couldn't save the backup")
+        }
+    }
+
+    fun restoreFrom(uri: Uri) {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    getApplication<Application>().contentResolver.openInputStream(uri)?.use { backup.restore(it) }
+                        ?: BackupManager.Restored.Failed("Couldn't open that file.")
+                } catch (e: Exception) {
+                    BackupManager.Restored.Failed("Couldn't read that file.")
+                }
+            }
+            when (result) {
+                is BackupManager.Restored.Failed -> postMessage(result.message)
+                is BackupManager.Restored.Ok -> {
+                    // re-read everything the backup replaced
+                    val links = withContext(Dispatchers.IO) { linksStore.load() }
+                    TeamMatcher.setUserLinks(links.map { it.a to it.b })
+                    val leagues = repo.leagues()
+                    val marks = withContext(Dispatchers.IO) { results.load() }
+                    invalidateCache()
+                    _state.update { it.copy(leagues = leagues, marks = marks, nameLinks = links) }
+                    val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
+                    selectLeague(start.id)
+                    postMessage("Backup restored (${result.files} files)")
+                }
+            }
+        }
+    }
+
     // ---- stats editor ----------------------------------------------------------------------
 
     fun editStat(row: StatRow, value: Double, games: Int) = statsChange("Updated ${row.team} · ${row.market}") { repo.editStatRow(row, value, games) }
@@ -608,6 +653,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             awayStats = TeamStatsEngine.stats(away, m),
             stats = statsResult,
             consensus = consensus,
+            modelBest = ConsensusEngine.modelBest(home, away, brymo, poisson, statsResult),
             date = date,
             trackable = if (forFixture) {
                 ConsensusEngine.trackable(home, away, brymo, poisson, statsResult, consensus)

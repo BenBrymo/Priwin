@@ -107,7 +107,9 @@ data class Analysis(
     /** Fixture date (yyyy-MM-dd) when this analysis is for a fixture; blank for a manual matchup. */
     val date: String = "",
     /** What the user can tick or cross. Empty for a manual matchup. */
-    val trackable: List<TrackablePick> = emptyList()
+    val trackable: List<TrackablePick> = emptyList(),
+    /** Each model's three best calls (Brymo / Stats: 80%+; Poisson: highest probability), keyed by model name. */
+    val modelBest: Map<String, List<Prediction>> = emptyMap()
 )
 
 /** What a fixture card in the list shows: only the consensus pick(s) across the models. */

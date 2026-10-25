@@ -72,7 +72,9 @@ fun DataScreen(
     onAddLeague: (String) -> Unit,
     onDeleteLeague: (League) -> Unit,
     onUnlink: (NameLink) -> Unit,
-    onExportMatches: (Uri) -> Unit
+    onExportMatches: (Uri) -> Unit,
+    onBackup: (Uri) -> Unit,
+    onRestore: (Uri) -> Unit
 ) {
     val league = state.selected
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
@@ -90,6 +92,14 @@ fun DataScreen(
     fun pick(kind: DataKind) {
         pendingKind = kind
         picker.launch(arrayOf("*/*"))
+    }
+
+    val backupMaker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri: Uri? ->
+        if (uri != null) onBackup(uri)
+    }
+    var restoreUri by remember { mutableStateOf<Uri?>(null) }
+    val restorePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) restoreUri = uri
     }
 
     var showAdd by remember { mutableStateOf(false) }
@@ -223,6 +233,31 @@ fun DataScreen(
         }
 
         AppCard(
+            title = "Backup & restore",
+            subtitle = "Ticks and reports, name links, added scores, stats edits and loaded files in one file. Make one before uninstalling or changing phone.",
+            accentColor = WinGreen
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                PrimaryButton(
+                    text = "Back up",
+                    onClick = {
+                        val day = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                        backupMaker.launch("priwin_backup_$day.zip")
+                    },
+                    icon = Icons.Filled.Download,
+                    color = WinGreen,
+                    modifier = Modifier.weight(1f)
+                )
+                SecondaryButton(
+                    text = "Restore",
+                    onClick = { restorePicker.launch(arrayOf("*/*")) },
+                    icon = Icons.Filled.UploadFile,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        AppCard(
             title = "Leagues",
             subtitle = "Add any league, then load its files",
             accentColor = VioletAccent,
@@ -302,6 +337,21 @@ fun DataScreen(
             dismissButton = {
                 TextButton(onClick = { showAdd = false }) { Text("Cancel", color = TextSecondary) }
             }
+        )
+    }
+
+    restoreUri?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { restoreUri = null },
+            containerColor = CardSurface,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary,
+            title = { Text("Restore this backup?") },
+            text = { Text("This replaces your current ticks, name links, added scores, stats edits and loaded files with the ones in the backup.") },
+            confirmButton = {
+                TextButton(onClick = { onRestore(uri); restoreUri = null }) { Text("Restore", color = IndigoPrimary) }
+            },
+            dismissButton = { TextButton(onClick = { restoreUri = null }) { Text("Cancel", color = TextSecondary) } }
         )
     }
 
