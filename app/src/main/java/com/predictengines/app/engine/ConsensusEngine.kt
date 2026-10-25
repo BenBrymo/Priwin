@@ -34,7 +34,6 @@ object ConsensusEngine {
     private const val BINARY_THRESHOLD = 55.0
     private const val DOUBLE_CHANCE_THRESHOLD = 72.0
     const val DEFAULT_MAX_PICKS = 3
-    private const val MAX_TRACKED_PER_MODEL = 4
 
     private val ALL_KEYS = listOf(
         "1", "X", "2", "1X", "X2", "12",
@@ -106,8 +105,8 @@ object ConsensusEngine {
     ) = models.filter { m -> m !in backers && opinions.getValue(m).keys.any { exclusive(key, it) } }
 
     /**
-     * Everything the user can tick or cross for a fixture: the consensus picks, then each model's
-     * own strongest picks (so reports can compare the models).
+     * Everything the user can tick or cross for a fixture: the consensus picks, then the best picks each model
+     * shows on its card (so reports can compare the models).
      */
     fun trackable(
         home: String,
@@ -119,11 +118,9 @@ object ConsensusEngine {
     ): List<TrackablePick> {
         val out = ArrayList<TrackablePick>()
         consensus.picks.forEach { out.add(TrackablePick("Consensus", it.key, it.label, it.group, it.averageConfidence)) }
-        val opinions = opinionsOf(home, away, brymo, poisson, stats)
-        for ((model, ops) in opinions) {
-            ops.entries.sortedByDescending { it.value.confidence }.take(MAX_TRACKED_PER_MODEL).forEach { (key, op) ->
-                out.add(TrackablePick(model, key, op.label, category(key), op.confidence))
-            }
+        // only the best picks each model shows on its card (Brymo 3, Poisson 5, Stats 3)
+        for ((model, picks) in bestKeyed(home, away, brymo, poisson, stats)) {
+            picks.forEach { (key, op) -> out.add(TrackablePick(model, key, op.label, category(key), op.confidence)) }
         }
         return out
     }
@@ -155,11 +152,25 @@ object ConsensusEngine {
         stats: StatsResult?
     ): Map<String, List<Prediction>> {
         val out = LinkedHashMap<String, List<Prediction>>()
+        for ((model, picks) in bestKeyed(home, away, brymo, poisson, stats)) {
+            out[model] = picks.map { (_, op) -> Prediction(op.label, op.confidence) }
+        }
+        return out
+    }
+
+    /** The same best picks with their selection keys (needed to tick them). */
+    private fun bestKeyed(
+        home: String,
+        away: String,
+        brymo: BrymoResult,
+        poisson: PoissonResult?,
+        stats: StatsResult?
+    ): Map<String, List<Pair<String, Opinion>>> {
+        val out = LinkedHashMap<String, List<Pair<String, Opinion>>>()
         for ((model, ops) in opinionsOf(home, away, brymo, poisson, stats)) {
             val all = if (model == "Poisson" && poisson != null) poissonAllOpinions(home, away, poisson) else ops
             val count = if (model == "Poisson") POISSON_BEST_PICKS else BEST_PICKS_PER_MODEL
-            out[model] = all.values.sortedByDescending { it.confidence }
-                .take(count).map { Prediction(it.label, it.confidence) }
+            out[model] = all.entries.sortedByDescending { it.value.confidence }.take(count).map { it.key to it.value }
         }
         return out
     }

@@ -332,7 +332,12 @@ private fun ResultsCard(
         accentColor = WinGreen
     ) {
         analysis.trackable.groupBy { it.source }.forEach { (source, picks) ->
-            Text(source, style = MaterialTheme.typography.labelLarge, color = TextSecondary)
+            val heading = when (source) {
+                "Consensus" -> "Consensus"
+                "Poisson" -> "Poisson · best ${picks.size}"
+                else -> "$source · best ${picks.size}"
+            }
+            Text(heading, style = MaterialTheme.typography.labelLarge, color = TextSecondary)
             Spacer(Modifier.height(4.dp))
             picks.forEach { pick ->
                 val id = PredictionRecord.idOf(
