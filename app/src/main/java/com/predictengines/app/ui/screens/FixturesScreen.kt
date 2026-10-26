@@ -2,6 +2,10 @@ package com.predictengines.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -108,7 +112,28 @@ fun FixturesScreen(
         TabRow(selectedTabIndex = section, containerColor = Color.Transparent, contentColor = IndigoPrimary) {
             Tab(selected = section == 0, onClick = { section = 0 }, text = { Text("This league") })
             Tab(selected = section == 1, onClick = { section = 1 }, text = { Text("Top 20 picks") })
-            Tab(selected = section == 2, onClick = { section = 2 }, text = { Text("Results") })
+            Tab(selected = section == 2, onClick = { section = 2 }, text = {
+                val waiting = missingResults(state).size
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Results")
+                    if (waiting > 0) {
+                        Spacer(Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .defaultMinSize(minWidth = 18.dp, minHeight = 18.dp)
+                                .clip(CircleShape)
+                                .background(WinGreen)
+                                .padding(horizontal = 5.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                if (waiting > 99) "99+" else waiting.toString(),
+                                style = MaterialTheme.typography.labelSmall, color = Color.Black, maxLines = 1
+                            )
+                        }
+                    }
+                }
+            })
         }
         Box(Modifier.weight(1f)) {
             if (section == 0) LeagueFixtures(state, onOpen, onGoToData, onMark, onLink, onSaveScore, onRemoveScore, scoreHints)
@@ -252,6 +277,16 @@ private fun TopPickCard(rank: Int, tp: TopPick, onClick: () -> Unit, modifier: M
     }
 }
 
+/** Played games in the open league that have no score yet (not in the matches file, not entered by you). */
+private fun missingResults(state: AppUiState): List<FixtureItem> {
+    val now = LocalDateTime.now()
+    return state.fixtures.filter { fx ->
+        fx.home != null && fx.away != null && fx.fixture.date.isNotBlank() &&
+            DateUtils.isPlayed(fx.fixture.date, fx.fixture.time, now) &&
+            !state.scores.containsKey(scoreKey(fx.fixture.date, fx.home, fx.away))
+    }.sortedByDescending { DateUtils.sortKey(it.fixture.date, it.fixture.time) }
+}
+
 /**
  * Played games that have no score yet (neither in the matches file nor entered by you). Tap Add result, pick the
  * score, corners, cards and who scored first, and the stats and picks are settled for you.
@@ -262,12 +297,9 @@ private fun ResultsEntry(
     onSaveScore: (Int, Int, Int, MatchExtras?) -> Unit,
     scoreHints: (home: String, away: String) -> List<ScoreCell>
 ) {
-    val now = LocalDateTime.now()
-    val missing = state.fixtures.filter { fx ->
-        fx.home != null && fx.away != null && fx.fixture.date.isNotBlank() &&
-            DateUtils.isPlayed(fx.fixture.date, fx.fixture.time, now) &&
-            !state.scores.containsKey(scoreKey(fx.fixture.date, fx.home, fx.away))
-    }.sortedByDescending { DateUtils.sortKey(it.fixture.date, it.fixture.time) }
+    val missing = missingResults(state)
+    var flipped by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    val thisWeek = ReportBuilder.weekStartOf(LocalDate.now().toString())
 
     var scoring by remember { mutableStateOf<FixtureItem?>(null) }
     val fmt = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
@@ -298,48 +330,34 @@ private fun ResultsEntry(
                 accentColor = WinGreen
             ) {}
         }
-        var lastWeek: java.time.LocalDate? = null
-        var first = true
-        for (fx in missing) {
-            val week = ReportBuilder.weekStartOf(fx.fixture.date)
-            if (first || week != lastWeek) {
-                first = false
-                lastWeek = week
-                item(key = "rw_${week ?: "none"}_${fx.id}") {
-                    Text(
-                        if (week != null) "Week of ${week.format(fmt)}" else "Date TBC",
-                        style = MaterialTheme.typography.labelLarge, color = TextSecondary,
-                        modifier = Modifier.padding(top = 6.dp, start = 4.dp)
-                    )
-                }
-            }
-            item(key = "re_${fx.id}") {
-                AppCard {
+        weekGroups(
+            prefix = "r", fixtures = missing, thisWeek = thisWeek, flipped = flipped,
+            onFlip = { flipped = if (it in flipped) flipped - it else flipped + it },
+            defaultOpen = { _, _ -> true },
+            showMarks = false,
+            card = { fx, _, modifier ->
+                AppCard(modifier = modifier) {
                     Text(
                         DateUtils.kickoffLabelWithYear(fx.fixture.date, fx.fixture.time),
                         style = MaterialTheme.typography.labelMedium, color = TextMuted
                     )
                     Spacer(Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                fx.fixture.homeTeam,
-                                style = MaterialTheme.typography.titleSmall, color = TextPrimary,
-                                maxLines = 2, overflow = TextOverflow.Ellipsis
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                fx.fixture.awayTeam,
-                                style = MaterialTheme.typography.titleSmall, color = TextPrimary,
-                                maxLines = 2, overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        PrimaryButton(text = "Add result", onClick = { scoring = fx }, color = WinGreen)
-                    }
+                    Text(
+                        fx.fixture.homeTeam,
+                        style = MaterialTheme.typography.titleSmall, color = TextPrimary,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        fx.fixture.awayTeam,
+                        style = MaterialTheme.typography.titleSmall, color = TextPrimary,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    PrimaryButton(text = "Add result", onClick = { scoring = fx }, color = WinGreen)
                 }
             }
-        }
+        )
     }
 
     scoring?.let { fx ->
