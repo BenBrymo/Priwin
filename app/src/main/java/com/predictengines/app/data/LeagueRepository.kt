@@ -111,8 +111,8 @@ class LeagueRepository(context: Context) {
 
     // ---- loading data ----------------------------------------------------------------------
 
-    /** Imported matches file if there is one, otherwise the built-in asset (if the league has one). */
-    fun loadMatches(league: League): List<Match> {
+    /** The league's matches file as parsed (imported file, else the built-in asset). Names are not unified yet. */
+    private fun baseMatches(league: League): List<Match> {
         val imported = fileFor(league, DataKind.MATCHES)
         val asset = league.assetFile
         val text = when {
@@ -120,12 +120,64 @@ class LeagueRepository(context: Context) {
             asset != null -> appContext.assets.open(asset).use { it.readBytes().toString(Charsets.UTF_8) }
             else -> return emptyList()
         }
-        // One club, one name: "Man City" and "Manchester City" in the same file become one team.
-        // Scores the user added in the app are appended; a game already in the file is never counted twice.
-        val base = CsvParser.parseMatches(text).rows
-        val all = TeamNames.unifyMatches(base + loadAddedResults(league) + fixtureFileResults(league, base))
-        val have = all.take(base.size).map { "${it.date}|${it.homeTeam}|${it.awayTeam}" }.toHashSet()
-        return all.take(base.size) + all.drop(base.size).filter { have.add("${it.date}|${it.homeTeam}|${it.awayTeam}") }
+        return CsvParser.parseMatches(text).rows
+    }
+
+    /**
+     * The league's results: the matches file plus the scores you entered by hand. Your own entry always wins for
+     * a game that is in both (see [scoreConflicts] for when they disagree). Scores written in a fixtures file's
+     * Result column are NOT used, because that data can be wrong.
+     * One club, one name: "Man City" and "Manchester City" in the same file become one team.
+     */
+    fun loadMatches(league: League): List<Match> {
+        val base = baseMatches(league)
+        val added = loadAddedResults(league)
+        val all = TeamNames.unifyMatches(base + added)
+        val baseU = all.take(base.size)
+        val addedU = all.drop(base.size)
+        val mine = addedU.map { "${it.date}|${it.homeTeam}|${it.awayTeam}" }.toHashSet()
+        return baseU.filter { "${it.date}|${it.homeTeam}|${it.awayTeam}" !in mine } + addedU
+    }
+
+    /** Games you entered by hand whose score differs from the matches file and that you haven't ruled on yet. */
+    fun scoreConflicts(league: League): List<ScoreConflict> {
+        val added = loadAddedResults(league)
+        if (added.isEmpty()) return emptyList()
+        val base = baseMatches(league)
+        if (base.isEmpty()) return emptyList()
+        val all = TeamNames.unifyMatches(base + added)
+        val csv = HashMap<String, Match>()
+        for (m in all.take(base.size)) csv["${m.date}|${m.homeTeam}|${m.awayTeam}"] = m
+        val out = ArrayList<ScoreConflict>()
+        for (m in all.drop(base.size)) {
+            val c = csv["${m.date}|${m.homeTeam}|${m.awayTeam}"] ?: continue
+            if (c.homeGoals == m.homeGoals && c.awayGoals == m.awayGoals) continue
+            val conflict = ScoreConflict(m.date, m.homeTeam, m.awayTeam, m.homeGoals, m.awayGoals, c.homeGoals, c.awayGoals)
+            // "Keep mine" is remembered together with the file score it was decided against.
+            if (prefs.getString(conflictKey(league, conflict), null) == "${c.homeGoals}-${c.awayGoals}") continue
+            out.add(conflict)
+        }
+        return out
+    }
+
+    private fun conflictKey(league: League, c: ScoreConflict) = "conflict_${league.id}|${c.key}"
+
+    /** You decided your own entry is right: stop asking until the file's score for that game changes again. */
+    fun keepMyScore(league: League, c: ScoreConflict) {
+        prefs.edit().putString(conflictKey(league, c), "${c.csvHome}-${c.csvAway}").apply()
+    }
+
+    /** You decided the matches file is right: your entry for that game is removed so the file's score is used. */
+    fun useFileScore(league: League, c: ScoreConflict) {
+        val added = loadAddedResults(league)
+        val base = baseMatches(league)
+        val unified = TeamNames.unifyMatches(base + added).drop(base.size)
+        val kept = added.filterIndexed { i, _ ->
+            val u = unified.getOrNull(i)
+            u == null || "${u.date}|${u.homeTeam}|${u.awayTeam}" != c.key
+        }
+        writeAdded(league, kept)
+        prefs.edit().remove(conflictKey(league, c)).apply()
     }
 
     /**
@@ -146,24 +198,6 @@ class LeagueRepository(context: Context) {
             stamp(statsFile), stamp(deletedFile), stamp(ledgerFile),
             stamp(File(appContext.filesDir, "name_links.json"))
         ).joinToString("|")
-    }
-
-    /**
-     * Scores written in the fixtures file's Result column. Only games whose two teams can be matched to teams
-     * already in the matches file are used (their names rewritten to the matches file's spelling), so a
-     * misspelt team never creates a phantom club.
-     */
-    private fun fixtureFileResults(league: League, base: List<Match>): List<Match> {
-        val teams = base.flatMap { listOf(it.homeTeam, it.awayTeam) }.distinct()
-        if (teams.isEmpty()) return emptyList()
-        return loadFixtures(league).mapNotNull { f ->
-            val hg = f.homeGoals ?: return@mapNotNull null
-            val ag = f.awayGoals ?: return@mapNotNull null
-            if (f.date.isBlank()) return@mapNotNull null
-            val h = TeamMatcher.resolve(f.homeTeam, teams) ?: return@mapNotNull null
-            val a = TeamMatcher.resolve(f.awayTeam, teams) ?: return@mapNotNull null
-            if (h == a) null else Match(f.date, h, a, hg, ag)
-        }
     }
 
     // ---- scores added in the app -----------------------------------------------------------
@@ -541,7 +575,7 @@ class LeagueRepository(context: Context) {
         const val KEY_AUTO_SETTLE = "auto_settle_from"
         const val KEY_STATS_INFO = "info_stats"
         const val BUILT_IN_STATS = "stats/statschecker_2026_2027.csv"
-        const val CACHE_VERSION = 2
+        const val CACHE_VERSION = 3
         const val MAX_FILE_BYTES = 20 * 1024 * 1024
     }
 }

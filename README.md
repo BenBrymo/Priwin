@@ -14,6 +14,18 @@ A **consensus** card after the three model cards gives the 1X2 verdict (all agre
 
 ## What's new (latest)
 
+- **Results you enter by hand.** Played fixtures with no result wait in the **Results** tab (and show **Add score** on
+  the card). Tap **Add result** and pick everything by tapping numbers, no typing: quick scorelines (the model's likely
+  ones first), goals 0-10 for each team, corners 0-20 and cards 0-10 for **each team**, and who scored first.
+- **Your entry wins.** The matches file still feeds the models, but a score you entered always beats the file's.
+  A game with no entry of yours is settled from the matches file if it has the game; otherwise it waits for you.
+  A wrong file score can be overridden with **Fix score** on the card.
+- **Conflict prompt.** When you import a matches file that contains a game you entered by hand with a *different*
+  score, the app asks which is right (**Keep mine** / **Use file** / **Later**). Your corners, cards and first scorer are
+  kept either way, and the game is settled again with the score you choose.
+- **The fixtures file's Result column is ignored** for results (it was unreliable). Only the matches file and your own
+  entries count.
+
 - **Any number of built-in leagues, detected automatically.** Drop `<id>_matches.csv` into
   `app/src/main/assets/leagues/` (and optionally `<id>_fixtures.csv` into `assets/fixtures/`) and the league
   appears as a tab. Names are made from the id (`premier_league` -> Premier League); add a `league_names.csv`

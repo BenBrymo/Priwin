@@ -22,6 +22,8 @@ import com.predictengines.app.data.ResultsStore
 import com.predictengines.app.data.TrackablePick
 import com.predictengines.app.data.TopPick
 import com.predictengines.app.data.MatchExtras
+import com.predictengines.app.data.ScoreCell
+import com.predictengines.app.data.ScoreConflict
 import com.predictengines.app.data.ResultExtrasStore
 import com.predictengines.app.data.settleSignature
 import com.predictengines.app.engine.ResultJudge
@@ -87,6 +89,8 @@ data class AppUiState(
     val extras: Map<String, MatchExtras> = emptyMap(),
     /** Played games from this date on are settled automatically when their score appears in a matches file. */
     val autoSettleFrom: String = "",
+    /** Hand-entered scores that differ from the matches file and still need your decision. */
+    val conflicts: List<ScoreConflict> = emptyList(),
 
     /** The user's ticks and crosses, keyed by [PredictionRecord.id]. */
     val marks: Map<String, PredictionRecord> = emptyMap(),
@@ -205,6 +209,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val data = cached ?: withContext(Dispatchers.IO) {
                 computeLeague(league)
             }
+            val conflicts = withContext(Dispatchers.IO) { repo.scoreConflicts(league) }
             matches = data.matches
             stats = data.stats
             ledger = data.ledger
@@ -214,6 +219,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val keepAway = s.awayTeam?.takeIf { it in data.teams && !resetTeams }
                 s.copy(
                     isLoading = false,
+                    conflicts = conflicts,
                     teams = data.teams,
                     matchCount = data.matches.size,
                     matchesImport = data.matchesImport,
@@ -561,6 +567,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     if (date.isBlank()) continue
                     val fx = fixtureKey(league.id, date, home, away)
                     repo.saveResult(league, Match(date, home, away, e.homeGoals, e.awayGoals))
+                    // You just chose this score on purpose, so don't ask about the file's different score for it.
+                    repo.scoreConflicts(league).filter { it.key == "$date|$home|$away" }.forEach { repo.keepMyScore(league, it) }
                     if (e.extras == null || e.extras.isEmpty) extrasMap.remove(fx) else extrasMap[fx] = e.extras
                     rows += settleOne(league, date, home, away, e.homeGoals, e.awayGoals, extrasMap[fx], marks)
                     settled[fx] = settleSignature(e.homeGoals, e.awayGoals, extrasMap[fx])
@@ -646,6 +654,47 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             _state.update { it.copy(marks = marks, extras = extras) }
             postMessage("Score removed; its automatic ticks and stats changes were taken back")
+            reloadKeepingView(league)
+        }
+    }
+
+    /** The model's most likely scorelines for a game, offered as quick picks in the result dialog. */
+    fun scoreHints(home: String, away: String): List<ScoreCell> =
+        if (home.isBlank() || away.isBlank()) emptyList()
+        else PoissonEngine.predict(home, away, matches)?.topScores.orEmpty()
+
+    /**
+     * Your decision for a game whose hand-entered score differs from the matches file.
+     * [useFile] = true: the file's score is used (your entry for that game is removed) and the game is settled again
+     * with it; false: your entry stays and you aren't asked again unless the file's score for that game changes.
+     * Corners, cards and first scorer you entered are kept either way.
+     */
+    fun resolveConflict(conflict: ScoreConflict, useFile: Boolean) {
+        val league = _state.value.selected ?: return
+        viewModelScope.launch {
+            val marks = withContext(Dispatchers.IO) {
+                if (useFile) {
+                    repo.useFileScore(league, conflict)
+                    // Settle the game again right away with the file's score (whatever the auto-settle start date is).
+                    val updated = _state.value.marks.toMutableMap()
+                    val fx = fixtureKey(league.id, conflict.date, conflict.home, conflict.away)
+                    val x = _state.value.extras[fx]
+                    settleOne(league, conflict.date, conflict.home, conflict.away, conflict.csvHome, conflict.csvAway, x, updated)
+                    results.save(updated.values)
+                    val settled = extrasStore.loadSettled().toMutableMap()
+                    settled[fx] = settleSignature(conflict.csvHome, conflict.csvAway, x)
+                    extrasStore.saveSettled(settled)
+                    updated.toMap()
+                } else {
+                    repo.keepMyScore(league, conflict)
+                    null
+                }
+            }
+            if (marks != null) _state.update { it.copy(marks = marks) }
+            postMessage(
+                if (useFile) "Using the file's score ${conflict.csvHome}-${conflict.csvAway} for ${conflict.home} v ${conflict.away}"
+                else "Keeping your score ${conflict.mineHome}-${conflict.mineAway} for ${conflict.home} v ${conflict.away}"
+            )
             reloadKeepingView(league)
         }
     }

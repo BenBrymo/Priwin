@@ -20,6 +20,10 @@ import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.Row
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -80,6 +84,48 @@ fun AppRoot(vm: AppViewModel) {
 
     val detailOpen = tab == Tab.FIXTURES && state.openFixtureId != null
     BackHandler(enabled = detailOpen) { vm.closeFixture() }
+
+    // A hand-entered score that differs from the matches file: ask which one is right.
+    var snoozed by rememberSaveable { mutableStateOf("") }
+    val conflictSignature = state.conflicts.joinToString(";") { it.key }
+    val conflict = state.conflicts.firstOrNull()
+    if (conflict != null && snoozed != conflictSignature) {
+        AlertDialog(
+            onDismissRequest = { snoozed = conflictSignature },
+            containerColor = CardSurface,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary,
+            title = { Text("Which score is right?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "${conflict.home} v ${conflict.away} (${conflict.date})",
+                        style = MaterialTheme.typography.titleMedium, color = TextPrimary
+                    )
+                    Text("You entered ${conflict.mineHome}-${conflict.mineAway}", color = TextPrimary)
+                    Text("The matches file says ${conflict.csvHome}-${conflict.csvAway}", color = TextPrimary)
+                    Text(
+                        "Until you decide, your own score is used. Corners, cards and first scorer you entered are kept either way." +
+                            if (state.conflicts.size > 1) " ${state.conflicts.size - 1} more to review after this one." else "",
+                        style = MaterialTheme.typography.bodyMedium, color = TextSecondary
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { vm.resolveConflict(conflict, useFile = false) }) {
+                    Text("Keep mine (${conflict.mineHome}-${conflict.mineAway})", color = IndigoPrimary)
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { vm.resolveConflict(conflict, useFile = true) }) {
+                        Text("Use file (${conflict.csvHome}-${conflict.csvAway})", color = IndigoPrimary)
+                    }
+                    TextButton(onClick = { snoozed = conflictSignature }) { Text("Later", color = TextSecondary) }
+                }
+            }
+        )
+    }
 
     Scaffold(
         containerColor = DeepSpace,
@@ -151,7 +197,8 @@ fun AppRoot(vm: AppViewModel) {
                         onOpenTopPick = vm::openTopPick,
                         onSaveScore = { id, h, a, x -> vm.saveScore(id, h, a, x) },
                         onRemoveScore = vm::removeScore,
-                        onSaveScores = vm::saveScores
+                        onSaveScores = vm::saveScores,
+                        scoreHints = vm::scoreHints
                     )
                     Tab.MATCHUP -> MatchupScreen(
                         state = state,

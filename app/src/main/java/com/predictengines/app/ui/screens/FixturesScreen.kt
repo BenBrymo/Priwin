@@ -55,11 +55,13 @@ import androidx.compose.ui.unit.dp
 import com.predictengines.app.data.DateUtils
 import com.predictengines.app.data.FixtureItem
 import com.predictengines.app.data.MatchExtras
+import com.predictengines.app.data.ScoreCell
 import com.predictengines.app.data.fixtureKey
 import com.predictengines.app.viewmodel.AppViewModel
 import com.predictengines.app.data.Match
 import com.predictengines.app.data.scoreKey
 import com.predictengines.app.ui.components.ScoreDialog
+import com.predictengines.app.ui.components.suggestedScores
 import com.predictengines.app.data.PredictionRecord
 import com.predictengines.app.data.ReportBuilder
 import com.predictengines.app.data.TopPick
@@ -94,7 +96,8 @@ fun FixturesScreen(
     onOpenTopPick: (TopPick) -> Unit,
     onSaveScore: (fixtureId: Int, home: Int, away: Int, extras: MatchExtras?) -> Unit,
     onRemoveScore: (fixtureId: Int) -> Unit,
-    onSaveScores: (List<AppViewModel.ScoreEntry>) -> Unit
+    onSaveScores: (List<AppViewModel.ScoreEntry>) -> Unit,
+    scoreHints: (home: String, away: String) -> List<ScoreCell> = { _, _ -> emptyList() }
 ) {
     var section by rememberSaveable { mutableIntStateOf(0) }
     if (state.openFixtureId != null) {
@@ -108,9 +111,9 @@ fun FixturesScreen(
             Tab(selected = section == 2, onClick = { section = 2 }, text = { Text("Results") })
         }
         Box(Modifier.weight(1f)) {
-            if (section == 0) LeagueFixtures(state, onOpen, onGoToData, onMark, onLink, onSaveScore, onRemoveScore)
+            if (section == 0) LeagueFixtures(state, onOpen, onGoToData, onMark, onLink, onSaveScore, onRemoveScore, scoreHints)
             else if (section == 1) TopPicksList(state, onOpenTopPick)
-            else ResultsEntry(state, onSaveScores)
+            else ResultsEntry(state, onSaveScore, scoreHints)
         }
     }
 }
@@ -250,11 +253,15 @@ private fun TopPickCard(rank: Int, tp: TopPick, onClick: () -> Unit, modifier: M
 }
 
 /**
- * One list of every played game that has no score yet: type the scores down the list, save once, and the
- * scores, stats updates and automatic ticks are all applied together.
+ * Played games that have no score yet (neither in the matches file nor entered by you). Tap Add result, pick the
+ * score, corners, cards and who scored first, and the stats and picks are settled for you.
  */
 @Composable
-private fun ResultsEntry(state: AppUiState, onSaveScores: (List<AppViewModel.ScoreEntry>) -> Unit) {
+private fun ResultsEntry(
+    state: AppUiState,
+    onSaveScore: (Int, Int, Int, MatchExtras?) -> Unit,
+    scoreHints: (home: String, away: String) -> List<ScoreCell>
+) {
     val now = LocalDateTime.now()
     val missing = state.fixtures.filter { fx ->
         fx.home != null && fx.away != null && fx.fixture.date.isNotBlank() &&
@@ -262,9 +269,7 @@ private fun ResultsEntry(state: AppUiState, onSaveScores: (List<AppViewModel.Sco
             !state.scores.containsKey(scoreKey(fx.fixture.date, fx.home, fx.away))
     }.sortedByDescending { DateUtils.sortKey(it.fixture.date, it.fixture.time) }
 
-    val homeText = remember { mutableStateMapOf<Int, String>() }
-    val awayText = remember { mutableStateMapOf<Int, String>() }
-    val ready = missing.filter { homeText[it.id]?.toIntOrNull() != null && awayText[it.id]?.toIntOrNull() != null }
+    var scoring by remember { mutableStateOf<FixtureItem?>(null) }
     val fmt = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
 
     if (state.isLoading) {
@@ -274,7 +279,7 @@ private fun ResultsEntry(state: AppUiState, onSaveScores: (List<AppViewModel.Sco
     if (missing.isEmpty()) {
         Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
             Text(
-                "No played games are waiting for a score in ${state.selected?.name.orEmpty()}.",
+                "No played games are waiting for a result in ${state.selected?.name.orEmpty()}.",
                 style = MaterialTheme.typography.bodyMedium, color = TextMuted
             )
         }
@@ -288,21 +293,10 @@ private fun ResultsEntry(state: AppUiState, onSaveScores: (List<AppViewModel.Sco
     ) {
         item {
             AppCard(
-                title = "${missing.size} games need a score",
-                subtitle = "Type the scores, then save once. The stats update and every pick the score decides is ticked or crossed for you.",
+                title = "${missing.size} games need a result",
+                subtitle = "The matches file has no score for these. Tap Add result and pick the score, corners, cards and who scored first.",
                 accentColor = WinGreen
-            ) {
-                PrimaryButton(
-                    text = if (ready.isEmpty()) "Save scores" else "Save ${ready.size} ${if (ready.size == 1) "score" else "scores"}",
-                    onClick = {
-                        onSaveScores(ready.map { AppViewModel.ScoreEntry(it.id, homeText[it.id]!!.toInt(), awayText[it.id]!!.toInt()) })
-                        ready.forEach { homeText.remove(it.id); awayText.remove(it.id) }
-                    },
-                    enabled = ready.isNotEmpty(),
-                    color = WinGreen,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+            ) {}
         }
         var lastWeek: java.time.LocalDate? = null
         var first = true
@@ -327,39 +321,38 @@ private fun ResultsEntry(state: AppUiState, onSaveScores: (List<AppViewModel.Sco
                     )
                     Spacer(Modifier.height(6.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            fx.fixture.homeTeam, modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.titleSmall, color = TextPrimary,
-                            maxLines = 2, overflow = TextOverflow.Ellipsis
-                        )
-                        OutlinedTextField(
-                            value = homeText[fx.id].orEmpty(),
-                            onValueChange = { homeText[fx.id] = it.filter(Char::isDigit).take(2) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
-                            colors = inputColors(),
-                            modifier = Modifier.width(64.dp)
-                        )
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            fx.fixture.awayTeam, modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.titleSmall, color = TextPrimary,
-                            maxLines = 2, overflow = TextOverflow.Ellipsis
-                        )
-                        OutlinedTextField(
-                            value = awayText[fx.id].orEmpty(),
-                            onValueChange = { awayText[fx.id] = it.filter(Char::isDigit).take(2) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
-                            colors = inputColors(),
-                            modifier = Modifier.width(64.dp)
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                fx.fixture.homeTeam,
+                                style = MaterialTheme.typography.titleSmall, color = TextPrimary,
+                                maxLines = 2, overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                fx.fixture.awayTeam,
+                                style = MaterialTheme.typography.titleSmall, color = TextPrimary,
+                                maxLines = 2, overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        PrimaryButton(text = "Add result", onClick = { scoring = fx }, color = WinGreen)
                     }
                 }
             }
         }
+    }
+
+    scoring?.let { fx ->
+        ScoreDialog(
+            home = fx.home.orEmpty(), away = fx.away.orEmpty(),
+            initial = null,
+            initialExtras = state.extras[fixtureKey(state.selected?.id.orEmpty(), fx.fixture.date, fx.home.orEmpty(), fx.away.orEmpty())],
+            canRemove = false,
+            onSave = { h, a, x -> onSaveScore(fx.id, h, a, x); scoring = null },
+            onRemove = { scoring = null },
+            onDismiss = { scoring = null },
+            suggested = suggestedScores(scoreHints(fx.home.orEmpty(), fx.away.orEmpty()))
+        )
     }
 }
 
@@ -371,7 +364,8 @@ private fun LeagueFixtures(
     onMark: (date: String, home: String, away: String, pick: TrackablePick, correct: Boolean?) -> Unit,
     onLink: (name: String, target: String) -> Unit,
     onSaveScore: (fixtureId: Int, home: Int, away: Int, extras: MatchExtras?) -> Unit,
-    onRemoveScore: (fixtureId: Int) -> Unit
+    onRemoveScore: (fixtureId: Int) -> Unit,
+    scoreHints: (home: String, away: String) -> List<ScoreCell>
 ) {
     val leagueName = state.selected?.name.orEmpty()
     if (state.isLoading) {
@@ -502,7 +496,8 @@ private fun LeagueFixtures(
             canRemove = sk in state.addedScoreKeys,
             onSave = { h, a, x -> onSaveScore(fx.id, h, a, x); scoring = null },
             onRemove = { onRemoveScore(fx.id); scoring = null },
-            onDismiss = { scoring = null }
+            onDismiss = { scoring = null },
+            suggested = suggestedScores(scoreHints(fx.home.orEmpty(), fx.away.orEmpty()))
         )
     }
 
@@ -639,7 +634,9 @@ private fun FixtureCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (score != null) {
                     TagChip("Final ${score.homeGoals} - ${score.awayGoals}", WinGreen)
-                    if (scoreEditable) TextButton(onClick = onScore) { Text("Edit score", color = IndigoPrimary) }
+                    TextButton(onClick = onScore) {
+                        Text(if (scoreEditable) "Edit score" else "Fix score", color = IndigoPrimary)
+                    }
                 } else {
                     TextButton(onClick = onScore) { Text("Add score", color = IndigoPrimary) }
                 }

@@ -6,9 +6,23 @@ import java.io.File
 
 enum class FirstScorer { HOME, AWAY }
 
-/** Things a score can't say. Optional: filled in, they let corners, cards and first-to-score picks settle themselves. */
-data class MatchExtras(val corners: Int? = null, val cards: Int? = null, val first: FirstScorer? = null) {
-    val isEmpty: Boolean get() = corners == null && cards == null && first == null
+/**
+ * Things a score can't say. Optional: filled in, they let corners, cards and first-to-score picks settle themselves.
+ * [corners] and [cards] are the match totals (the picks are judged on these); the per-team numbers are what you
+ * enter, and the totals are their sums when both teams are given.
+ */
+data class MatchExtras(
+    val corners: Int? = null,
+    val cards: Int? = null,
+    val first: FirstScorer? = null,
+    val homeCorners: Int? = null,
+    val awayCorners: Int? = null,
+    val homeCards: Int? = null,
+    val awayCards: Int? = null
+) {
+    val isEmpty: Boolean
+        get() = corners == null && cards == null && first == null &&
+            homeCorners == null && awayCorners == null && homeCards == null && awayCards == null
 }
 
 /**
@@ -31,7 +45,11 @@ class ResultExtrasStore(context: Context) {
                 MatchExtras(
                     corners = if (e.has("c")) e.getInt("c") else null,
                     cards = if (e.has("k")) e.getInt("k") else null,
-                    first = if (e.has("f")) runCatching { FirstScorer.valueOf(e.getString("f")) }.getOrNull() else null
+                    first = if (e.has("f")) runCatching { FirstScorer.valueOf(e.getString("f")) }.getOrNull() else null,
+                    homeCorners = if (e.has("hc")) e.getInt("hc") else null,
+                    awayCorners = if (e.has("ac")) e.getInt("ac") else null,
+                    homeCards = if (e.has("hk")) e.getInt("hk") else null,
+                    awayCards = if (e.has("ak")) e.getInt("ak") else null
                 )
             }
         }
@@ -47,6 +65,10 @@ class ResultExtrasStore(context: Context) {
             v.corners?.let { e.put("c", it) }
             v.cards?.let { e.put("k", it) }
             v.first?.let { e.put("f", it.name) }
+            v.homeCorners?.let { e.put("hc", it) }
+            v.awayCorners?.let { e.put("ac", it) }
+            v.homeCards?.let { e.put("hk", it) }
+            v.awayCards?.let { e.put("ak", it) }
             o.put(k, e)
         }
         write(extrasFile, o)
