@@ -30,7 +30,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -109,10 +109,15 @@ fun FixturesScreen(
         return
     }
     Column(modifier = Modifier.fillMaxSize()) {
-        TabRow(selectedTabIndex = section, containerColor = Color.Transparent, contentColor = IndigoPrimary) {
+        ScrollableTabRow(
+            selectedTabIndex = section, containerColor = Color.Transparent, contentColor = IndigoPrimary,
+            edgePadding = 8.dp
+        ) {
             Tab(selected = section == 0, onClick = { section = 0 }, text = { Text("This league") })
             Tab(selected = section == 1, onClick = { section = 1 }, text = { Text("Top 20 picks") })
-            Tab(selected = section == 2, onClick = { section = 2 }, text = {
+            Tab(selected = section == 2, onClick = { section = 2 }, text = { Text("Handicap") })
+            Tab(selected = section == 3, onClick = { section = 3 }, text = { Text("Over 1.5") })
+            Tab(selected = section == 4, onClick = { section = 4 }, text = {
                 val waiting = missingResults(state).size
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Results")
@@ -138,24 +143,45 @@ fun FixturesScreen(
         Box(Modifier.weight(1f)) {
             if (section == 0) LeagueFixtures(state, onOpen, onGoToData, onMark, onLink, onSaveScore, onRemoveScore, scoreHints)
             else if (section == 1) TopPicksList(state, onOpenTopPick)
+            else if (section == 2) TopPicksList(
+                state, onOpenTopPick, picks = state.handicapPicks, prefix = "h", showBest = false,
+                title = "Brymo handicap picks of each week",
+                subtitle = "best 20 per week across all leagues · Brymo's strongest +2 handicap pick per game · tap a card to open the analysis",
+                emptyText = "No upcoming games have a Brymo handicap pick yet."
+            )
+            else if (section == 3) TopPicksList(
+                state, onOpenTopPick, picks = state.over15Picks, prefix = "o", showBest = false,
+                title = "Over 1.5 goals of each week",
+                subtitle = "best 20 per week across all leagues · backed by Poisson and/or Stats, both backing it first · tap a card to open the analysis",
+                emptyText = "No upcoming games have Poisson or Stats backing Over 1.5 goals yet."
+            )
             else ResultsEntry(state, onSaveScore, scoreHints)
         }
     }
 }
 
 @Composable
-private fun TopPicksList(state: AppUiState, onOpenTopPick: (TopPick) -> Unit) {
+private fun TopPicksList(
+    state: AppUiState,
+    onOpenTopPick: (TopPick) -> Unit,
+    picks: List<TopPick> = state.topPicks,
+    prefix: String = "t",
+    showBest: Boolean = true,
+    title: String = "Top 20 picks of each week",
+    subtitle: String? = null,
+    emptyText: String = "No upcoming predictable fixtures in any league yet. Add fixtures files (built in or loaded on the Data tab) and the strongest picks will be ranked here."
+) {
     var folded by rememberSaveable { mutableStateOf(emptySet<String>()) }
-    if (state.topPicksLoading && state.topPicks.isEmpty()) {
+    if (state.topPicksLoading && picks.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = IndigoPrimary)
         }
         return
     }
-    if (state.topPicks.isEmpty()) {
+    if (picks.isEmpty()) {
         Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
             Text(
-                "No upcoming predictable fixtures in any league yet. Add fixtures files (built in or loaded on the Data tab) and the strongest picks will be ranked here.",
+                emptyText,
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextMuted
             )
@@ -169,19 +195,19 @@ private fun TopPicksList(state: AppUiState, onOpenTopPick: (TopPick) -> Unit) {
     ) {
         item {
             AppCard(
-                title = "Top 20 picks of each week",
-                subtitle = "${state.topPicks.size} picks · best 20 per week across all leagues, ranked within the week · tap a card to open the analysis",
+                title = title,
+                subtitle = "${picks.size} picks · " + (subtitle ?: "best 20 per week across all leagues, ranked within the week · tap a card to open the analysis"),
                 accentColor = WinGreen
             ) {}
         }
         // Same week groups as the league list: Monday-Sunday, foldable, games side by side.
         val thisWeek = ReportBuilder.weekStartOf(LocalDate.now().toString())
         // The list arrives week by week, strongest first inside each week: rank = position within the week.
-        val groups = state.topPicks.groupBy { ReportBuilder.weekStartOf(it.date) }
+        val groups = picks.groupBy { ReportBuilder.weekStartOf(it.date) }
             .map { (week, picks) -> week to picks.mapIndexed { i, tp -> (i + 1) to tp } }
         val fmt = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
         for ((week, list) in groups) {
-            val key = "t|${week ?: "none"}"
+            val key = "$prefix|${week ?: "none"}"
             val open = key !in folded
             val title = when {
                 week == null -> "Date TBC"
@@ -220,7 +246,7 @@ private fun TopPicksList(state: AppUiState, onOpenTopPick: (TopPick) -> Unit) {
                             list,
                             key = { (_, p) -> "${p.leagueId}|${p.date}|${p.home}|${p.away}" }
                         ) { (rank, tp) ->
-                            TopPickCard(rank, tp, onClick = { onOpenTopPick(tp) }, modifier = Modifier.width(300.dp))
+                            TopPickCard(rank, tp, onClick = { onOpenTopPick(tp) }, modifier = Modifier.width(300.dp), showBest = showBest)
                         }
                     }
                 }
@@ -230,7 +256,7 @@ private fun TopPicksList(state: AppUiState, onOpenTopPick: (TopPick) -> Unit) {
 }
 
 @Composable
-private fun TopPickCard(rank: Int, tp: TopPick, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun TopPickCard(rank: Int, tp: TopPick, onClick: () -> Unit, modifier: Modifier = Modifier, showBest: Boolean = true) {
     val pick = tp.pick
     AppCard(modifier = modifier, onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -263,7 +289,7 @@ private fun TopPickCard(rank: Int, tp: TopPick, onClick: () -> Unit, modifier: M
                 style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = WinGreen
             )
             Spacer(Modifier.width(8.dp))
-            BestPickChip(pick)
+            if (showBest) BestPickChip(pick)
         }
         Text(
             if (pick.isSingleModel) {

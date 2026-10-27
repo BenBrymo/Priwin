@@ -1,5 +1,7 @@
 package com.predictengines.app.engine
 
+import com.predictengines.app.data.ConsensusPick
+import com.predictengines.app.data.ConsensusVote
 import com.predictengines.app.data.DateUtils
 import com.predictengines.app.data.FixtureItem
 import com.predictengines.app.data.League
@@ -28,6 +30,43 @@ object TopPicksEngine {
                 date = fx.fixture.date, time = fx.fixture.time,
                 homeDisplay = fx.fixture.homeTeam, awayDisplay = fx.fixture.awayTeam,
                 home = home, away = away, pick = best
+            )
+        }
+
+    private fun upcoming(league: League, items: List<FixtureItem>, now: LocalDateTime, make: (FixtureItem) -> ConsensusPick?): List<TopPick> =
+        items.mapNotNull { fx ->
+            val home = fx.home ?: return@mapNotNull null
+            val away = fx.away ?: return@mapNotNull null
+            if (DateUtils.isPlayed(fx.fixture.date, fx.fixture.time, now)) return@mapNotNull null
+            val pick = make(fx) ?: return@mapNotNull null
+            TopPick(
+                leagueId = league.id, leagueName = league.name,
+                date = fx.fixture.date, time = fx.fixture.time,
+                homeDisplay = fx.fixture.homeTeam, awayDisplay = fx.fixture.awayTeam,
+                home = home, away = away, pick = pick
+            )
+        }
+
+    /** Brymo's "+2 Handicap Likely" pick (at most one per game), ranked by Brymo's confidence. */
+    fun handicapCandidates(league: League, items: List<FixtureItem>, now: LocalDateTime = LocalDateTime.now()): List<TopPick> =
+        upcoming(league, items, now) { fx ->
+            val h = fx.summary?.handicap ?: return@upcoming null
+            ConsensusPick(
+                key = "B:${h.label}", label = h.label, group = "Handicap / other",
+                backers = listOf(ConsensusVote("Brymo", h.confidencePercent)),
+                against = emptyList(), abstain = emptyList(), modelCount = 3, strength = h.confidencePercent
+            )
+        }
+
+    /** "Over 1.5 goals" where Poisson and/or Stats back it. Two backers rank above one; then average confidence. */
+    fun over15Candidates(league: League, items: List<FixtureItem>, now: LocalDateTime = LocalDateTime.now()): List<TopPick> =
+        upcoming(league, items, now) { fx ->
+            val votes = fx.summary?.over15?.takeIf { it.isNotEmpty() } ?: return@upcoming null
+            val avg = votes.map { it.confidence }.average()
+            ConsensusPick(
+                key = "O1.5", label = "Over 1.5 goals", group = "Over/Under",
+                backers = votes, against = emptyList(), abstain = emptyList(), modelCount = 3,
+                strength = avg + 100.0 * (votes.size - 1) // only used for ordering: more backers first
             )
         }
 

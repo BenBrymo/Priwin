@@ -73,6 +73,10 @@ class LeagueDiskCache(context: Context) {
             .put("h", fx.home ?: JSONObject.NULL)
             .put("a", fx.away ?: JSONObject.NULL)
         val c = fx.summary?.consensus
+        fx.summary?.handicap?.let { o.put("hcp", JSONArray().put(it.label).put(it.confidencePercent)) }
+        fx.summary?.over15?.takeIf { it.isNotEmpty() }?.let { v ->
+            o.put("o15", arr(v) { x -> JSONArray().put(x.model).put(x.confidence) })
+        }
         if (c != null) {
             o.put("models", JSONArray(c.models))
             o.put("picks", arr(c.picks) { p ->
@@ -129,7 +133,10 @@ class LeagueDiskCache(context: Context) {
                                 modelCount = p.getInt("mc"), strength = p.getDouble("st")
                             )
                         }
-                    )
+                    ),
+                    f.optJSONArray("hcp")?.let { Prediction(it.getString(0), it.getDouble(1)) },
+                    f.optJSONArray("o15")?.let { a -> list(a) { x -> (x as JSONArray).let { ConsensusVote(it.getString(0), it.getDouble(1)) } } }
+                        ?: emptyList()
                 )
             } else null
             FixtureItem(

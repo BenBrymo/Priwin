@@ -84,6 +84,9 @@ data class AppUiState(
     /** Best consensus picks across every league's upcoming fixtures (the Top picks tab). */
     val topPicks: List<TopPick> = emptyList(),
     val topPicksLoading: Boolean = true,
+    /** Brymo's best handicap picks and the best "Over 1.5 goals" picks, best 20 per week across all leagues. */
+    val handicapPicks: List<TopPick> = emptyList(),
+    val over15Picks: List<TopPick> = emptyList(),
 
     /** Corners / cards / first scorer the user typed in for played games, keyed by fixture. */
     val extras: Map<String, MatchExtras> = emptyMap(),
@@ -134,6 +137,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val cache = java.util.concurrent.ConcurrentHashMap<String, LoadedData>()
     private val cacheGen = java.util.concurrent.atomic.AtomicInteger(0)
     private var topCache: List<TopPick>? = null
+    private var handicapCache: List<TopPick> = emptyList()
+    private var over15Cache: List<TopPick> = emptyList()
 
     private fun invalidateCache() {
         cacheGen.incrementAndGet()
@@ -268,7 +273,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         topCache?.let { cached ->
             // games that kicked off since the list was built drop out
             val live = cached.filter { !DateUtils.isPlayed(it.date, it.time) }
-            _state.update { it.copy(topPicks = live, topPicksLoading = false) }
+            _state.update {
+                it.copy(
+                    topPicks = live, topPicksLoading = false,
+                    handicapPicks = handicapCache.filter { p -> !DateUtils.isPlayed(p.date, p.time) },
+                    over15Picks = over15Cache.filter { p -> !DateUtils.isPlayed(p.date, p.time) }
+                )
+            }
             return
         }
         topJob?.cancel()
@@ -278,20 +289,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val gen = cacheGen.get()
             val top = withContext(Dispatchers.Default) {
                 val all = ArrayList<TopPick>()
+                val hcp = ArrayList<TopPick>()
+                val o15 = ArrayList<TopPick>()
                 for (league in leagues) {
                     try {
                         // Uses (and fills) the same per-league cache, so the other leagues are ready before you open them.
                         val data = cache[league.id] ?: computeLeague(league)
                         if (data.matches.isEmpty() || data.fixtures.isEmpty()) continue
                         all += TopPicksEngine.candidates(league, data.fixtures)
+                        hcp += TopPicksEngine.handicapCandidates(league, data.fixtures)
+                        o15 += TopPicksEngine.over15Candidates(league, data.fixtures)
                     } catch (e: Exception) {
                         // one unreadable league must not hide the others
                     }
                 }
-                TopPicksEngine.rank(all)
+                Triple(TopPicksEngine.rank(all), TopPicksEngine.rank(hcp), TopPicksEngine.rank(o15))
             }
-            if (gen == cacheGen.get()) topCache = top
-            _state.update { it.copy(topPicks = top, topPicksLoading = false) }
+            if (gen == cacheGen.get()) {
+                topCache = top.first; handicapCache = top.second; over15Cache = top.third
+            }
+            _state.update {
+                it.copy(topPicks = top.first, handicapPicks = top.second, over15Picks = top.third, topPicksLoading = false)
+            }
         }
     }
 
@@ -329,13 +348,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 // stats without the changes this very game made to them (once its score is in).
                 val before = matchesBefore(matches, f.date)
                 val st = statsAsOf(leagueId, f.date, home, away, statRows, led)
+                val brymo = BrymoEngine.predict(home, away, before)
+                val poisson = PoissonEngine.predict(home, away, before)
+                val stats = StatsEngine.predict(home, away, st)
                 FixtureSummary(
-                    ConsensusEngine.compute(
-                        home, away,
-                        BrymoEngine.predict(home, away, before),
-                        PoissonEngine.predict(home, away, before),
-                        StatsEngine.predict(home, away, st)
-                    )
+                    ConsensusEngine.compute(home, away, brymo, poisson, stats),
+                    ConsensusEngine.handicapPick(home, away, brymo),
+                    ConsensusEngine.over15Backers(home, away, poisson, stats)
                 )
             } else null
             FixtureItem(index, f, home, away, summary)

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -71,50 +72,31 @@ private const val LOW_PERCENT = 50.0
 private fun percentOf(r: StatRow): Double = r.percent ?: StatsUpdater.percentOf(r.value, r.games) ?: 0.0
 private fun num(d: Double): String = if (d == Math.rint(d)) d.toLong().toString() else d.toString()
 
-private val COL_SEASON = 64.dp
-private val COL_VALUE = 52.dp
-private val COL_PCT = 46.dp
-
 @Composable
-private fun TableHeader() {
-    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("Team", style = MaterialTheme.typography.labelSmall, color = TextMuted, modifier = Modifier.weight(1f))
-        Text("Season", style = MaterialTheme.typography.labelSmall, color = TextMuted, modifier = Modifier.width(COL_SEASON))
-        Text("Rec.", style = MaterialTheme.typography.labelSmall, color = TextMuted, modifier = Modifier.width(COL_VALUE))
-        Text("%", style = MaterialTheme.typography.labelSmall, color = TextMuted, modifier = Modifier.width(COL_PCT))
-        Spacer(Modifier.width(80.dp))
-    }
-}
-
-@Composable
-private fun TableRow(r: StatRow, onEdit: () -> Unit, onDelete: () -> Unit) {
+private fun StatCard(r: StatRow, onEdit: () -> Unit, onDelete: () -> Unit, modifier: Modifier = Modifier) {
     val pct = percentOf(r)
     val low = pct < LOW_PERCENT
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    AppCard(modifier = modifier) {
         Text(
-            r.team, style = MaterialTheme.typography.bodyMedium, color = TextPrimary,
-            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+            r.team, style = MaterialTheme.typography.titleSmall, color = TextPrimary,
+            maxLines = 2, overflow = TextOverflow.Ellipsis
         )
-        Text(
-            r.season, style = MaterialTheme.typography.labelSmall, color = TextSecondary,
-            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(COL_SEASON)
-        )
-        Text(
-            "${num(r.value)}/${r.games}", style = MaterialTheme.typography.labelMedium,
-            color = TextPrimary, maxLines = 1, modifier = Modifier.width(COL_VALUE)
-        )
-        Text(
-            String.format(Locale.US, "%.0f%%", pct), style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold, color = if (low) LossRed else WinGreen, modifier = Modifier.width(COL_PCT)
-        )
-        IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = "Edit", tint = IndigoPrimary) }
-        if (low) {
-            IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = LossRed) }
-        } else {
-            Spacer(Modifier.width(48.dp))
+        Text(r.season, style = MaterialTheme.typography.labelSmall, color = TextSecondary, maxLines = 1)
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    String.format(Locale.US, "%.0f%%", pct), style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold, color = if (low) LossRed else WinGreen
+                )
+                Text(
+                    "${num(r.value)}/${r.games}", style = MaterialTheme.typography.labelMedium, color = TextMuted
+                )
+            }
+            IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = "Edit", tint = IndigoPrimary) }
+            if (low) {
+                IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = LossRed) }
+            }
         }
     }
 }
@@ -243,23 +225,18 @@ fun StatsEditorScreen(
                     }
                 }
                 if (open) {
-                    item(key = "mh_$mkt") { TableHeader() }
-                    val chunks = ordered.chunked(20)
-                    chunks.forEachIndexed { ci, chunk ->
-                        item(key = "mt_${mkt}_$ci") {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(CardSurface)
-                            ) {
-                                chunk.forEach { r ->
-                                    TableRow(
-                                        r,
-                                        onEdit = { editing = r },
-                                        onDelete = { confirmDelete = listOf(r) }
-                                    )
-                                }
+                    item(key = "mr_$mkt") {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            contentPadding = PaddingValues(end = 16.dp)
+                        ) {
+                            items(ordered, key = { StatsUpdater.rowKey(it) }) { r ->
+                                StatCard(
+                                    r,
+                                    onEdit = { editing = r },
+                                    onDelete = { confirmDelete = listOf(r) },
+                                    modifier = Modifier.width(220.dp)
+                                )
                             }
                         }
                     }

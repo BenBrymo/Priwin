@@ -127,6 +127,22 @@ object ConsensusEngine {
 
     const val BEST_PICKS_PER_MODEL = 3
 
+    /** Brymo's strongest "+2 Handicap Likely" pick for the game, if it has one. */
+    fun handicapPick(home: String, away: String, brymo: BrymoResult): Prediction? =
+        brymoOpinions(home, away, brymo).entries
+            .filter { it.key.startsWith("B:") && it.value.label.contains("Handicap") }
+            .maxByOrNull { it.value.confidence }
+            ?.let { Prediction(it.value.label, it.value.confidence) }
+
+    /** Which of Poisson / Stats back "Over 1.5 goals" (each only when it clears its own bar). */
+    fun over15Backers(home: String, away: String, poisson: PoissonResult?, stats: StatsResult?): List<ConsensusVote> {
+        val out = ArrayList<ConsensusVote>()
+        poisson?.let { poissonOpinions(home, away, it)["O1.5"] }?.let { out.add(ConsensusVote("Poisson", it.confidence)) }
+        stats?.takeIf { it.hasPrediction }?.let { statsOpinions(home, away, it)["O1.5"] }
+            ?.let { out.add(ConsensusVote("Stats", it.confidence)) }
+        return out
+    }
+
     const val POISSON_BEST_PICKS = 5
 
     /** Every market Poisson has a probability for (no cut-off), so it can always fill its best five. */
