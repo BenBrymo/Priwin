@@ -114,10 +114,7 @@ fun FixturesScreen(
             edgePadding = 8.dp
         ) {
             Tab(selected = section == 0, onClick = { section = 0 }, text = { Text("This league") })
-            Tab(selected = section == 1, onClick = { section = 1 }, text = { Text("Top 20 picks") })
-            Tab(selected = section == 2, onClick = { section = 2 }, text = { Text("Handicap") })
-            Tab(selected = section == 3, onClick = { section = 3 }, text = { Text("Over 1.5") })
-            Tab(selected = section == 4, onClick = { section = 4 }, text = {
+            Tab(selected = section == 1, onClick = { section = 1 }, text = {
                 val waiting = missingResults(state).size
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Results")
@@ -139,23 +136,26 @@ fun FixturesScreen(
                     }
                 }
             })
+            Tab(selected = section == 2, onClick = { section = 2 }, text = { Text("Top 20 picks") })
+            Tab(selected = section == 3, onClick = { section = 3 }, text = { Text("Handicap") })
+            Tab(selected = section == 4, onClick = { section = 4 }, text = { Text("Over 1.5") })
         }
         Box(Modifier.weight(1f)) {
             if (section == 0) LeagueFixtures(state, onOpen, onGoToData, onMark, onLink, onSaveScore, onRemoveScore, scoreHints)
-            else if (section == 1) TopPicksList(state, onOpenTopPick)
-            else if (section == 2) TopPicksList(
+            else if (section == 1) ResultsEntry(state, onSaveScore, scoreHints)
+            else if (section == 2) TopPicksList(state, onOpenTopPick)
+            else if (section == 3) TopPicksList(
                 state, onOpenTopPick, picks = state.handicapPicks, prefix = "h", showBest = false,
                 title = "Brymo handicap picks of each week",
                 subtitle = "best 20 per week across all leagues · Brymo's strongest +2 handicap pick per game · tap a card to open the analysis",
                 emptyText = "No upcoming games have a Brymo handicap pick yet."
             )
-            else if (section == 3) TopPicksList(
+            else if (section == 4) TopPicksList(
                 state, onOpenTopPick, picks = state.over15Picks, prefix = "o", showBest = false,
                 title = "Over 1.5 goals of each week",
                 subtitle = "best 20 per week across all leagues · backed by Poisson and/or Stats, both backing it first · tap a card to open the analysis",
                 emptyText = "No upcoming games have Poisson or Stats backing Over 1.5 goals yet."
             )
-            else ResultsEntry(state, onSaveScore, scoreHints)
         }
     }
 }

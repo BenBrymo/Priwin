@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -72,30 +73,66 @@ private const val LOW_PERCENT = 50.0
 private fun percentOf(r: StatRow): Double = r.percent ?: StatsUpdater.percentOf(r.value, r.games) ?: 0.0
 private fun num(d: Double): String = if (d == Math.rint(d)) d.toLong().toString() else d.toString()
 
+private val COL_SEASON = 60.dp
+private val COL_VALUE = 48.dp
+private val COL_PCT = 42.dp
+
+/** One market as a table: its records one under another (highest percentage first), scrolling inside the card. */
 @Composable
-private fun StatCard(r: StatRow, onEdit: () -> Unit, onDelete: () -> Unit, modifier: Modifier = Modifier) {
-    val pct = percentOf(r)
-    val low = pct < LOW_PERCENT
+private fun MarketTable(
+    market: String,
+    rows: List<StatRow>,
+    onEdit: (StatRow) -> Unit,
+    onDelete: (StatRow) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val lows = rows.count { percentOf(it) < LOW_PERCENT }
     AppCard(modifier = modifier) {
+        Text(market, style = MaterialTheme.typography.titleMedium, color = TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Text(
-            r.team, style = MaterialTheme.typography.titleSmall, color = TextPrimary,
-            maxLines = 2, overflow = TextOverflow.Ellipsis
+            "${rows.size} ${if (rows.size == 1) "record" else "records"}" + if (lows > 0) " · $lows below 50%" else "",
+            style = MaterialTheme.typography.labelSmall, color = TextMuted
         )
-        Text(r.season, style = MaterialTheme.typography.labelSmall, color = TextSecondary, maxLines = 1)
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    String.format(Locale.US, "%.0f%%", pct), style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold, color = if (low) LossRed else WinGreen
-                )
-                Text(
-                    "${num(r.value)}/${r.games}", style = MaterialTheme.typography.labelMedium, color = TextMuted
-                )
-            }
-            IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = "Edit", tint = IndigoPrimary) }
-            if (low) {
-                IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = LossRed) }
+            Text("Team", style = MaterialTheme.typography.labelSmall, color = TextMuted, modifier = Modifier.weight(1f))
+            Text("Season", style = MaterialTheme.typography.labelSmall, color = TextMuted, modifier = Modifier.width(COL_SEASON))
+            Text("Rec.", style = MaterialTheme.typography.labelSmall, color = TextMuted, modifier = Modifier.width(COL_VALUE))
+            Text("%", style = MaterialTheme.typography.labelSmall, color = TextMuted, modifier = Modifier.width(COL_PCT))
+            Spacer(Modifier.width(80.dp))
+        }
+        LazyColumn(modifier = Modifier.weight(1f, fill = true)) {
+            items(rows, key = { StatsUpdater.rowKey(it) }) { r ->
+                val pct = percentOf(r)
+                val low = pct < LOW_PERCENT
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        r.team, style = MaterialTheme.typography.bodyMedium, color = TextPrimary,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        r.season, style = MaterialTheme.typography.labelSmall, color = TextSecondary,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(COL_SEASON)
+                    )
+                    Text(
+                        "${num(r.value)}/${r.games}", style = MaterialTheme.typography.labelMedium,
+                        color = TextPrimary, maxLines = 1, modifier = Modifier.width(COL_VALUE)
+                    )
+                    Text(
+                        String.format(Locale.US, "%.0f%%", pct), style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold, color = if (low) LossRed else WinGreen, modifier = Modifier.width(COL_PCT)
+                    )
+                    IconButton(onClick = { onEdit(r) }, modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.Filled.Edit, contentDescription = "Edit", tint = IndigoPrimary)
+                    }
+                    if (low) {
+                        IconButton(onClick = { onDelete(r) }, modifier = Modifier.size(40.dp)) {
+                            Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = LossRed)
+                        }
+                    } else {
+                        Spacer(Modifier.width(40.dp))
+                    }
+                }
             }
         }
     }
@@ -119,7 +156,6 @@ fun StatsEditorScreen(
     var editing by remember { mutableStateOf<StatRow?>(null) }
     var adding by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<List<StatRow>?>(null) }
-    var flipped by rememberSaveable { mutableStateOf(emptySet<String>()) }
 
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
         if (uri != null) onExport(uri)
@@ -135,8 +171,6 @@ fun StatsEditorScreen(
                 (!lowOnly || percentOf(r) < LOW_PERCENT)
         }.sortedWith(compareBy({ it.team.lowercase(Locale.ROOT) }, { it.market }))
     }
-    // Groups start folded; while searching or filtering they start open instead (tapping a header flips it).
-    val filtering = query.isNotBlank() || market != ALL_MARKETS || lowOnly
     val lowCount = remember(rows) { rows.count { percentOf(it) < LOW_PERCENT } }
 
     LazyColumn(
@@ -199,46 +233,22 @@ fun StatsEditorScreen(
                     style = MaterialTheme.typography.labelMedium, color = TextSecondary
                 )
             }
-            val grouped = shown.groupBy { it.market }.toSortedMap()
-            for ((mkt, list) in grouped) {
-                val open = filtering != (mkt in flipped)
-                val ordered = list.sortedWith(
-                    compareByDescending<StatRow> { percentOf(it) }.thenBy { it.team.lowercase(Locale.ROOT) }
-                )
-                val lows = list.count { percentOf(it) < LOW_PERCENT }
-                item(key = "mk_$mkt") {
-                    AppCard(onClick = { flipped = if (mkt in flipped) flipped - mkt else flipped + mkt }) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(mkt, style = MaterialTheme.typography.titleMedium, color = TextPrimary)
-                                Text(
-                                    "${list.size} ${if (list.size == 1) "record" else "records"}" +
-                                        if (lows > 0) " · $lows below 50%" else "",
-                                    style = MaterialTheme.typography.labelSmall, color = TextMuted
-                                )
-                            }
-                            Icon(
-                                if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                                contentDescription = if (open) "Fold" else "Unfold", tint = TextSecondary
-                            )
-                        }
-                    }
-                }
-                if (open) {
-                    item(key = "mr_$mkt") {
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            contentPadding = PaddingValues(end = 16.dp)
-                        ) {
-                            items(ordered, key = { StatsUpdater.rowKey(it) }) { r ->
-                                StatCard(
-                                    r,
-                                    onEdit = { editing = r },
-                                    onDelete = { confirmDelete = listOf(r) },
-                                    modifier = Modifier.width(220.dp)
-                                )
-                            }
-                        }
+            val grouped = shown.groupBy { it.market }.toSortedMap().entries.toList()
+            item(key = "market_tables") {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(end = 16.dp)
+                ) {
+                    items(grouped, key = { it.key }) { (mkt, list) ->
+                        val ordered = list.sortedWith(
+                            compareByDescending<StatRow> { percentOf(it) }.thenBy { it.team.lowercase(Locale.ROOT) }
+                        )
+                        MarketTable(
+                            market = mkt, rows = ordered,
+                            onEdit = { editing = it },
+                            onDelete = { confirmDelete = listOf(it) },
+                            modifier = Modifier.width(390.dp).height(460.dp)
+                        )
                     }
                 }
             }
