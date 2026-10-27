@@ -4,6 +4,11 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -66,6 +71,54 @@ private const val LOW_PERCENT = 50.0
 private fun percentOf(r: StatRow): Double = r.percent ?: StatsUpdater.percentOf(r.value, r.games) ?: 0.0
 private fun num(d: Double): String = if (d == Math.rint(d)) d.toLong().toString() else d.toString()
 
+private val COL_SEASON = 64.dp
+private val COL_VALUE = 52.dp
+private val COL_PCT = 46.dp
+
+@Composable
+private fun TableHeader() {
+    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Team", style = MaterialTheme.typography.labelSmall, color = TextMuted, modifier = Modifier.weight(1f))
+        Text("Season", style = MaterialTheme.typography.labelSmall, color = TextMuted, modifier = Modifier.width(COL_SEASON))
+        Text("Rec.", style = MaterialTheme.typography.labelSmall, color = TextMuted, modifier = Modifier.width(COL_VALUE))
+        Text("%", style = MaterialTheme.typography.labelSmall, color = TextMuted, modifier = Modifier.width(COL_PCT))
+        Spacer(Modifier.width(80.dp))
+    }
+}
+
+@Composable
+private fun TableRow(r: StatRow, onEdit: () -> Unit, onDelete: () -> Unit) {
+    val pct = percentOf(r)
+    val low = pct < LOW_PERCENT
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            r.team, style = MaterialTheme.typography.bodyMedium, color = TextPrimary,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+        )
+        Text(
+            r.season, style = MaterialTheme.typography.labelSmall, color = TextSecondary,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(COL_SEASON)
+        )
+        Text(
+            "${num(r.value)}/${r.games}", style = MaterialTheme.typography.labelMedium,
+            color = TextPrimary, maxLines = 1, modifier = Modifier.width(COL_VALUE)
+        )
+        Text(
+            String.format(Locale.US, "%.0f%%", pct), style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold, color = if (low) LossRed else WinGreen, modifier = Modifier.width(COL_PCT)
+        )
+        IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = "Edit", tint = IndigoPrimary) }
+        if (low) {
+            IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = LossRed) }
+        } else {
+            Spacer(Modifier.width(48.dp))
+        }
+    }
+}
+
 /**
  * Edit the stats data in the app: search, change a record's numbers, add a record, export the file,
  * and delete records that fall below 50% (the delete button only appears on those).
@@ -84,6 +137,7 @@ fun StatsEditorScreen(
     var editing by remember { mutableStateOf<StatRow?>(null) }
     var adding by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<List<StatRow>?>(null) }
+    var flipped by rememberSaveable { mutableStateOf(emptySet<String>()) }
 
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
         if (uri != null) onExport(uri)
@@ -99,6 +153,8 @@ fun StatsEditorScreen(
                 (!lowOnly || percentOf(r) < LOW_PERCENT)
         }.sortedWith(compareBy({ it.team.lowercase(Locale.ROOT) }, { it.market }))
     }
+    // Groups start folded; while searching or filtering they start open instead (tapping a header flips it).
+    val filtering = query.isNotBlank() || market != ALL_MARKETS || lowOnly
     val lowCount = remember(rows) { rows.count { percentOf(it) < LOW_PERCENT } }
 
     LazyColumn(
@@ -161,37 +217,49 @@ fun StatsEditorScreen(
                     style = MaterialTheme.typography.labelMedium, color = TextSecondary
                 )
             }
-            items(shown, key = { StatsUpdater.rowKey(it) }) { r ->
-                val pct = percentOf(r)
-                val low = pct < LOW_PERCENT
-                AppCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                r.team, style = MaterialTheme.typography.titleMedium, color = TextPrimary,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                "${r.market} · ${r.season}", style = MaterialTheme.typography.labelMedium,
-                                color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                "${num(r.value)}/${r.games}", style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold, color = TextPrimary
-                            )
-                            Text(
-                                String.format(Locale.US, "%.0f%%", pct),
-                                style = MaterialTheme.typography.labelMedium, color = if (low) LossRed else WinGreen
+            val grouped = shown.groupBy { it.market }.toSortedMap()
+            for ((mkt, list) in grouped) {
+                val open = filtering != (mkt in flipped)
+                val ordered = list.sortedWith(
+                    compareByDescending<StatRow> { percentOf(it) }.thenBy { it.team.lowercase(Locale.ROOT) }
+                )
+                val lows = list.count { percentOf(it) < LOW_PERCENT }
+                item(key = "mk_$mkt") {
+                    AppCard(onClick = { flipped = if (mkt in flipped) flipped - mkt else flipped + mkt }) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(mkt, style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                                Text(
+                                    "${list.size} ${if (list.size == 1) "record" else "records"}" +
+                                        if (lows > 0) " · $lows below 50%" else "",
+                                    style = MaterialTheme.typography.labelSmall, color = TextMuted
+                                )
+                            }
+                            Icon(
+                                if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                contentDescription = if (open) "Fold" else "Unfold", tint = TextSecondary
                             )
                         }
-                        IconButton(onClick = { editing = r }) {
-                            Icon(Icons.Filled.Edit, contentDescription = "Edit", tint = IndigoPrimary)
-                        }
-                        if (low) {
-                            IconButton(onClick = { confirmDelete = listOf(r) }) {
-                                Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = LossRed)
+                    }
+                }
+                if (open) {
+                    item(key = "mh_$mkt") { TableHeader() }
+                    val chunks = ordered.chunked(20)
+                    chunks.forEachIndexed { ci, chunk ->
+                        item(key = "mt_${mkt}_$ci") {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(CardSurface)
+                            ) {
+                                chunk.forEach { r ->
+                                    TableRow(
+                                        r,
+                                        onEdit = { editing = r },
+                                        onDelete = { confirmDelete = listOf(r) }
+                                    )
+                                }
                             }
                         }
                     }

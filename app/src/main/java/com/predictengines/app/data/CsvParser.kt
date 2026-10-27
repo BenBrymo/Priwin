@@ -37,12 +37,20 @@ object CsvParser {
     /** Header words that mean a column is NOT the full-time score (half-time goals, expected goals ...). */
     private val NOT_FULL_TIME = listOf("half", "ht", "xg", "1st", "2nd", "first", "second", "pen", "corner", "shot", "against", "conceded", "avg", "average", "odds")
 
+    private val HC_KEYS = listOf("hc", "homecorners", "homecorner", "cornershome")
+    private val AC_KEYS = listOf("ac", "awaycorners", "awaycorner", "cornersaway")
+    private val HY_KEYS = listOf("hy", "homeyellow", "homeyellows", "homeyellowcards")
+    private val AY_KEYS = listOf("ay", "awayyellow", "awayyellows", "awayyellowcards")
+    private val HR_KEYS = listOf("hr", "homered", "homereds", "homeredcards")
+    private val AR_KEYS = listOf("ar", "awayred", "awayreds", "awayredcards")
+
     private const val HEADER_SCAN_ROWS = 15
 
     /** Where the needed columns are, and which row is the header. */
     private class MatchCols(
         val headerRow: Int, val date: Int, val time: Int, val home: Int, val away: Int, val hg: Int, val ag: Int,
-        val labels: List<String>
+        val labels: List<String>,
+        val hc: Int = -1, val ac: Int = -1, val hy: Int = -1, val ay: Int = -1, val hr: Int = -1, val ar: Int = -1
     )
 
     private fun pick(header: List<String>, keys: List<String>): Int {
@@ -70,7 +78,12 @@ object CsvParser {
             if (hg < 0 || ag < 0 || hg == ag) continue
             val date = pick(h, DATE_KEYS)
             val time = pick(h, TIME_KEYS).takeIf { it != date } ?: -1
-            return MatchCols(r, date, time, home, away, hg, ag, table[r])
+            val taken = setOf(date, time, home, away, hg, ag)
+            fun opt(keys: List<String>) = pick(h, keys).takeIf { it >= 0 && it !in taken } ?: -1
+            return MatchCols(
+                r, date, time, home, away, hg, ag, table[r],
+                opt(HC_KEYS), opt(AC_KEYS), opt(HY_KEYS), opt(AY_KEYS), opt(HR_KEYS), opt(AR_KEYS)
+            )
         }
         return null
     }
@@ -100,10 +113,15 @@ object CsvParser {
         val agI: Int
         val dataRows: List<List<String>>
         var note: String? = null
+        var hcI = -1; var acI = -1; var hyI = -1; var ayI = -1; var hrI = -1; var arI = -1
         if (cols != null) {
+            hcI = cols.hc; acI = cols.ac; hyI = cols.hy; ayI = cols.ay; hrI = cols.hr; arI = cols.ar
             dateI = cols.date; homeI = cols.home; awayI = cols.away; hgI = cols.hg; agI = cols.ag
             dataRows = table.drop(cols.headerRow + 1)
-            note = usedNote(cols.labels, listOf(cols.date, cols.time, cols.home, cols.away, cols.hg, cols.ag))
+            note = usedNote(
+                cols.labels,
+                listOf(cols.date, cols.time, cols.home, cols.away, cols.hg, cols.ag, cols.hc, cols.ac, cols.hy, cols.ay, cols.hr, cols.ar)
+            )
         } else if (hasTeamHeader(table)) {
             return Parsed(
                 emptyList(), 0,
@@ -135,7 +153,9 @@ object CsvParser {
                 skipped++
                 continue
             }
-            out.add(Match(stripTime(row.getOrNull(dateI).orEmpty().trim()), cleanName(home), cleanName(away), hg, ag))
+            fun num(i: Int) = if (i >= 0) parseGoals(row.getOrNull(i)) else null
+            val x = MatchExtras.fromFile(num(hcI), num(acI), num(hyI), num(ayI), num(hrI), num(arI))
+            out.add(Match(stripTime(row.getOrNull(dateI).orEmpty().trim()), cleanName(home), cleanName(away), hg, ag, x))
         }
         if (out.isEmpty()) {
             return Parsed(emptyList(), skipped, "No valid match rows found ($skipped rows skipped).")

@@ -6,7 +6,9 @@ data class Match(
     val homeTeam: String,
     val awayTeam: String,
     val homeGoals: Int,
-    val awayGoals: Int
+    val awayGoals: Int,
+    /** Corners and cards from the matches file's HC/AC/HY/AY/HR/AR columns, when it has them. */
+    val extras: MatchExtras? = null
 )
 
 /** An upcoming (not yet played) fixture loaded from a fixtures file. */

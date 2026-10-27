@@ -593,6 +593,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * Settles one game: stats from the score, then each pick of the fixture that the result decides gets an
      * automatic tick or cross. Returns how many stats rows were touched. [marks] is updated in place.
      */
+    /** What you entered, with the matches file's corners/cards filling anything you left empty. */
+    private fun effectiveExtras(typed: MatchExtras?, m: Match): MatchExtras? =
+        typed?.orElse(m.extras) ?: m.extras
+
     private fun settleOne(
         league: League, date: String, home: String, away: String, hg: Int, ag: Int,
         extras: MatchExtras?, marks: MutableMap<String, PredictionRecord>
@@ -678,7 +682,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     // Settle the game again right away with the file's score (whatever the auto-settle start date is).
                     val updated = _state.value.marks.toMutableMap()
                     val fx = fixtureKey(league.id, conflict.date, conflict.home, conflict.away)
-                    val x = _state.value.extras[fx]
+                    val x = _state.value.extras[fx]?.orElse(_state.value.scores[scoreKey(conflict.date, conflict.home, conflict.away)]?.extras)
                     settleOne(league, conflict.date, conflict.home, conflict.away, conflict.csvHome, conflict.csvAway, x, updated)
                     results.save(updated.values)
                     val settled = extrasStore.loadSettled().toMutableMap()
@@ -726,7 +730,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         val a = fx.away ?: continue
                         val m = st.scores[scoreKey(fx.fixture.date, h, a)] ?: continue
                         val key = fixtureKey(league.id, fx.fixture.date, h, a)
-                        val x = st.extras[key]
+                        val x = effectiveExtras(st.extras[key], m)
                         val sig = settleSignature(m.homeGoals, m.awayGoals, x)
                         if (settled[key] == sig) continue
                         settleOne(league, fx.fixture.date, h, a, m.homeGoals, m.awayGoals, x, marks)

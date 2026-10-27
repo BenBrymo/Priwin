@@ -136,7 +136,9 @@ class LeagueRepository(context: Context) {
         val baseU = all.take(base.size)
         val addedU = all.drop(base.size)
         val mine = addedU.map { "${it.date}|${it.homeTeam}|${it.awayTeam}" }.toHashSet()
-        return baseU.filter { "${it.date}|${it.homeTeam}|${it.awayTeam}" !in mine } + addedU
+        val fileExtras = baseU.filter { it.extras != null }.associate { "${it.date}|${it.homeTeam}|${it.awayTeam}" to it.extras }
+        return baseU.filter { "${it.date}|${it.homeTeam}|${it.awayTeam}" !in mine } +
+            addedU.map { m -> fileExtras["${m.date}|${m.homeTeam}|${m.awayTeam}"]?.let { m.copy(extras = it) } ?: m }
     }
 
     /** Games you entered by hand whose score differs from the matches file and that you haven't ruled on yet. */
@@ -575,7 +577,7 @@ class LeagueRepository(context: Context) {
         const val KEY_AUTO_SETTLE = "auto_settle_from"
         const val KEY_STATS_INFO = "info_stats"
         const val BUILT_IN_STATS = "stats/statschecker_2026_2027.csv"
-        const val CACHE_VERSION = 3
+        const val CACHE_VERSION = 4
         const val MAX_FILE_BYTES = 20 * 1024 * 1024
     }
 }

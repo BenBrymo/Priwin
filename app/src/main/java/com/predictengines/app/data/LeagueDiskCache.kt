@@ -43,7 +43,7 @@ class LeagueDiskCache(context: Context) {
     // ---- encoding --------------------------------------------------------------------------
 
     private fun encode(d: LoadedData) = JSONObject()
-        .put("matches", arr(d.matches) { m -> JSONArray().put(m.date).put(m.homeTeam).put(m.awayTeam).put(m.homeGoals).put(m.awayGoals) })
+        .put("matches", arr(d.matches) { m -> encMatch(m) })
         .put("teams", JSONArray(d.teams))
         .put("fixtures", arr(d.fixtures) { fx -> encodeFixture(fx) })
         .put("mi", d.matchesImport?.let { info(it) } ?: JSONObject.NULL)
@@ -54,7 +54,7 @@ class LeagueDiskCache(context: Context) {
                 .put(r.value).put(r.games).put(r.percent ?: JSONObject.NULL)
         })
         .put("si", d.statsImport?.let { info(it) } ?: JSONObject.NULL)
-        .put("added", arr(d.added) { m -> JSONArray().put(m.date).put(m.homeTeam).put(m.awayTeam).put(m.homeGoals).put(m.awayGoals) })
+        .put("added", arr(d.added) { m -> encMatch(m) })
         .put("ledger", arr(d.ledger) { e -> JSONArray().put(e.fx).put(e.rowKey).put(e.dv).put(e.dg).put(e.tag) })
 
     private fun <T> arr(list: List<T>, f: (T) -> Any): JSONArray {
@@ -92,7 +92,22 @@ class LeagueDiskCache(context: Context) {
 
     private fun strings(a: JSONArray) = (0 until a.length()).map { a.getString(it) }
 
-    private fun match(a: JSONArray) = Match(a.getString(0), a.getString(1), a.getString(2), a.getInt(3), a.getInt(4))
+    private fun encMatch(m: Match): JSONArray {
+        val a = JSONArray().put(m.date).put(m.homeTeam).put(m.awayTeam).put(m.homeGoals).put(m.awayGoals)
+        val x = m.extras
+        if (x != null) a.put(JSONArray()
+            .put(x.homeCorners ?: JSONObject.NULL).put(x.awayCorners ?: JSONObject.NULL)
+            .put(x.homeCards ?: JSONObject.NULL).put(x.awayCards ?: JSONObject.NULL))
+        return a
+    }
+
+    private fun match(a: JSONArray): Match {
+        val e = a.optJSONArray(5)
+        fun n(i: Int): Int? = if (e == null || e.isNull(i)) null else e.getInt(i)
+        val x = if (e == null) null else MatchExtras.fromFile(n(0), n(1), null, null, null, null)
+            ?.copy(homeCards = n(2), awayCards = n(3), cards = if (n(2) != null && n(3) != null) n(2)!! + n(3)!! else null)
+        return Match(a.getString(0), a.getString(1), a.getString(2), a.getInt(3), a.getInt(4), x)
+    }
 
     private fun infoOf(o: JSONObject, key: String): ImportInfo? =
         o.optJSONObject(key)?.let { ImportInfo(it.getString("n"), it.getInt("r"), it.getInt("s"), it.getLong("t")) }

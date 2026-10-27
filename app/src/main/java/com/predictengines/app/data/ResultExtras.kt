@@ -23,6 +23,35 @@ data class MatchExtras(
     val isEmpty: Boolean
         get() = corners == null && cards == null && first == null &&
             homeCorners == null && awayCorners == null && homeCards == null && awayCards == null
+
+    /** What you entered wins, field by field; anything you left empty is filled from [file] (the matches file). */
+    fun orElse(file: MatchExtras?): MatchExtras {
+        if (file == null) return this
+        val hc = homeCorners ?: file.homeCorners
+        val ac = awayCorners ?: file.awayCorners
+        val hk = homeCards ?: file.homeCards
+        val ak = awayCards ?: file.awayCards
+        return MatchExtras(
+            corners = if (hc != null && ac != null) hc + ac else corners ?: file.corners,
+            cards = if (hk != null && ak != null) hk + ak else cards ?: file.cards,
+            first = first ?: file.first,
+            homeCorners = hc, awayCorners = ac, homeCards = hk, awayCards = ak
+        )
+    }
+
+    companion object {
+        /** Builds extras from the file's per-team numbers. Cards = yellow + red (a missing red count counts as 0). */
+        fun fromFile(hc: Int?, ac: Int?, hy: Int?, ay: Int?, hr: Int?, ar: Int?): MatchExtras? {
+            val hk = hy?.let { it + (hr ?: 0) }
+            val ak = ay?.let { it + (ar ?: 0) }
+            val x = MatchExtras(
+                corners = if (hc != null && ac != null) hc + ac else null,
+                cards = if (hk != null && ak != null) hk + ak else null,
+                homeCorners = hc, awayCorners = ac, homeCards = hk, awayCards = ak
+            )
+            return if (x.isEmpty) null else x
+        }
+    }
 }
 
 /**
