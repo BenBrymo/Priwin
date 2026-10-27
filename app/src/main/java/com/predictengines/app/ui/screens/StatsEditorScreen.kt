@@ -125,12 +125,8 @@ private fun MarketTable(
                     IconButton(onClick = { onEdit(r) }, modifier = Modifier.size(40.dp)) {
                         Icon(Icons.Filled.Edit, contentDescription = "Edit", tint = IndigoPrimary)
                     }
-                    if (low) {
-                        IconButton(onClick = { onDelete(r) }, modifier = Modifier.size(40.dp)) {
-                            Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = LossRed)
-                        }
-                    } else {
-                        Spacer(Modifier.width(40.dp))
+                    IconButton(onClick = { onDelete(r) }, modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = if (low) LossRed else TextMuted)
                     }
                 }
             }
@@ -140,7 +136,7 @@ private fun MarketTable(
 
 /**
  * Edit the stats data in the app: search, change a record's numbers, add a record, export the file,
- * and delete records that fall below 50% (the delete button only appears on those).
+ * and delete any record (the delete button is on every row).
  */
 @Composable
 fun StatsEditorScreen(
@@ -356,7 +352,7 @@ fun StatsEditorScreen(
             text = {
                 Text(
                     if (list.size == 1) "${list[0].team} · ${list[0].market} (${num(list[0].value)}/${list[0].games}) will be removed from the stats and stay removed."
-                    else "These records (all below 50%) will be removed from the stats and stay removed. You can add them back with Add record."
+                    else "These records will be removed from the stats and stay removed. You can add them back with Add record."
                 )
             },
             confirmButton = { TextButton(onClick = { onDelete(list); confirmDelete = null }) { Text("Delete", color = LossRed) } },

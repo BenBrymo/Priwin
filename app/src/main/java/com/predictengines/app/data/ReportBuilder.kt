@@ -31,7 +31,10 @@ data class WeekReport(
 
 object ReportBuilder {
 
-    private val SOURCE_ORDER = listOf("Consensus", "Brymo", "Poisson", "Stats")
+    private val SOURCE_ORDER = listOf("Consensus", "Brymo", "Poisson", "Stats", "Top 20", "Handicap", "Over 1.5")
+
+    /** The weekly lists repeat picks that are already counted under the models, so they stay out of the totals. */
+    private val LIST_SOURCES = setOf("Top 20", "Handicap", "Over 1.5")
 
     fun weekStartOf(date: String): LocalDate? =
         DateUtils.parse(date)?.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
@@ -63,13 +66,14 @@ object ReportBuilder {
         val keys = (byWeek.keys + pending.keys).distinct()
         return keys.map { start ->
             val recs = (byWeek[start] ?: emptyList()).sortedWith(compareBy({ it.date }, { it.home }, { it.source }))
+            val counted = recs.filter { it.source !in LIST_SOURCES }
             WeekReport(
                 weekStart = start,
-                correct = recs.count { it.correct },
-                wrong = recs.count { !it.correct },
+                correct = counted.count { it.correct },
+                wrong = counted.count { !it.correct },
                 pending = pending[start] ?: 0,
                 bySource = breakdown(recs, { it.source }, SOURCE_ORDER),
-                byMarket = breakdown(recs, { it.group }, emptyList()),
+                byMarket = breakdown(counted, { it.group }, emptyList()),
                 records = recs
             )
         }.sortedWith(compareByDescending<WeekReport> { it.weekStart != null }.thenByDescending { it.weekStart })
@@ -109,7 +113,7 @@ object ReportBuilder {
         if (week.pending > 0) sb.append("\nStill to mark: ").append(week.pending)
         sb.append('\n')
         if (week.bySource.isNotEmpty()) {
-            sb.append("\nBy model\n")
+            sb.append("\nBy model and list\n")
             week.bySource.forEach { sb.append("  ").append(line(it)).append('\n') }
         }
         if (week.byMarket.isNotEmpty()) {

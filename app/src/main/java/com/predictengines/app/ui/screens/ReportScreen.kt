@@ -122,7 +122,7 @@ private fun WeekCard(week: WeekReport) {
 
         if (week.bySource.isNotEmpty()) {
             Spacer(Modifier.height(14.dp))
-            Text("By model", style = MaterialTheme.typography.labelLarge, color = TextSecondary)
+            Text("By model and list", style = MaterialTheme.typography.labelLarge, color = TextSecondary)
             week.bySource.forEach { BreakdownRow(it) }
         }
         if (week.byMarket.isNotEmpty()) {

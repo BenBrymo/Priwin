@@ -2,6 +2,15 @@ package com.predictengines.app.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import com.predictengines.app.ui.theme.WinGreen
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -83,6 +92,17 @@ fun AppRoot(vm: AppViewModel) {
     }
 
     val detailOpen = tab == Tab.FIXTURES && state.openFixtureId != null
+
+    // Played games with no score, per league. The open league is counted live; the others come from the background load.
+    val missing: Map<String, Int> = remember(state.missingByLeague, state.fixtures, state.scores, state.selected, state.isLoading) {
+        val m = HashMap(state.missingByLeague)
+        val sel = state.selected
+        if (sel != null && !state.isLoading) m[sel.id] = com.predictengines.app.ui.screens.missingResults(state).size
+        m.filterValues { it > 0 }
+    }
+    var missingDismissed by rememberSaveable { mutableStateOf(false) }
+    var showMissingList by remember { mutableStateOf(false) }
+    var jumpToResults by rememberSaveable { mutableIntStateOf(0) }
     BackHandler(enabled = detailOpen) { vm.closeFixture() }
 
     // A hand-entered score that differs from the matches file: ask which one is right.
@@ -124,6 +144,35 @@ fun AppRoot(vm: AppViewModel) {
                     TextButton(onClick = { snoozed = conflictSignature }) { Text("Later", color = TextSecondary) }
                 }
             }
+        )
+    }
+
+    if (showMissingList) {
+        AlertDialog(
+            onDismissRequest = { showMissingList = false },
+            containerColor = CardSurface,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary,
+            title = { Text("Games waiting for a result") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    state.leagues.filter { (missing[it.id] ?: 0) > 0 }.forEach { l ->
+                        TextButton(
+                            onClick = {
+                                showMissingList = false
+                                tabIndex = Tab.FIXTURES.ordinal
+                                if (l.id != state.selected?.id) vm.selectLeague(l.id)
+                                jumpToResults += 1
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(l.name, color = TextPrimary, modifier = Modifier.weight(1f))
+                            Text("${missing[l.id]}", color = WinGreen)
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showMissingList = false }) { Text("Close", color = TextSecondary) } }
         )
     }
 
@@ -175,11 +224,52 @@ fun AppRoot(vm: AppViewModel) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(state.leagues, key = { it.id }) { league ->
-                        PillChip(
-                            text = league.name,
-                            selected = league.id == state.selected?.id,
-                            onClick = { vm.selectLeague(league.id) }
+                        val n = missing[league.id] ?: 0
+                        Box(modifier = Modifier.padding(top = 6.dp, end = 6.dp)) {
+                            PillChip(
+                                text = league.name,
+                                selected = league.id == state.selected?.id,
+                                onClick = { vm.selectLeague(league.id) }
+                            )
+                            if (n > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .offset(x = 6.dp, y = (-6).dp)
+                                        .defaultMinSize(minWidth = 18.dp, minHeight = 18.dp)
+                                        .clip(CircleShape)
+                                        .background(WinGreen)
+                                        .padding(horizontal = 5.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        if (n > 99) "99+" else n.toString(),
+                                        style = MaterialTheme.typography.labelSmall, color = Color.Black, maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                if (tab == Tab.FIXTURES && missing.isNotEmpty() && !missingDismissed) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(CardSurface)
+                            .padding(start = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "${missing.values.sum()} played ${if (missing.values.sum() == 1) "game needs" else "games need"} a result" +
+                                " in ${missing.size} ${if (missing.size == 1) "league" else "leagues"}",
+                            style = MaterialTheme.typography.bodyMedium, color = TextPrimary,
+                            modifier = Modifier.weight(1f)
                         )
+                        TextButton(onClick = { showMissingList = true }) { Text("Show", color = IndigoPrimary) }
+                        TextButton(onClick = { missingDismissed = true }) { Text("Hide", color = TextSecondary) }
                     }
                 }
                 Spacer(Modifier.height(12.dp))
@@ -198,7 +288,8 @@ fun AppRoot(vm: AppViewModel) {
                         onSaveScore = { id, h, a, x -> vm.saveScore(id, h, a, x) },
                         onRemoveScore = vm::removeScore,
                         onSaveScores = vm::saveScores,
-                        scoreHints = vm::scoreHints
+                        scoreHints = vm::scoreHints,
+                        jumpToResults = jumpToResults
                     )
                     Tab.MATCHUP -> MatchupScreen(
                         state = state,

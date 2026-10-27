@@ -24,6 +24,7 @@ import com.predictengines.app.data.TopPick
 import com.predictengines.app.data.MatchExtras
 import com.predictengines.app.data.ScoreCell
 import com.predictengines.app.data.ScoreConflict
+import com.predictengines.app.data.ListPicksStore
 import com.predictengines.app.data.ResultExtrasStore
 import com.predictengines.app.data.settleSignature
 import com.predictengines.app.engine.ResultJudge
@@ -85,6 +86,8 @@ data class AppUiState(
     val topPicks: List<TopPick> = emptyList(),
     val topPicksLoading: Boolean = true,
     /** Brymo's best handicap picks and the best "Over 1.5 goals" picks, best 20 per week across all leagues. */
+    /** Played games with no score, per league id (from every league's loaded data). */
+    val missingByLeague: Map<String, Int> = emptyMap(),
     val handicapPicks: List<TopPick> = emptyList(),
     val over15Picks: List<TopPick> = emptyList(),
 
@@ -118,6 +121,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val disk = LeagueDiskCache(application)
     private val backup = BackupManager(application)
     private val extrasStore = ResultExtrasStore(application)
+    private val listPicks = ListPicksStore(application)
     private val settling = java.util.concurrent.atomic.AtomicBoolean(false)
     private val results = ResultsStore(application)
     private val linksStore = NameLinksStore(application)
@@ -139,6 +143,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var topCache: List<TopPick>? = null
     private var handicapCache: List<TopPick> = emptyList()
     private var over15Cache: List<TopPick> = emptyList()
+    private var missingCache: Map<String, Int> = emptyMap()
 
     private fun invalidateCache() {
         cacheGen.incrementAndGet()
@@ -277,7 +282,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 it.copy(
                     topPicks = live, topPicksLoading = false,
                     handicapPicks = handicapCache.filter { p -> !DateUtils.isPlayed(p.date, p.time) },
-                    over15Picks = over15Cache.filter { p -> !DateUtils.isPlayed(p.date, p.time) }
+                    over15Picks = over15Cache.filter { p -> !DateUtils.isPlayed(p.date, p.time) },
+                    missingByLeague = missingCache
                 )
             }
             return
@@ -291,11 +297,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val all = ArrayList<TopPick>()
                 val hcp = ArrayList<TopPick>()
                 val o15 = ArrayList<TopPick>()
+                val missing = HashMap<String, Int>()
                 for (league in leagues) {
                     try {
                         // Uses (and fills) the same per-league cache, so the other leagues are ready before you open them.
                         val data = cache[league.id] ?: computeLeague(league)
-                        if (data.matches.isEmpty() || data.fixtures.isEmpty()) continue
+                        if (data.fixtures.isEmpty()) continue
+                        missing[league.id] = countMissing(data)
+                        if (data.matches.isEmpty()) continue
                         all += TopPicksEngine.candidates(league, data.fixtures)
                         hcp += TopPicksEngine.handicapCandidates(league, data.fixtures)
                         o15 += TopPicksEngine.over15Candidates(league, data.fixtures)
@@ -303,15 +312,43 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         // one unreadable league must not hide the others
                     }
                 }
+                missingCache = missing
                 Triple(TopPicksEngine.rank(all), TopPicksEngine.rank(hcp), TopPicksEngine.rank(o15))
             }
+            withContext(Dispatchers.IO) { recordListPicks(top.first, top.second, top.third) }
             if (gen == cacheGen.get()) {
                 topCache = top.first; handicapCache = top.second; over15Cache = top.third
             }
             _state.update {
-                it.copy(topPicks = top.first, handicapPicks = top.second, over15Picks = top.third, topPicksLoading = false)
+                it.copy(
+                    topPicks = top.first, handicapPicks = top.second, over15Picks = top.third,
+                    missingByLeague = missingCache, topPicksLoading = false
+                )
             }
         }
+    }
+
+    /** Played games of a league that have no score in the matches file or among your entries. */
+    private fun countMissing(data: LoadedData): Int {
+        val now = java.time.LocalDateTime.now()
+        val known = data.matches.mapTo(HashSet()) { scoreKey(it.date, it.homeTeam, it.awayTeam) }
+        return data.fixtures.count { fx ->
+            val h = fx.home; val a = fx.away
+            h != null && a != null && fx.fixture.date.isNotBlank() &&
+                DateUtils.isPlayed(fx.fixture.date, fx.fixture.time, now) &&
+                scoreKey(fx.fixture.date, h, a) !in known
+        }
+    }
+
+    /** Writes down the picks on the three weekly lists, so they can be settled and reported after their games. */
+    private fun recordListPicks(top: List<TopPick>, hcp: List<TopPick>, o15: List<TopPick>) {
+        fun entries(source: String, list: List<TopPick>) = list.map { tp ->
+            ListPicksStore.Entry(
+                source, tp.leagueId, tp.leagueName, tp.date, tp.home, tp.away,
+                tp.pick.key, tp.pick.label, tp.pick.group
+            )
+        }
+        listPicks.add(entries(ListPicksStore.TOP, top) + entries(ListPicksStore.HANDICAP, hcp) + entries(ListPicksStore.OVER15, o15))
     }
 
     /** Opens a Top-picks entry: switches to its league if needed, then opens that fixture's analysis. */
@@ -645,6 +682,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val deltas = StatsUpdater.tickDeltas(pick.key, verdict, home, away, played, repo.loadStats())
                 rows += repo.updateStatsForFixture(fx, { it == "tick:${pick.key}" }, deltas)
             }
+        }
+        // The weekly lists' picks for this game (Top 20 / Handicap / Over 1.5): judged from the result, automatic only.
+        val recorded = listPicks.forGame(listPicks.load(), league.id, date, home, away)
+        for (e in recorded) {
+            val id = e.id
+            val verdict = ResultJudge.judge(e.key, home, away, hg, ag, extras)
+            if (verdict == null) { marks.remove(id); continue }
+            marks[id] = PredictionRecord(
+                id, league.id, league.name, date, home, away, e.source, e.key, e.label, e.group,
+                verdict, System.currentTimeMillis(), auto = true
+            )
         }
         return rows
     }

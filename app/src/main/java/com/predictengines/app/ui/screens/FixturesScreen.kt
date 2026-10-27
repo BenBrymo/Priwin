@@ -101,9 +101,12 @@ fun FixturesScreen(
     onSaveScore: (fixtureId: Int, home: Int, away: Int, extras: MatchExtras?) -> Unit,
     onRemoveScore: (fixtureId: Int) -> Unit,
     onSaveScores: (List<AppViewModel.ScoreEntry>) -> Unit,
-    scoreHints: (home: String, away: String) -> List<ScoreCell> = { _, _ -> emptyList() }
+    scoreHints: (home: String, away: String) -> List<ScoreCell> = { _, _ -> emptyList() },
+    jumpToResults: Int = 0
 ) {
     var section by rememberSaveable { mutableIntStateOf(0) }
+    // The "games need results" prompt asks for the Results sub-tab.
+    androidx.compose.runtime.LaunchedEffect(jumpToResults) { if (jumpToResults > 0) section = 1 }
     if (state.openFixtureId != null) {
         FixtureDetail(state, onClose, onMark, onLink)
         return
@@ -304,7 +307,7 @@ private fun TopPickCard(rank: Int, tp: TopPick, onClick: () -> Unit, modifier: M
 }
 
 /** Played games in the open league that have no score yet (not in the matches file, not entered by you). */
-private fun missingResults(state: AppUiState): List<FixtureItem> {
+internal fun missingResults(state: AppUiState): List<FixtureItem> {
     val now = LocalDateTime.now()
     return state.fixtures.filter { fx ->
         fx.home != null && fx.away != null && fx.fixture.date.isNotBlank() &&

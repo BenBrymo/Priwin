@@ -112,7 +112,7 @@ class BackupManager(context: Context) {
         const val MARKER = "priwin_backup.json"
         const val PREFS_FILE = "settings.json"
         const val LEAGUE_DIR = "league_data"
-        val TOP_FILES = listOf("prediction_marks.json", "name_links.json", "result_extras.json", "settled_fixtures.json")
+        val TOP_FILES = listOf("prediction_marks.json", "name_links.json", "result_extras.json", "settled_fixtures.json", "list_picks.json")
         const val KEY_CUSTOM = "custom_leagues"
         const val KEY_LAST = "last_league"
         const val KEY_AUTO = "auto_settle_from"
