@@ -1,6 +1,12 @@
 package com.predictengines.app.ui.screens
 
 import android.content.Intent
+import com.predictengines.app.data.ListPicksStore
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -55,7 +61,14 @@ fun ReportScreen(state: AppUiState) {
         ReportBuilder.weeks(state.marks.values, ReportBuilder.pending(state.fixtures, state.marks, leagueId))
     }
 
-    if (weeks.isEmpty()) {
+    val lists = remember(state.marks, state.listEntries) {
+        val marked = state.marks.keys
+        ListPicksStore.SOURCES.map { src ->
+            src to ReportBuilder.listWeeks(src, state.marks.values, state.listEntries, marked)
+        }
+    }
+
+    if (weeks.isEmpty() && lists.all { it.second.isEmpty() }) {
         Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
             EmptyState(
                 icon = Icons.Filled.Assessment,
@@ -72,6 +85,7 @@ fun ReportScreen(state: AppUiState) {
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        items(lists, key = { "list_${it.first}" }) { (src, listWeeks) -> ListReportCard(src, listWeeks) }
         items(weeks, key = { it.weekStart?.toString() ?: "no_date" }) { week -> WeekCard(week) }
     }
 }
@@ -122,7 +136,7 @@ private fun WeekCard(week: WeekReport) {
 
         if (week.bySource.isNotEmpty()) {
             Spacer(Modifier.height(14.dp))
-            Text("By model and list", style = MaterialTheme.typography.labelLarge, color = TextSecondary)
+            Text("By model", style = MaterialTheme.typography.labelLarge, color = TextSecondary)
             week.bySource.forEach { BreakdownRow(it) }
         }
         if (week.byMarket.isNotEmpty()) {
@@ -162,6 +176,110 @@ private fun WeekCard(week: WeekReport) {
                             "${r.home} v ${r.away} · ${r.label} · ${r.source}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextPrimary
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** One weekly list's report: foldable card, with a foldable block for each week inside. */
+@Composable
+private fun ListReportCard(source: String, weeks: List<ReportBuilder.ListWeek>) {
+    val context = LocalContext.current
+    var open by rememberSaveable(source) { mutableStateOf(false) }
+    var flipped by rememberSaveable(source) { mutableStateOf(emptySet<String>()) }
+    val correct = weeks.sumOf { it.correct }
+    val wrong = weeks.sumOf { it.wrong }
+    val waiting = weeks.sumOf { it.waiting }
+    val total = correct + wrong
+    val rate = if (total == 0) 0 else Math.round(correct * 100.0 / total).toInt()
+    val title = when (source) {
+        "Top 20" -> "Top 20 picks"
+        "Handicap" -> "Handicap picks"
+        else -> "Over 1.5 goals"
+    }
+
+    AppCard(onClick = { open = !open }) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                Text(
+                    if (total == 0 && waiting == 0) "No results yet"
+                    else "$correct correct · $wrong wrong" + (if (total > 0) " · $rate%" else "") +
+                        (if (waiting > 0) " · $waiting waiting" else ""),
+                    style = MaterialTheme.typography.labelMedium, color = TextSecondary
+                )
+            }
+            Icon(
+                if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                contentDescription = if (open) "Fold" else "Unfold", tint = TextSecondary
+            )
+        }
+        if (open) {
+            if (weeks.isEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Picks on this list are settled automatically once their games have results.",
+                    style = MaterialTheme.typography.bodyMedium, color = TextMuted
+                )
+            }
+            weeks.forEachIndexed { index, w ->
+                val key = w.weekStart?.toString() ?: "no_date"
+                val weekOpen = (index == 0) != (key in flipped)
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { flipped = if (key in flipped) flipped - key else flipped + key },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(ReportBuilder.weekLabel(w.weekStart), style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+                        Text(
+                            "${w.correct} correct · ${w.wrong} wrong" + (if (w.total > 0) " · ${w.hitRatePercent}%" else "") +
+                                (if (w.waiting > 0) " · ${w.waiting} waiting" else ""),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (w.total == 0) TextMuted else if (w.hitRatePercent >= 50) WinGreen else LossRed
+                        )
+                    }
+                    IconButton(onClick = {
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_SUBJECT, "Priwin $title report: ${ReportBuilder.weekLabel(w.weekStart)}")
+                            putExtra(Intent.EXTRA_TEXT, ReportBuilder.listText(title, w))
+                        }
+                        context.startActivity(Intent.createChooser(send, "Share report"))
+                    }) { Icon(Icons.Filled.Share, contentDescription = "Share report", tint = TextSecondary) }
+                    Icon(
+                        if (weekOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                        contentDescription = if (weekOpen) "Fold" else "Unfold", tint = TextSecondary
+                    )
+                }
+                if (weekOpen) {
+                    w.records.forEach { r ->
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
+                            Text(
+                                if (r.correct) "✓" else "✗",
+                                color = if (r.correct) WinGreen else LossRed,
+                                fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 10.dp)
+                            )
+                            Column {
+                                Text(
+                                    "${r.home} v ${r.away} · ${r.label}",
+                                    style = MaterialTheme.typography.bodyMedium, color = TextPrimary
+                                )
+                                Text(
+                                    "${r.leagueName} · ${r.date}",
+                                    style = MaterialTheme.typography.labelSmall, color = TextMuted
+                                )
+                            }
+                        }
+                    }
+                    if (w.waiting > 0) {
+                        Text(
+                            "${w.waiting} more waiting for their games to be played or scored",
+                            style = MaterialTheme.typography.labelSmall, color = DrawAmber,
+                            modifier = Modifier.padding(top = 4.dp)
                         )
                     }
                 }

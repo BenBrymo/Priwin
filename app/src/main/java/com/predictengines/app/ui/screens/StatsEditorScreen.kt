@@ -70,6 +70,35 @@ import java.util.Locale
 private const val ALL_MARKETS = "All markets"
 private const val LOW_PERCENT = 50.0
 
+/** The order the market tables (and the market dropdown) are shown in. Markets not listed come last, A-Z. */
+private val MARKET_ORDER: List<String> = buildList {
+    addAll(
+        listOf(
+            "Total Wins", "Home Wins", "Away Wins", "Home Win to Nill", "Away Win to Nill",
+            "Total Draws", "Home Draws", "Away Draws", "Total Lost", "Home Lost", "Away Lost",
+            "Win or Draw", "Home Win or Draw", "Away W or D", "Total BTTS", "Home BTTS", "Away BTTS",
+            "First to Score", "FTS Home", "FTS Away"
+        )
+    )
+    fun lines(prefix: String, lines: List<String>) {
+        for (l in lines) for (side in listOf("Over", "Under")) {
+            add("$prefix$side $l")
+            add("$prefix$side $l Home")
+            add("$prefix$side $l Away")
+        }
+    }
+    lines("", listOf("1.5", "2.5", "3.5"))
+    lines("Corners ", listOf("8.5", "9.5", "10.5", "11.5"))
+    lines("Cards ", listOf("3.5", "4.5", "5.5", "6.5"))
+}.map { it.lowercase(Locale.ROOT) }
+
+private fun marketRank(name: String): Int {
+    val i = MARKET_ORDER.indexOf(name.trim().lowercase(Locale.ROOT))
+    return if (i < 0) Int.MAX_VALUE else i
+}
+
+private val MARKET_COMPARATOR: Comparator<String> = compareBy<String>({ marketRank(it) }, { it.lowercase(Locale.ROOT) })
+
 private fun percentOf(r: StatRow): Double = r.percent ?: StatsUpdater.percentOf(r.value, r.games) ?: 0.0
 private fun num(d: Double): String = if (d == Math.rint(d)) d.toLong().toString() else d.toString()
 
@@ -158,7 +187,7 @@ fun StatsEditorScreen(
     }
 
     val rows = state.statsRows
-    val markets = remember(rows) { rows.map { it.market }.distinct().sorted() }
+    val markets = remember(rows) { rows.map { it.market }.distinct().sortedWith(MARKET_COMPARATOR) }
     val shown = remember(rows, query, market, lowOnly) {
         val q = query.trim().lowercase(Locale.ROOT)
         rows.filter { r ->
@@ -229,7 +258,7 @@ fun StatsEditorScreen(
                     style = MaterialTheme.typography.labelMedium, color = TextSecondary
                 )
             }
-            val grouped = shown.groupBy { it.market }.toSortedMap().entries.toList()
+            val grouped = shown.groupBy { it.market }.toSortedMap(MARKET_COMPARATOR).entries.toList()
             item(key = "market_tables") {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),

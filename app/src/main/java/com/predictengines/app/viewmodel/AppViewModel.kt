@@ -88,6 +88,8 @@ data class AppUiState(
     /** Brymo's best handicap picks and the best "Over 1.5 goals" picks, best 20 per week across all leagues. */
     /** Played games with no score, per league id (from every league's loaded data). */
     val missingByLeague: Map<String, Int> = emptyMap(),
+    /** Picks that were on the weekly lists (Top 20 / Handicap / Over 1.5), settled or still waiting. */
+    val listEntries: List<ListPicksStore.Entry> = emptyList(),
     val handicapPicks: List<TopPick> = emptyList(),
     val over15Picks: List<TopPick> = emptyList(),
 
@@ -188,7 +190,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // The user's name links must be in place before any file is read, so every file sees the same names.
         val links = linksStore.load()
         TeamMatcher.setUserLinks(links.map { it.a to it.b })
-        _state.update { it.copy(leagues = leagues, marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom()) }
+        _state.update { it.copy(leagues = leagues, marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
         val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
         selectLeague(start.id)
     }
@@ -349,6 +351,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         listPicks.add(entries(ListPicksStore.TOP, top) + entries(ListPicksStore.HANDICAP, hcp) + entries(ListPicksStore.OVER15, o15))
+        _state.update { it.copy(listEntries = listPicks.load().values.toList()) }
     }
 
     /** Opens a Top-picks entry: switches to its league if needed, then opens that fixture's analysis. */
@@ -863,7 +866,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val marks = withContext(Dispatchers.IO) { results.load() }
                     val extras = withContext(Dispatchers.IO) { extrasStore.loadExtras() }
                     invalidateCache()
-                    _state.update { it.copy(leagues = leagues, marks = marks, nameLinks = links, extras = extras, autoSettleFrom = repo.autoSettleFrom()) }
+                    _state.update { it.copy(leagues = leagues, marks = marks, nameLinks = links, extras = extras, autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
                     val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
                     selectLeague(start.id)
                     postMessage("Backup restored (${result.files} files)")

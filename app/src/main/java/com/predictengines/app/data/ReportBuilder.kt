@@ -31,7 +31,7 @@ data class WeekReport(
 
 object ReportBuilder {
 
-    private val SOURCE_ORDER = listOf("Consensus", "Brymo", "Poisson", "Stats", "Top 20", "Handicap", "Over 1.5")
+    private val SOURCE_ORDER = listOf("Consensus", "Brymo", "Poisson", "Stats")
 
     /** The weekly lists repeat picks that are already counted under the models, so they stay out of the totals. */
     private val LIST_SOURCES = setOf("Top 20", "Handicap", "Over 1.5")
@@ -61,7 +61,8 @@ object ReportBuilder {
     }
 
     /** Newest week first; the "no date" group last. */
-    fun weeks(records: Collection<PredictionRecord>, pending: Map<LocalDate?, Int> = emptyMap()): List<WeekReport> {
+    fun weeks(all: Collection<PredictionRecord>, pending: Map<LocalDate?, Int> = emptyMap()): List<WeekReport> {
+        val records = all.filter { it.source !in LIST_SOURCES } // the weekly lists have their own reports
         val byWeek = records.groupBy { weekStartOf(it.date) }
         val keys = (byWeek.keys + pending.keys).distinct()
         return keys.map { start ->
@@ -102,6 +103,49 @@ object ReportBuilder {
         }
     }
 
+    /** One Monday-Sunday week of one weekly list (Top 20 / Handicap / Over 1.5). */
+    data class ListWeek(
+        val weekStart: LocalDate?,
+        val correct: Int,
+        val wrong: Int,
+        /** Recorded picks whose game hasn't been settled yet. */
+        val waiting: Int,
+        val records: List<PredictionRecord>
+    ) {
+        val total: Int get() = correct + wrong
+        val hitRatePercent: Int get() = if (total == 0) 0 else Math.round(correct * 100.0 / total).toInt()
+    }
+
+    /** The settled picks of one weekly list grouped by week (newest first), plus how many are still waiting. */
+    fun listWeeks(
+        source: String,
+        marks: Collection<PredictionRecord>,
+        recorded: Collection<ListPicksStore.Entry>,
+        marked: Set<String>
+    ): List<ListWeek> {
+        val recs = marks.filter { it.source == source }.groupBy { weekStartOf(it.date) }
+        val waiting = recorded.filter { it.source == source && it.id !in marked }.groupingBy { weekStartOf(it.date) }.eachCount()
+        return (recs.keys + waiting.keys).distinct().map { start ->
+            val rs = (recs[start] ?: emptyList()).sortedWith(compareBy({ it.date }, { it.home }))
+            ListWeek(start, rs.count { it.correct }, rs.count { !it.correct }, waiting[start] ?: 0, rs)
+        }.sortedWith(compareByDescending<ListWeek> { it.weekStart != null }.thenByDescending { it.weekStart })
+    }
+
+    fun listText(source: String, w: ListWeek): String {
+        val sb = StringBuilder()
+        sb.append("Priwin · ").append(source).append(" · week ").append(weekLabel(w.weekStart)).append('\n')
+        sb.append("Correct: ").append(w.correct).append(" · Wrong: ").append(w.wrong)
+        if (w.total > 0) sb.append(" · Hit rate: ").append(w.hitRatePercent).append('%')
+        if (w.waiting > 0) sb.append(" · Waiting: ").append(w.waiting)
+        sb.append('\n')
+        w.records.forEach {
+            sb.append(if (it.correct) "  ✓ " else "  ✗ ")
+                .append(it.home).append(" v ").append(it.away)
+                .append(" (").append(it.leagueName).append("): ").append(it.label).append('\n')
+        }
+        return sb.toString().trimEnd()
+    }
+
     /** Plain-text report for sharing. */
     fun toText(week: WeekReport): String {
         val sb = StringBuilder()
@@ -113,7 +157,7 @@ object ReportBuilder {
         if (week.pending > 0) sb.append("\nStill to mark: ").append(week.pending)
         sb.append('\n')
         if (week.bySource.isNotEmpty()) {
-            sb.append("\nBy model and list\n")
+            sb.append("\nBy model\n")
             week.bySource.forEach { sb.append("  ").append(line(it)).append('\n') }
         }
         if (week.byMarket.isNotEmpty()) {
