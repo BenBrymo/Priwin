@@ -21,7 +21,8 @@ class ListPicksStore(context: Context) {
         val away: String,
         val key: String,
         val label: String,
-        val group: String
+        val group: String,
+        val time: String = ""
     ) {
         val id: String get() = PredictionRecord.idOf(leagueId, date, home, away, source, key)
     }
@@ -36,7 +37,8 @@ class ListPicksStore(context: Context) {
                 val o = arr.getJSONObject(i)
                 val e = Entry(
                     o.getString("s"), o.getString("l"), o.getString("ln"), o.getString("d"),
-                    o.getString("h"), o.getString("a"), o.getString("k"), o.getString("lb"), o.getString("g")
+                    o.getString("h"), o.getString("a"), o.getString("k"), o.getString("lb"), o.getString("g"),
+                    o.optString("tm", "")
                 )
                 out[e.id] = e
             }
@@ -49,14 +51,17 @@ class ListPicksStore(context: Context) {
     /** Adds [entries] to what is already written down. Returns true when something new was added. */
     fun add(entries: Collection<Entry>): Boolean {
         val all = LinkedHashMap(load())
-        val before = all.size
-        for (e in entries) all.putIfAbsent(e.id, e)
-        if (all.size == before) return false
+        var changed = false
+        for (e in entries) {
+            val old = all[e.id]
+            if (old == null || (old.time.isBlank() && e.time.isNotBlank())) { all[e.id] = e; changed = true }
+        }
+        if (!changed) return false
         val arr = JSONArray()
         for (e in all.values) {
             arr.put(
                 JSONObject().put("s", e.source).put("l", e.leagueId).put("ln", e.leagueName).put("d", e.date)
-                    .put("h", e.home).put("a", e.away).put("k", e.key).put("lb", e.label).put("g", e.group)
+                    .put("h", e.home).put("a", e.away).put("k", e.key).put("lb", e.label).put("g", e.group).put("tm", e.time)
             )
         }
         try {

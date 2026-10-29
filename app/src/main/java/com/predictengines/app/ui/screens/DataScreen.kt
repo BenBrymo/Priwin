@@ -1,5 +1,11 @@
 package com.predictengines.app.ui.screens
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material3.Switch
+import com.predictengines.app.ui.components.PillChip
+import com.predictengines.app.ui.theme.DrawAmber
+import com.predictengines.app.reminders.ReminderPrefs
+import com.predictengines.app.reminders.ReminderScheduler
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -250,6 +256,8 @@ fun DataScreen(
             TextButton(onClick = { editingSettleDate = true }) { Text("Change start date", color = IndigoPrimary) }
         }
 
+        ReminderCard()
+
         AppCard(
             title = "Backup & restore",
             subtitle = "Ticks and reports, name links, added scores, stats edits and loaded files in one file. Make one before uninstalling or changing phone.",
@@ -474,3 +482,79 @@ private fun DataSourceCard(
 
 private fun formatTime(millis: Long): String =
     SimpleDateFormat("d MMM yyyy, HH:mm", Locale.getDefault()).format(Date(millis))
+
+
+/** Daily phone reminder for the picks that kick off today and tomorrow (Top 20, Handicap and Over 1.5 lists). */
+@Composable
+private fun ReminderCard() {
+    val context = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    var on by remember { mutableStateOf(ReminderPrefs.enabled(context)) }
+    var hour by remember { mutableStateOf(ReminderPrefs.hour(context)) }
+    var note by remember { mutableStateOf<String?>(null) }
+
+    fun apply(enabled: Boolean) {
+        on = enabled
+        ReminderPrefs.setEnabled(context, enabled)
+        ReminderScheduler.sync(context)
+    }
+
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            apply(true)
+            note = null
+        } else {
+            apply(false)
+            note = "Notifications are blocked for Priwin. Allow them in the phone's app settings to get reminders."
+        }
+    }
+
+    AppCard(
+        title = "Pick reminders",
+        subtitle = "A notification at the time you choose, even when the app is closed, listing the Top 20, Handicap and Over 1.5 picks that kick off today and tomorrow.",
+        accentColor = DrawAmber
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Remind me every day", style = MaterialTheme.typography.titleSmall, color = TextPrimary, modifier = Modifier.weight(1f))
+            Switch(
+                checked = on,
+                onCheckedChange = { want ->
+                    if (!want) apply(false)
+                    else if (ReminderScheduler.canNotify(context)) { apply(true); note = null }
+                    else if (android.os.Build.VERSION.SDK_INT >= 33) permission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    else apply(true)
+                }
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Text("Time of day", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
+        Spacer(Modifier.height(4.dp))
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            for (h in listOf(6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 21)) {
+                PillChip(
+                    text = String.format(Locale.US, "%02d:00", h),
+                    selected = hour == h,
+                    onClick = {
+                        hour = h
+                        ReminderPrefs.setHour(context, h)
+                        ReminderScheduler.sync(context)
+                    }
+                )
+            }
+        }
+        Text(
+            "The phone may deliver it a few minutes late to save battery.",
+            style = MaterialTheme.typography.labelSmall, color = TextMuted
+        )
+        TextButton(onClick = {
+            note = when {
+                !ReminderScheduler.canNotify(context) -> "Turn the reminders on first, and allow notifications when asked."
+                ReminderScheduler.notify(context, force = true) -> "Sent. Check your notifications."
+                else -> "Couldn't show a notification."
+            }
+        }) { Text("Send a test now", color = IndigoPrimary) }
+        note?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = TextSecondary) }
+    }
+}

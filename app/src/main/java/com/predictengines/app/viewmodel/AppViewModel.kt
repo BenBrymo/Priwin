@@ -347,7 +347,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         fun entries(source: String, list: List<TopPick>) = list.map { tp ->
             ListPicksStore.Entry(
                 source, tp.leagueId, tp.leagueName, tp.date, tp.home, tp.away,
-                tp.pick.key, tp.pick.label, tp.pick.group
+                tp.pick.key, tp.pick.label, tp.pick.group, tp.time
             )
         }
         listPicks.add(entries(ListPicksStore.TOP, top) + entries(ListPicksStore.HANDICAP, hcp) + entries(ListPicksStore.OVER15, o15))

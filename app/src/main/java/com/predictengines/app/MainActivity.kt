@@ -22,6 +22,8 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT)
         )
+        // Keep the daily pick reminder's alarm in step with its settings.
+        com.predictengines.app.reminders.ReminderScheduler.sync(this)
         setContent {
             PredictEnginesTheme {
                 AppRoot(viewModel)
