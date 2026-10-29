@@ -121,14 +121,32 @@ object ReportBuilder {
         source: String,
         marks: Collection<PredictionRecord>,
         recorded: Collection<ListPicksStore.Entry>,
-        marked: Set<String>
+        marked: Set<String>,
+        thisWeek: LocalDate = weekStartOf(LocalDate.now().toString()) ?: LocalDate.now()
     ): List<ListWeek> {
         val recs = marks.filter { it.source == source }.groupBy { weekStartOf(it.date) }
         val waiting = recorded.filter { it.source == source && it.id !in marked }.groupingBy { weekStartOf(it.date) }.eachCount()
         return (recs.keys + waiting.keys).distinct().map { start ->
             val rs = (recs[start] ?: emptyList()).sortedWith(compareBy({ it.date }, { it.home }))
             ListWeek(start, rs.count { it.correct }, rs.count { !it.correct }, waiting[start] ?: 0, rs)
-        }.sortedWith(compareByDescending<ListWeek> { it.weekStart != null }.thenByDescending { it.weekStart })
+        }.sortedWith(
+            // This week first, then the upcoming weeks in date order, then older weeks (most recent first), undated last.
+            compareBy<ListWeek> { w ->
+                val ws = w.weekStart
+                when {
+                    ws == null -> 2
+                    ws >= thisWeek -> 0
+                    else -> 1
+                }
+            }.thenComparator { x, y ->
+                val a = x.weekStart; val b = y.weekStart
+                when {
+                    a == null || b == null -> 0
+                    a >= thisWeek -> a.compareTo(b)
+                    else -> b.compareTo(a)
+                }
+            }
+        )
     }
 
     fun listText(source: String, w: ListWeek): String {

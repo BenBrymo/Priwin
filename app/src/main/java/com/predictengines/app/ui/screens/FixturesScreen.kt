@@ -39,6 +39,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import com.predictengines.app.ui.components.inputColors
 import com.predictengines.app.ui.components.PrimaryButton
+import com.predictengines.app.ui.components.urgencyColor
+import com.predictengines.app.ui.components.rememberNow
+import com.predictengines.app.ui.components.TodayDot
+import com.predictengines.app.ui.components.CountdownChip
+import com.predictengines.app.data.Countdown
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.OutlinedTextField
@@ -116,7 +121,9 @@ fun FixturesScreen(
             selectedTabIndex = section, containerColor = Color.Transparent, contentColor = IndigoPrimary,
             edgePadding = 8.dp
         ) {
-            Tab(selected = section == 0, onClick = { section = 0 }, text = { Text("This league") })
+            Tab(selected = section == 0, onClick = { section = 0 }, text = {
+                TabLabel("This league", Countdown.anyToday(state.fixtures.map { it.fixture.date to it.fixture.time }, rememberNow()))
+            })
             Tab(selected = section == 1, onClick = { section = 1 }, text = {
                 val waiting = missingResults(state).size
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -139,9 +146,15 @@ fun FixturesScreen(
                     }
                 }
             })
-            Tab(selected = section == 2, onClick = { section = 2 }, text = { Text("Top 20 picks") })
-            Tab(selected = section == 3, onClick = { section = 3 }, text = { Text("Handicap") })
-            Tab(selected = section == 4, onClick = { section = 4 }, text = { Text("Over 1.5") })
+            Tab(selected = section == 2, onClick = { section = 2 }, text = {
+                TabLabel("Top 20 picks", Countdown.anyToday(state.topPicks.map { it.date to it.time }, rememberNow()))
+            })
+            Tab(selected = section == 3, onClick = { section = 3 }, text = {
+                TabLabel("Handicap", Countdown.anyToday(state.handicapPicks.map { it.date to it.time }, rememberNow()))
+            })
+            Tab(selected = section == 4, onClick = { section = 4 }, text = {
+                TabLabel("Over 1.5", Countdown.anyToday(state.over15Picks.map { it.date to it.time }, rememberNow()))
+            })
         }
         Box(Modifier.weight(1f)) {
             if (section == 0) LeagueFixtures(state, onOpen, onGoToData, onMark, onLink, onSaveScore, onRemoveScore, scoreHints)
@@ -230,6 +243,10 @@ private fun TopPicksList(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = TextMuted
                             )
+                            val near = Countdown.summary(list.map { (_, p) -> p.date to p.time }, rememberNow())
+                            if (near != null) {
+                                Text(near.first, style = MaterialTheme.typography.labelMedium, color = urgencyColor(near.second))
+                            }
                         }
                         Icon(
                             if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
@@ -285,6 +302,8 @@ private fun TopPickCard(rank: Int, tp: TopPick, onClick: () -> Unit, modifier: M
                 )
             }
         }
+        Spacer(Modifier.height(6.dp))
+        CountdownChip(tp.date, tp.time)
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -303,6 +322,17 @@ private fun TopPickCard(rank: Int, tp: TopPick, onClick: () -> Unit, modifier: M
             style = MaterialTheme.typography.labelMedium,
             color = TextSecondary
         )
+    }
+}
+
+@Composable
+private fun TabLabel(text: String, today: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(text)
+        if (today) {
+            Spacer(Modifier.width(6.dp))
+            TodayDot()
+        }
     }
 }
 
@@ -604,6 +634,10 @@ private fun LazyListScope.weekGroups(
                             style = MaterialTheme.typography.labelSmall,
                             color = TextMuted
                         )
+                        val near = Countdown.summary(list.map { it.fixture.date to it.fixture.time }, rememberNow())
+                        if (near != null) {
+                            Text(near.first, style = MaterialTheme.typography.labelMedium, color = urgencyColor(near.second))
+                        }
                     }
                     Icon(
                         if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
@@ -675,6 +709,10 @@ private fun FixtureCard(
                 Spacer(Modifier.width(12.dp))
                 TagChip(DateUtils.kickoffLabel(item.fixture.date, item.fixture.time), IndigoPrimary)
             }
+        }
+        if (Countdown.of(item.fixture.date, item.fixture.time) != null) {
+            Spacer(Modifier.height(6.dp))
+            CountdownChip(item.fixture.date, item.fixture.time)
         }
 
         if (showMarks && item.home != null && item.away != null) {
