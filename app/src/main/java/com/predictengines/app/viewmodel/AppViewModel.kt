@@ -54,6 +54,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 data class AppUiState(
+    val hiddenLeagues: List<League> = emptyList(),
+    /** Leagues left out because another league has the same name and better files. */
+    val duplicateLeagues: List<League> = emptyList(),
     val leagues: List<League> = emptyList(),
     val selected: League? = null,
     val isLoading: Boolean = true,
@@ -190,7 +193,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // The user's name links must be in place before any file is read, so every file sees the same names.
         val links = linksStore.load()
         TeamMatcher.setUserLinks(links.map { it.a to it.b })
-        _state.update { it.copy(leagues = leagues, marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
+        _state.update { it.copy(leagues = leagues, hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
         val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
         selectLeague(start.id)
     }
@@ -443,12 +446,35 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** One tap: this league's imported files, entered scores, their settled ticks and stats changes are wiped. */
+    fun resetLeague(league: League) {
+        viewModelScope.launch {
+            val marks = withContext(Dispatchers.IO) {
+                repo.resetLeague(league)
+                val prefix = "${league.id}|"
+                val kept = _state.value.marks.filterValues { !(it.id.startsWith(prefix) && it.auto) }
+                results.save(kept.values)
+                extrasStore.saveExtras(extrasStore.loadExtras().filterKeys { !it.startsWith(prefix) })
+                extrasStore.saveSettled(extrasStore.loadSettled().filterKeys { !it.startsWith(prefix) })
+                kept
+            }
+            invalidateCache()
+            _state.update { it.copy(marks = marks, extras = extrasStore.loadExtras()) }
+            postMessage("${league.name} was reset to its built-in data")
+            if (_state.value.selected?.id == league.id) load(league, resetTeams = true, fresh = true) else refreshTopPicks()
+        }
+    }
+
     // ---- custom leagues --------------------------------------------------------------------
 
     fun addLeague(name: String) {
         if (name.isBlank()) return
+        if (repo.nameTaken(name)) {
+            postMessage("A league called \"${name.trim()}\" already exists. Two leagues can't share a name.")
+            return
+        }
         val league = repo.addCustomLeague(name)
-        _state.update { it.copy(leagues = repo.leagues()) }
+        _state.update { it.copy(leagues = repo.leagues(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues()) }
         selectLeague(league.id)
         postMessage("League added. Now load its match results file.")
     }
@@ -458,9 +484,31 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         repo.deleteCustomLeague(league)
         invalidateCache()
         val leagues = repo.leagues()
-        _state.update { it.copy(leagues = leagues) }
+        _state.update { it.copy(leagues = leagues, hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues()) }
         if (_state.value.selected?.id == league.id) selectLeague(leagues.first().id)
         postMessage("Deleted ${league.name}")
+    }
+
+    /** Takes a league out of the app's lists (chips, Top 20, reports of the open league...). Nothing is deleted. */
+    fun hideLeague(league: League) {
+        if (_state.value.leagues.size <= 1) {
+            postMessage("Keep at least one league showing")
+            return
+        }
+        repo.hideLeague(league)
+        invalidateCache()
+        val leagues = repo.leagues()
+        _state.update { it.copy(leagues = leagues, hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues()) }
+        if (_state.value.selected?.id == league.id) selectLeague(leagues.first().id) else refreshTopPicks()
+        postMessage("${league.name} is hidden. Bring it back under Data > Leagues.")
+    }
+
+    fun showLeague(league: League) {
+        repo.showLeague(league)
+        invalidateCache()
+        _state.update { it.copy(leagues = repo.leagues(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues()) }
+        refreshTopPicks()
+        postMessage("${league.name} is showing again")
     }
 
     // ---- manual matchup --------------------------------------------------------------------
@@ -866,7 +914,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val marks = withContext(Dispatchers.IO) { results.load() }
                     val extras = withContext(Dispatchers.IO) { extrasStore.loadExtras() }
                     invalidateCache()
-                    _state.update { it.copy(leagues = leagues, marks = marks, nameLinks = links, extras = extras, autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
+                    _state.update { it.copy(leagues = leagues, hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = marks, nameLinks = links, extras = extras, autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
                     val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
                     selectLeague(start.id)
                     postMessage("Backup restored (${result.files} files)")

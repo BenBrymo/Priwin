@@ -8,6 +8,7 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
+import java.util.Locale
 
 sealed class ImportResult {
     /** [note] says which columns were used / ignored, e.g. "used Date, Time ... · ignored 12 other columns". */
@@ -31,7 +32,61 @@ class LeagueRepository(context: Context) {
     // ---- leagues ---------------------------------------------------------------------------
 
     /** Built-in leagues are found by looking at the asset folders, so any number of them works. */
-    fun leagues(): List<League> = bundledLeagues + loadCustomLeagues()
+    fun leagues(): List<League> {
+        val hidden = hiddenIds()
+        return resolved().first.filter { it.id !in hidden }
+    }
+
+    /** Leagues you hid; their data and your records are kept, and you can show them again. */
+    fun hiddenLeagues(): List<League> {
+        val hidden = hiddenIds()
+        return resolved().first.filter { it.id in hidden }
+    }
+
+    /** Leagues left out because another league has the same name and better files. Their data is not touched. */
+    fun duplicateLeagues(): List<League> = resolved().second
+
+    private fun nameKey(name: String) = name.lowercase(Locale.ROOT).filter { it.isLetterOrDigit() }
+
+    /** True when a league with this name (ignoring case, spaces and punctuation) already exists. */
+    fun nameTaken(name: String): Boolean {
+        val k = nameKey(name)
+        return (bundledLeagues + loadCustomLeagues()).any { nameKey(it.name) == k }
+    }
+
+    /**
+     * Two leagues never share a name. When they do, the one with the right files is kept: matches results first,
+     * then fixtures, then a built-in league over a custom one, then the one with more matches rows.
+     * Returns (leagues to show, leagues left out).
+     */
+    private fun resolved(): Pair<List<League>, List<League>> {
+        val all = bundledLeagues + loadCustomLeagues()
+        val groups = all.groupBy { nameKey(it.name) }
+        if (groups.values.all { it.size == 1 }) return all to emptyList()
+        val keep = HashSet<String>()
+        for ((_, group) in groups) {
+            if (group.size == 1) { keep.add(group[0].id); continue }
+            val best = group.maxByOrNull { l ->
+                val rows = try { baseMatches(l).size } catch (e: Exception) { 0 }
+                val fixtures = fileFor(l, DataKind.FIXTURES).exists() || builtInFixturesPath(l) != null
+                (if (rows > 0) 4_000_000_000L else 0L) + (if (fixtures) 2_000_000_000L else 0L) +
+                    (if (!l.isCustom) 1_000_000_000L else 0L) + rows.toLong()
+            }!!
+            keep.add(best.id)
+        }
+        return all.filter { it.id in keep } to all.filter { it.id !in keep }
+    }
+
+    private fun hiddenIds(): Set<String> =
+        prefs.getString(KEY_HIDDEN, "").orEmpty().split('\n').filter { it.isNotBlank() }.toSet()
+
+    fun hideLeague(league: League) {
+        prefs.edit().putString(KEY_HIDDEN, (hiddenIds() + league.id).joinToString("\n")).apply()
+    }
+
+    fun showLeague(league: League) {
+        prefs.edit().putString(KEY_HIDDEN, (hiddenIds() - league.id).joinToString("\n")).apply()
+    }
 
     private val bundledLeagues: List<League> by lazy {
         val found = LeagueCatalog.detect(
@@ -343,6 +398,28 @@ class LeagueRepository(context: Context) {
         prefs.edit().remove(infoKey(league, kind)).apply()
     }
 
+    /**
+     * Back to how the league came in the app: its imported matches and fixtures files, the scores you entered and
+     * their decisions are removed, and what those scores added to the stats is taken back out.
+     * (The stats file itself, other leagues and your own ticks are not touched.)
+     */
+    fun resetLeague(league: League) {
+        clearImport(league, DataKind.MATCHES)
+        clearImport(league, DataKind.FIXTURES)
+        writeAdded(league, emptyList())
+        val e = prefs.edit()
+        prefs.all.keys.filter { it.startsWith("conflict_${league.id}|") }.forEach { e.remove(it) }
+        e.apply()
+        val ledger = loadLedger()
+        val mine = ledger.filter { it.fx.startsWith("${league.id}|") }
+        if (mine.isNotEmpty()) {
+            val rows = loadStats()
+            val undone = StatsUpdater.apply(rows, mine.map { StatDelta(it.rowKey, it.dv, it.dg, it.tag) }, sign = -1)
+            if (undone.isNotEmpty()) saveUserRows(undone)
+            saveLedger(ledger - mine.toSet())
+        }
+    }
+
     fun importInfo(league: League, kind: DataKind): ImportInfo? {
         if (!fileFor(league, kind).exists()) return null
         val raw = prefs.getString(infoKey(league, kind), null) ?: return null
@@ -573,6 +650,7 @@ class LeagueRepository(context: Context) {
 
     private companion object {
         const val KEY_CUSTOM = "custom_leagues"
+        const val KEY_HIDDEN = "hidden_leagues"
         const val KEY_LAST_LEAGUE = "last_league"
         const val KEY_AUTO_SETTLE = "auto_settle_from"
         const val KEY_STATS_INFO = "info_stats"

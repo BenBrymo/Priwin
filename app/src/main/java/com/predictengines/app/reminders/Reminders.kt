@@ -68,7 +68,9 @@ object ReminderScheduler {
     /** Builds the reminder text for today and tomorrow from the recorded list picks; null when there is nothing. */
     fun message(c: Context, now: LocalDateTime = LocalDateTime.now()): Pair<String, String>? {
         val today = now.toLocalDate()
-        val picks = ListPicksStore(c).load().values
+        val hidden = c.getSharedPreferences("predict_engines", Context.MODE_PRIVATE)
+            .getString("hidden_leagues", "").orEmpty().split('\n').filter { it.isNotBlank() }.toSet()
+        val picks = ListPicksStore(c).load().values.filter { it.leagueId !in hidden }
         fun on(day: LocalDate) = picks.filter { e ->
             DateUtils.parse(e.date) == day && !DateUtils.isPlayed(e.date, e.time, now)
         }

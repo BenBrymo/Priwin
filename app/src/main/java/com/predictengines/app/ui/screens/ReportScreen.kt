@@ -57,14 +57,18 @@ import com.predictengines.app.viewmodel.AppUiState
 @Composable
 fun ReportScreen(state: AppUiState) {
     val leagueId = state.selected?.id.orEmpty()
-    val weeks = remember(state.marks, state.fixtures, leagueId) {
-        ReportBuilder.weeks(state.marks.values, ReportBuilder.pending(state.fixtures, state.marks, leagueId))
+    // Ticks and reports of a hidden league are left out while it is hidden (they come back when it is shown again).
+    val visible = remember(state.leagues) { state.leagues.map { it.id }.toSet() }
+    val shownMarks = remember(state.marks, visible) { state.marks.filterValues { it.leagueId in visible } }
+    val weeks = remember(shownMarks, state.fixtures, leagueId) {
+        ReportBuilder.weeks(shownMarks.values, ReportBuilder.pending(state.fixtures, shownMarks, leagueId))
     }
 
-    val lists = remember(state.marks, state.listEntries) {
-        val marked = state.marks.keys
+    val lists = remember(shownMarks, state.listEntries, visible) {
+        val marked = shownMarks.keys
+        val entries = state.listEntries.filter { it.leagueId in visible }
         ListPicksStore.SOURCES.map { src ->
-            src to ReportBuilder.listWeeks(src, state.marks.values, state.listEntries, marked)
+            src to ReportBuilder.listWeeks(src, shownMarks.values, entries, marked)
         }
     }
 

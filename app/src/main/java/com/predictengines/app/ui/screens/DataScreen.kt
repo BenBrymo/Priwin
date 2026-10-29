@@ -24,6 +24,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.UploadFile
@@ -77,6 +79,9 @@ fun DataScreen(
     onClear: (DataKind) -> Unit,
     onAddLeague: (String) -> Unit,
     onDeleteLeague: (League) -> Unit,
+    onHideLeague: (League) -> Unit,
+    onResetLeague: (League) -> Unit,
+    onShowLeague: (League) -> Unit,
     onUnlink: (NameLink) -> Unit,
     onExportMatches: (Uri) -> Unit,
     onBackup: (Uri) -> Unit,
@@ -112,6 +117,7 @@ fun DataScreen(
     var showAdd by remember { mutableStateOf(false) }
     var editingSettleDate by remember { mutableStateOf(false) }
     var toDelete by remember { mutableStateOf<League?>(null) }
+    var toReset by remember { mutableStateOf<League?>(null) }
 
     Column(
         modifier = Modifier
@@ -285,7 +291,7 @@ fun DataScreen(
 
         AppCard(
             title = "Leagues",
-            subtitle = "Add any league, then load its files",
+            subtitle = "Add any league, then load its files. Hide a built-in league to take it out of the app (nothing is deleted).",
             accentColor = VioletAccent,
             trailing = {
                 IconButton(onClick = { showAdd = true }) {
@@ -304,6 +310,9 @@ fun DataScreen(
                         style = MaterialTheme.typography.bodyLarge,
                         color = if (l.id == league?.id) TextPrimary else TextSecondary
                     )
+                    IconButton(onClick = { toReset = l }) {
+                        Icon(Icons.Filled.RestartAlt, contentDescription = "Reset ${l.name}", tint = TextSecondary)
+                    }
                     if (l.isCustom) {
                         TagChip("Custom", VioletAccent)
                         IconButton(onClick = { toDelete = l }) {
@@ -311,6 +320,46 @@ fun DataScreen(
                         }
                     } else {
                         Text("Built-in", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+                        IconButton(onClick = { onHideLeague(l) }) {
+                            Icon(Icons.Filled.VisibilityOff, contentDescription = "Hide ${l.name}", tint = TextSecondary)
+                        }
+                    }
+                }
+            }
+            if (state.duplicateLeagues.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                Text("Left out: same name as another league", style = MaterialTheme.typography.labelLarge, color = DrawAmber)
+                Text(
+                    "The copy with the right files is kept. These are not used anywhere; delete a custom one to tidy up.",
+                    style = MaterialTheme.typography.labelSmall, color = TextMuted
+                )
+                state.duplicateLeagues.forEach { l ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            l.name + if (l.isCustom) " (custom)" else " (built-in)",
+                            modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = TextMuted
+                        )
+                        if (l.isCustom) {
+                            IconButton(onClick = { toDelete = l }) {
+                                Icon(Icons.Filled.Delete, contentDescription = "Delete ${l.name}", tint = LossRed)
+                            }
+                        }
+                    }
+                }
+            }
+            if (state.hiddenLeagues.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                Text("Hidden leagues", style = MaterialTheme.typography.labelLarge, color = TextSecondary)
+                state.hiddenLeagues.forEach { l ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(l.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = TextMuted)
+                        TextButton(onClick = { onShowLeague(l) }) { Text("Show again", color = IndigoPrimary) }
                     }
                 }
             }
@@ -400,6 +449,27 @@ fun DataScreen(
                 TextButton(onClick = { onRestore(uri); restoreUri = null }) { Text("Restore", color = IndigoPrimary) }
             },
             dismissButton = { TextButton(onClick = { restoreUri = null }) { Text("Cancel", color = TextSecondary) } }
+        )
+    }
+
+    toReset?.let { target ->
+        AlertDialog(
+            onDismissRequest = { toReset = null },
+            containerColor = CardSurface,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary,
+            title = { Text("Reset ${target.name}?") },
+            text = {
+                Text(
+                    "This removes the matches and fixtures files you imported for this league and every score you entered, " +
+                        "and takes back what those scores added to your stats. The league goes back to its built-in data. " +
+                        "Your own ticks, other leagues and the stats file's other changes are kept."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { onResetLeague(target); toReset = null }) { Text("Reset", color = LossRed) }
+            },
+            dismissButton = { TextButton(onClick = { toReset = null }) { Text("Cancel", color = TextSecondary) } }
         )
     }
 
