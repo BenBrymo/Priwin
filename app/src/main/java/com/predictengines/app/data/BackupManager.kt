@@ -48,7 +48,7 @@ class BackupManager(context: Context) {
                 }
             }
             val p = JSONObject()
-            for ((k, v) in prefs.all) if (v is String && (k == KEY_CUSTOM || k == KEY_HIDDEN || k == KEY_LAST || k == KEY_AUTO || k.startsWith("info_"))) p.put(k, v)
+            for ((k, v) in prefs.all) if (v is String && (k == KEY_CUSTOM || k.startsWith("krypto_") || k == KEY_HIDDEN || k == KEY_LAST || k == KEY_AUTO || k.startsWith("info_"))) p.put(k, v)
             put(PREFS_FILE, p.toString().toByteArray())
         }
         return count
@@ -92,8 +92,8 @@ class BackupManager(context: Context) {
             entries[PREFS_FILE]?.let { raw ->
                 val p = JSONObject(String(raw))
                 val edit = prefs.edit()
-                prefs.all.keys.filter { it == KEY_CUSTOM || it == KEY_HIDDEN || it == KEY_LAST || it == KEY_AUTO || it.startsWith("info_") }.forEach { edit.remove(it) }
-                for (k in p.keys()) if (k == KEY_CUSTOM || k == KEY_HIDDEN || k == KEY_LAST || k == KEY_AUTO || k.startsWith("info_")) edit.putString(k, p.getString(k))
+                prefs.all.keys.filter { it == KEY_CUSTOM || it.startsWith("krypto_") || it == KEY_HIDDEN || it == KEY_LAST || it == KEY_AUTO || it.startsWith("info_") }.forEach { edit.remove(it) }
+                for (k in p.keys()) if (k == KEY_CUSTOM || k.startsWith("krypto_") || k == KEY_HIDDEN || k == KEY_LAST || k == KEY_AUTO || k.startsWith("info_")) edit.putString(k, p.getString(k))
                 edit.commit()
             }
             return Restored.Ok(count)

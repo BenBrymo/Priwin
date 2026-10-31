@@ -123,7 +123,9 @@ data class FixtureSummary(
     /** Brymo's strongest "+2 Handicap Likely" pick for this game (label, confidence), if it has one. */
     val handicap: Prediction? = null,
     /** Poisson and/or Stats backing "Over 1.5 goals" (model, confidence). Empty when neither does. */
-    val over15: List<ConsensusVote> = emptyList()
+    val over15: List<ConsensusVote> = emptyList(),
+    /** Kryptonite warnings for the two teams, as of this game's date. */
+    val flags: List<KryptoFlag> = emptyList()
 )
 
 /**

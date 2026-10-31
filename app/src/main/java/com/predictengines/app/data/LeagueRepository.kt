@@ -80,6 +80,17 @@ class LeagueRepository(context: Context) {
     private fun hiddenIds(): Set<String> =
         prefs.getString(KEY_HIDDEN, "").orEmpty().split('\n').filter { it.isNotBlank() }.toSet()
 
+    // ---- Kryptonite switches ---------------------------------------------------------------
+
+    fun kryptoModes(): Map<String, KryptoMode> =
+        Kryptonites.RULES.associate { r ->
+            r.id to (runCatching { KryptoMode.valueOf(prefs.getString("krypto_${r.id}", "WARN").orEmpty()) }.getOrDefault(KryptoMode.WARN))
+        }
+
+    fun setKryptoMode(ruleId: String, mode: KryptoMode) {
+        prefs.edit().putString("krypto_$ruleId", mode.name).apply()
+    }
+
     fun hideLeague(league: League) {
         prefs.edit().putString(KEY_HIDDEN, (hiddenIds() + league.id).joinToString("\n")).apply()
     }
@@ -708,7 +719,7 @@ class LeagueRepository(context: Context) {
         const val KEY_AUTO_SETTLE = "auto_settle_from"
         const val KEY_STATS_INFO = "info_stats"
         const val BUILT_IN_STATS = "stats/statschecker_2026_2027.csv"
-        const val CACHE_VERSION = 5
+        const val CACHE_VERSION = 6
         const val MAX_FILE_BYTES = 20 * 1024 * 1024
     }
 }

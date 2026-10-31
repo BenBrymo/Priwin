@@ -46,5 +46,6 @@ data class TopPick(
     /** Names resolved to the matches file (used to find the fixture again). */
     val home: String,
     val away: String,
-    val pick: ConsensusPick
+    val pick: ConsensusPick,
+    val flags: List<KryptoFlag> = emptyList()
 )

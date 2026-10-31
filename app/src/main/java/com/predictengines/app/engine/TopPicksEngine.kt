@@ -3,6 +3,8 @@ package com.predictengines.app.engine
 import com.predictengines.app.data.ConsensusPick
 import com.predictengines.app.data.ConsensusVote
 import com.predictengines.app.data.DateUtils
+import com.predictengines.app.data.KryptoMode
+import com.predictengines.app.data.Kryptonites
 import com.predictengines.app.data.FixtureItem
 import com.predictengines.app.data.League
 import com.predictengines.app.data.ReportBuilder
@@ -29,7 +31,8 @@ object TopPicksEngine {
                 leagueId = league.id, leagueName = league.name,
                 date = fx.fixture.date, time = fx.fixture.time,
                 homeDisplay = fx.fixture.homeTeam, awayDisplay = fx.fixture.awayTeam,
-                home = home, away = away, pick = best
+                home = home, away = away, pick = best,
+                flags = fx.summary?.flags.orEmpty()
             )
         }
 
@@ -43,7 +46,8 @@ object TopPicksEngine {
                 leagueId = league.id, leagueName = league.name,
                 date = fx.fixture.date, time = fx.fixture.time,
                 homeDisplay = fx.fixture.homeTeam, awayDisplay = fx.fixture.awayTeam,
-                home = home, away = away, pick = pick
+                home = home, away = away, pick = pick,
+                flags = fx.summary?.flags.orEmpty()
             )
         }
 
@@ -74,8 +78,12 @@ object TopPicksEngine {
      * Adds the picks whose games are already played to a ranked list of upcoming picks. Played picks keep their
      * week; each week then shows its played picks plus as many upcoming ones as fit in [limit], strongest first.
      */
-    fun withPlayed(upcoming: List<TopPick>, played: List<TopPick>, limit: Int = DEFAULT_LIMIT): List<TopPick> {
-        val strongestFirst = compareByDescending<TopPick> { it.pick.strength }
+    fun withPlayed(
+        upcoming: List<TopPick>, played: List<TopPick>, limit: Int = DEFAULT_LIMIT,
+        modes: Map<String, KryptoMode> = emptyMap()
+    ): List<TopPick> {
+        val strongestFirst = compareBy<TopPick> { Kryptonites.effect(it.flags, modes) == KryptoMode.BOTTOM }
+            .thenByDescending { it.pick.strength }
             .thenByDescending { it.pick.backers.size }
             .thenBy { DateUtils.sortKey(it.date, it.time) }
         val up = upcoming.groupBy { ReportBuilder.weekStartOf(it.date) }
@@ -94,11 +102,12 @@ object TopPicksEngine {
      * The [limit] strongest picks of EACH Monday-Sunday week, across all leagues. Weeks run earliest first;
      * inside a week the strongest comes first (more backers, then earlier kickoff, break ties).
      */
-    fun rank(all: List<TopPick>, limit: Int = DEFAULT_LIMIT): List<TopPick> {
-        val strongestFirst = compareByDescending<TopPick> { it.pick.strength }
+    fun rank(all: List<TopPick>, limit: Int = DEFAULT_LIMIT, modes: Map<String, KryptoMode> = emptyMap()): List<TopPick> {
+        val strongestFirst = compareBy<TopPick> { Kryptonites.effect(it.flags, modes) == KryptoMode.BOTTOM }
+            .thenByDescending { it.pick.strength }
             .thenByDescending { it.pick.backers.size }
             .thenBy { DateUtils.sortKey(it.date, it.time) }
-        return all.groupBy { ReportBuilder.weekStartOf(it.date) }
+        return all.filter { Kryptonites.effect(it.flags, modes) != KryptoMode.HIDE }.groupBy { ReportBuilder.weekStartOf(it.date) }
             .entries.sortedBy { it.key?.toEpochDay() ?: Long.MAX_VALUE }
             .flatMap { (_, picks) -> picks.sortedWith(strongestFirst).take(limit) }
     }

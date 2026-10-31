@@ -5,6 +5,8 @@ import androidx.compose.material3.Switch
 import com.predictengines.app.ui.components.PillChip
 import com.predictengines.app.ui.theme.DrawAmber
 import com.predictengines.app.reminders.ReminderPrefs
+import com.predictengines.app.data.Kryptonites
+import com.predictengines.app.data.KryptoMode
 import com.predictengines.app.reminders.ReminderScheduler
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -81,6 +83,7 @@ fun DataScreen(
     onDeleteLeague: (League) -> Unit,
     onHideLeague: (League) -> Unit,
     onResetLeague: (League) -> Unit,
+    onSetKryptoMode: (String, KryptoMode) -> Unit,
     onShowLeague: (League) -> Unit,
     onUnlink: (NameLink) -> Unit,
     onExportMatches: (Uri) -> Unit,
@@ -261,6 +264,31 @@ fun DataScreen(
                 style = MaterialTheme.typography.bodyMedium, color = TextSecondary
             )
             TextButton(onClick = { editingSettleDate = true }) { Text("Change start date", color = IndigoPrimary) }
+        }
+
+        AppCard(
+            title = "Kryptonites",
+            subtitle = "Rules that watch teams' results and flag their fixtures and picks. Choose what each one does.",
+            accentColor = LossRed
+        ) {
+            Kryptonites.RULES.forEach { rule ->
+                Text(rule.name, style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+                Text(rule.description, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    KryptoMode.entries.forEach { m ->
+                        PillChip(
+                            text = m.label,
+                            selected = (state.kryptoModes[rule.id] ?: KryptoMode.WARN) == m,
+                            onClick = { onSetKryptoMode(rule.id, m) }
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
         }
 
         ReminderCard()

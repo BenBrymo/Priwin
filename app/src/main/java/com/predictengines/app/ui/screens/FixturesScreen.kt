@@ -39,6 +39,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import com.predictengines.app.ui.components.inputColors
 import com.predictengines.app.ui.components.PrimaryButton
+import com.predictengines.app.ui.components.KryptoBadges
+import com.predictengines.app.data.Kryptonites
+import com.predictengines.app.data.KryptoMode
 import com.predictengines.app.ui.theme.DrawAmber
 import com.predictengines.app.ui.components.urgencyColor
 import com.predictengines.app.ui.components.rememberNow
@@ -329,6 +332,7 @@ private fun TopPickCard(
             }
         } else {
             CountdownChip(tp.date, tp.time)
+            KryptoBadges(tp.flags, Modifier.padding(top = 6.dp))
         }
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -506,6 +510,9 @@ private fun LeagueFixtures(
             else -> upcoming.add(fx)
         }
     }
+    // Kryptonites: flagged upcoming fixtures are hidden or sent to the bottom of their week when you chose that.
+    val hiddenByKrypto = upcoming.count { Kryptonites.effect(it.summary?.flags.orEmpty(), state.kryptoModes) == KryptoMode.HIDE }
+    upcoming.removeAll { Kryptonites.effect(it.summary?.flags.orEmpty(), state.kryptoModes) == KryptoMode.HIDE }
     played.reverse() // most recent first
     var showPlayed by rememberSaveable { mutableStateOf(false) }
     var showNotReady by rememberSaveable { mutableStateOf(false) }
@@ -529,7 +536,8 @@ private fun LeagueFixtures(
             AppCard(
                 title = "${upcoming.size} upcoming fixtures",
                 subtitle = (state.fixturesImport?.fileName ?: "Fixtures file") +
-                    " · consensus picks · tap a game for each model's analysis",
+                    " · consensus picks · tap a game for each model's analysis" +
+                    if (hiddenByKrypto > 0) " · $hiddenByKrypto hidden by a Kryptonite" else "",
                 accentColor = IndigoPrimary
             ) {}
         }
@@ -580,7 +588,8 @@ private fun LeagueFixtures(
             prefix = "u", fixtures = upcoming, thisWeek = thisWeek, flipped = flipped,
             onFlip = { flipped = if (it in flipped) flipped - it else flipped + it },
             defaultOpen = { _, week -> week == null || thisWeek == null || !week.isAfter(thisWeek.plusWeeks(1)) },
-            showMarks = false, card = card
+            showMarks = false, card = card,
+            bottomLast = { Kryptonites.effect(it.summary?.flags.orEmpty(), state.kryptoModes) == KryptoMode.BOTTOM }
         )
         if (showNotReady && notReady.isNotEmpty()) {
             weekGroups(
@@ -634,7 +643,8 @@ private fun LazyListScope.weekGroups(
     defaultOpen: (index: Int, week: LocalDate?) -> Boolean,
     showMarks: Boolean,
     card: @Composable (FixtureItem, Boolean, Modifier) -> Unit,
-    singleGroupTitle: String? = null
+    singleGroupTitle: String? = null,
+    bottomLast: (FixtureItem) -> Boolean = { false }
 ) {
     val groups = LinkedHashMap<LocalDate?, MutableList<FixtureItem>>()
     for (fx in fixtures) groups.getOrPut(ReportBuilder.weekStartOf(fx.fixture.date)) { ArrayList() }.add(fx)
@@ -642,7 +652,9 @@ private fun LazyListScope.weekGroups(
     groups.entries.forEachIndexed { index, (week, list) ->
         val key = "$prefix|${week ?: "none"}"
         val open = defaultOpen(index, week) != (key in flipped)
-        val ordered = list.sortedBy { DateUtils.sortKey(it.fixture.date, it.fixture.time) }
+        val ordered = list.sortedWith(
+            compareBy<FixtureItem> { bottomLast(it) }.thenBy { DateUtils.sortKey(it.fixture.date, it.fixture.time) }
+        )
         val title = singleGroupTitle ?: when {
             week == null -> "Date TBC"
             week == thisWeek -> "This week"
@@ -741,6 +753,9 @@ private fun FixtureCard(
         if (Countdown.of(item.fixture.date, item.fixture.time) != null) {
             Spacer(Modifier.height(6.dp))
             CountdownChip(item.fixture.date, item.fixture.time)
+        }
+        if (summary != null && Countdown.of(item.fixture.date, item.fixture.time) != null) {
+            KryptoBadges(summary.flags, Modifier.padding(top = 6.dp))
         }
 
         if (showMarks && item.home != null && item.away != null) {
@@ -865,6 +880,7 @@ private fun FixtureDetail(
                     .padding(horizontal = 16.dp)
                     .padding(bottom = 24.dp)
             ) {
+                state.fixtures.firstOrNull { it.id == state.openFixtureId }?.summary?.flags?.let { KryptoBadges(it, Modifier.padding(bottom = 8.dp)) }
                 AnalysisContent(
                     analysis,
                     marks = state.marks,

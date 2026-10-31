@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.predictengines.app.data.Analysis
 import com.predictengines.app.data.DataKind
 import com.predictengines.app.data.DateUtils
+import com.predictengines.app.data.Kryptonites
+import com.predictengines.app.data.KryptoMode
 import com.predictengines.app.data.ConsensusVote
 import com.predictengines.app.data.ConsensusPick
 import com.predictengines.app.data.Fixture
@@ -59,6 +61,8 @@ data class AppUiState(
     val hiddenLeagues: List<League> = emptyList(),
     /** Leagues left out because another league has the same name and better files. */
     val duplicateLeagues: List<League> = emptyList(),
+    /** What each Kryptonite does to flagged fixtures and picks (rule id -> mode). */
+    val kryptoModes: Map<String, KryptoMode> = emptyMap(),
     val leagues: List<League> = emptyList(),
     val selected: League? = null,
     val isLoading: Boolean = true,
@@ -195,7 +199,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // The user's name links must be in place before any file is read, so every file sees the same names.
         val links = linksStore.load()
         TeamMatcher.setUserLinks(links.map { it.a to it.b })
-        _state.update { it.copy(leagues = leagues, hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
+        _state.update { it.copy(leagues = leagues, kryptoModes = repo.kryptoModes(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
         val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
         selectLeague(start.id)
     }
@@ -319,7 +323,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 missingCache = missing
-                Triple(TopPicksEngine.rank(all), TopPicksEngine.rank(hcp), TopPicksEngine.rank(o15))
+                val modes = repo.kryptoModes()
+                Triple(TopPicksEngine.rank(all, modes = modes), TopPicksEngine.rank(hcp, modes = modes), TopPicksEngine.rank(o15, modes = modes))
             }
             withContext(Dispatchers.IO) { recordListPicks(top.first, top.second, top.third) }
             if (gen == cacheGen.get()) {
@@ -359,7 +364,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             val live = upcoming.filter { !DateUtils.isPlayed(it.date, it.time) }
-            return TopPicksEngine.withPlayed(live, past)
+            return TopPicksEngine.withPlayed(live, past, modes = _state.value.kryptoModes)
         }
         return Triple(
             merge(ListPicksStore.TOP, top), merge(ListPicksStore.HANDICAP, hcp), merge(ListPicksStore.OVER15, o15)
@@ -432,7 +437,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 FixtureSummary(
                     ConsensusEngine.compute(home, away, brymo, poisson, stats),
                     ConsensusEngine.handicapPick(home, away, brymo),
-                    ConsensusEngine.over15Backers(home, away, poisson, stats)
+                    ConsensusEngine.over15Backers(home, away, poisson, stats),
+                    Kryptonites.forFixture(home, away, before)
                 )
             } else null
             FixtureItem(index, f, home, away, summary)
@@ -682,6 +688,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (correct != null) postMessage(if (changed > 0) "Stats data updated ($changed rows)" else "No stats rows to update for this pick")
             reloadKeepingView(league)
         }
+    }
+
+    /** Chooses what a Kryptonite does: warn only, push flagged picks to the bottom of their week, or hide them. */
+    fun setKryptoMode(ruleId: String, mode: KryptoMode) {
+        repo.setKryptoMode(ruleId, mode)
+        _state.update { it.copy(kryptoModes = repo.kryptoModes()) }
+        topCache = null
+        refreshTopPicks()
+        postMessage("Kryptonite set to: ${mode.label}")
     }
 
     /** Takes back stats changes that were counted twice for one game. */
@@ -965,7 +980,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val marks = withContext(Dispatchers.IO) { results.load() }
                     val extras = withContext(Dispatchers.IO) { extrasStore.loadExtras() }
                     invalidateCache()
-                    _state.update { it.copy(leagues = leagues, hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = marks, nameLinks = links, extras = extras, autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
+                    _state.update { it.copy(leagues = leagues, kryptoModes = repo.kryptoModes(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = marks, nameLinks = links, extras = extras, autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
                     val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
                     selectLeague(start.id)
                     postMessage("Backup restored (${result.files} files)")

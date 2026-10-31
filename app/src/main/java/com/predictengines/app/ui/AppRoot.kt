@@ -316,6 +316,7 @@ fun AppRoot(vm: AppViewModel) {
                         onDeleteLeague = vm::deleteLeague,
                         onHideLeague = vm::hideLeague,
                         onResetLeague = vm::resetLeague,
+                        onSetKryptoMode = vm::setKryptoMode,
                         onShowLeague = vm::showLeague,
                         onUnlink = vm::unlinkNames,
                         onExportMatches = vm::exportMatches,
