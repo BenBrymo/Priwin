@@ -284,7 +284,6 @@ private fun TopPicksList(
     }
 }
 
-@Composable
 private class ListResult(val played: Boolean, val correct: Boolean?, val score: Match?)
 
 @Composable
