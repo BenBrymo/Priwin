@@ -18,7 +18,10 @@ data class MatchExtras(
     val homeCorners: Int? = null,
     val awayCorners: Int? = null,
     val homeCards: Int? = null,
-    val awayCards: Int? = null
+    val awayCards: Int? = null,
+    /** Red cards of each team from the matches file (already included in the card totals). */
+    val homeReds: Int? = null,
+    val awayReds: Int? = null
 ) {
     val isEmpty: Boolean
         get() = corners == null && cards == null && first == null &&
@@ -35,7 +38,8 @@ data class MatchExtras(
             corners = if (hc != null && ac != null) hc + ac else corners ?: file.corners,
             cards = if (hk != null && ak != null) hk + ak else cards ?: file.cards,
             first = first ?: file.first,
-            homeCorners = hc, awayCorners = ac, homeCards = hk, awayCards = ak
+            homeCorners = hc, awayCorners = ac, homeCards = hk, awayCards = ak,
+            homeReds = homeReds ?: file.homeReds, awayReds = awayReds ?: file.awayReds
         )
     }
 
@@ -47,7 +51,8 @@ data class MatchExtras(
             val x = MatchExtras(
                 corners = if (hc != null && ac != null) hc + ac else null,
                 cards = if (hk != null && ak != null) hk + ak else null,
-                homeCorners = hc, awayCorners = ac, homeCards = hk, awayCards = ak
+                homeCorners = hc, awayCorners = ac, homeCards = hk, awayCards = ak,
+                homeReds = hr, awayReds = ar
             )
             return if (x.isEmpty) null else x
         }
@@ -78,7 +83,9 @@ class ResultExtrasStore(context: Context) {
                     homeCorners = if (e.has("hc")) e.getInt("hc") else null,
                     awayCorners = if (e.has("ac")) e.getInt("ac") else null,
                     homeCards = if (e.has("hk")) e.getInt("hk") else null,
-                    awayCards = if (e.has("ak")) e.getInt("ak") else null
+                    awayCards = if (e.has("ak")) e.getInt("ak") else null,
+                    homeReds = if (e.has("hr")) e.getInt("hr") else null,
+                    awayReds = if (e.has("ar")) e.getInt("ar") else null
                 )
             }
         }
@@ -98,6 +105,8 @@ class ResultExtrasStore(context: Context) {
             v.awayCorners?.let { e.put("ac", it) }
             v.homeCards?.let { e.put("hk", it) }
             v.awayCards?.let { e.put("ak", it) }
+            v.homeReds?.let { e.put("hr", it) }
+            v.awayReds?.let { e.put("ar", it) }
             o.put(k, e)
         }
         write(extrasFile, o)

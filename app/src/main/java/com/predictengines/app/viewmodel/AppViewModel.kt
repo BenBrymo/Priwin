@@ -438,7 +438,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     ConsensusEngine.compute(home, away, brymo, poisson, stats),
                     ConsensusEngine.handicapPick(home, away, brymo),
                     ConsensusEngine.over15Backers(home, away, poisson, stats),
-                    Kryptonites.forFixture(home, away, before)
+                    Kryptonites.forFixture(home, away, before, f.time, f.date)
                 )
             } else null
             FixtureItem(index, f, home, away, summary)

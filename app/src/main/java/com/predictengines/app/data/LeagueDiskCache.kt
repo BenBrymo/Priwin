@@ -104,7 +104,8 @@ class LeagueDiskCache(context: Context) {
         val x = m.extras
         if (x != null) a.put(JSONArray()
             .put(x.homeCorners ?: JSONObject.NULL).put(x.awayCorners ?: JSONObject.NULL)
-            .put(x.homeCards ?: JSONObject.NULL).put(x.awayCards ?: JSONObject.NULL))
+            .put(x.homeCards ?: JSONObject.NULL).put(x.awayCards ?: JSONObject.NULL)
+            .put(x.homeReds ?: JSONObject.NULL).put(x.awayReds ?: JSONObject.NULL))
         return a
     }
 
@@ -112,7 +113,11 @@ class LeagueDiskCache(context: Context) {
         val e = a.optJSONArray(5)
         fun n(i: Int): Int? = if (e == null || e.isNull(i)) null else e.getInt(i)
         val x = if (e == null) null else MatchExtras.fromFile(n(0), n(1), null, null, null, null)
-            ?.copy(homeCards = n(2), awayCards = n(3), cards = if (n(2) != null && n(3) != null) n(2)!! + n(3)!! else null)
+            ?.copy(
+                homeCards = n(2), awayCards = n(3), cards = if (n(2) != null && n(3) != null) n(2)!! + n(3)!! else null,
+                homeReds = if (e != null && e.length() > 5) n(4) else null,
+                awayReds = if (e != null && e.length() > 5) n(5) else null
+            )
         return Match(a.getString(0), a.getString(1), a.getString(2), a.getInt(3), a.getInt(4), x)
     }
 
