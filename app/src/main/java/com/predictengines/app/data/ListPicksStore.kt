@@ -22,7 +22,13 @@ class ListPicksStore(context: Context) {
         val key: String,
         val label: String,
         val group: String,
-        val time: String = ""
+        val time: String = "",
+        val homeDisplay: String = "",
+        val awayDisplay: String = "",
+        val strength: Double = 0.0,
+        /** Who backed the pick and how confident each was, as (model, percent). */
+        val backers: List<Pair<String, Double>> = emptyList(),
+        val modelCount: Int = 3
     ) {
         val id: String get() = PredictionRecord.idOf(leagueId, date, home, away, source, key)
     }
@@ -38,7 +44,12 @@ class ListPicksStore(context: Context) {
                 val e = Entry(
                     o.getString("s"), o.getString("l"), o.getString("ln"), o.getString("d"),
                     o.getString("h"), o.getString("a"), o.getString("k"), o.getString("lb"), o.getString("g"),
-                    o.optString("tm", "")
+                    o.optString("tm", ""),
+                    o.optString("hd", ""), o.optString("ad", ""), o.optDouble("st", 0.0),
+                    o.optJSONArray("bk")?.let { b ->
+                        (0 until b.length()).map { i -> b.getJSONArray(i).let { x -> x.getString(0) to x.getDouble(1) } }
+                    } ?: emptyList(),
+                    o.optInt("mc", 3)
                 )
                 out[e.id] = e
             }
@@ -54,7 +65,10 @@ class ListPicksStore(context: Context) {
         var changed = false
         for (e in entries) {
             val old = all[e.id]
-            if (old == null || (old.time.isBlank() && e.time.isNotBlank())) { all[e.id] = e; changed = true }
+            // A pick already written down is only filled in (time, names, strength) and never moved or removed.
+            if (old == null || (old.time.isBlank() && e.time.isNotBlank()) || (old.backers.isEmpty() && e.backers.isNotEmpty())) {
+                all[e.id] = e; changed = true
+            }
         }
         if (!changed) return false
         val arr = JSONArray()
@@ -62,6 +76,8 @@ class ListPicksStore(context: Context) {
             arr.put(
                 JSONObject().put("s", e.source).put("l", e.leagueId).put("ln", e.leagueName).put("d", e.date)
                     .put("h", e.home).put("a", e.away).put("k", e.key).put("lb", e.label).put("g", e.group).put("tm", e.time)
+                    .put("hd", e.homeDisplay).put("ad", e.awayDisplay).put("st", e.strength).put("mc", e.modelCount)
+                    .put("bk", JSONArray().also { b -> e.backers.forEach { (m, c) -> b.put(JSONArray().put(m).put(c)) } })
             )
         }
         try {

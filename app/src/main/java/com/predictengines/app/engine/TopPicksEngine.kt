@@ -71,6 +71,26 @@ object TopPicksEngine {
         }
 
     /**
+     * Adds the picks whose games are already played to a ranked list of upcoming picks. Played picks keep their
+     * week; each week then shows its played picks plus as many upcoming ones as fit in [limit], strongest first.
+     */
+    fun withPlayed(upcoming: List<TopPick>, played: List<TopPick>, limit: Int = DEFAULT_LIMIT): List<TopPick> {
+        val strongestFirst = compareByDescending<TopPick> { it.pick.strength }
+            .thenByDescending { it.pick.backers.size }
+            .thenBy { DateUtils.sortKey(it.date, it.time) }
+        val up = upcoming.groupBy { ReportBuilder.weekStartOf(it.date) }
+        val pl = played.groupBy { ReportBuilder.weekStartOf(it.date) }
+        return (up.keys + pl.keys).distinct()
+            .sortedBy { it?.toEpochDay() ?: Long.MAX_VALUE }
+            .flatMap { week ->
+                val past = pl[week].orEmpty()
+                val room = (limit - past.size).coerceAtLeast(0)
+                val ahead = up[week].orEmpty().sortedWith(strongestFirst).take(room)
+                (past + ahead).sortedWith(strongestFirst)
+            }
+    }
+
+    /**
      * The [limit] strongest picks of EACH Monday-Sunday week, across all leagues. Weeks run earliest first;
      * inside a week the strongest comes first (more backers, then earlier kickoff, break ties).
      */

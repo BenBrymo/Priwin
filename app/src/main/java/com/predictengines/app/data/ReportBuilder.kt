@@ -110,7 +110,9 @@ object ReportBuilder {
         val wrong: Int,
         /** Recorded picks whose game hasn't been settled yet. */
         val waiting: Int,
-        val records: List<PredictionRecord>
+        val records: List<PredictionRecord>,
+        /** Recorded picks of the week without a result yet (played and awaiting, or still to be played). */
+        val pending: List<ListPicksStore.Entry> = emptyList()
     ) {
         val total: Int get() = correct + wrong
         val hitRatePercent: Int get() = if (total == 0) 0 else Math.round(correct * 100.0 / total).toInt()
@@ -125,10 +127,14 @@ object ReportBuilder {
         thisWeek: LocalDate = weekStartOf(LocalDate.now().toString()) ?: LocalDate.now()
     ): List<ListWeek> {
         val recs = marks.filter { it.source == source }.groupBy { weekStartOf(it.date) }
-        val waiting = recorded.filter { it.source == source && it.id !in marked }.groupingBy { weekStartOf(it.date) }.eachCount()
+        val pendingBy = recorded.filter { it.source == source && it.id !in marked }.groupBy { weekStartOf(it.date) }
+        val waiting = pendingBy.mapValues { it.value.size }
         return (recs.keys + waiting.keys).distinct().map { start ->
             val rs = (recs[start] ?: emptyList()).sortedWith(compareBy({ it.date }, { it.home }))
-            ListWeek(start, rs.count { it.correct }, rs.count { !it.correct }, waiting[start] ?: 0, rs)
+            ListWeek(
+                start, rs.count { it.correct }, rs.count { !it.correct }, waiting[start] ?: 0, rs,
+                pendingBy[start].orEmpty().sortedBy { DateUtils.sortKey(it.date, it.time) }
+            )
         }.sortedWith(
             // This week first, then the upcoming weeks in date order, then older weeks (most recent first), undated last.
             compareBy<ListWeek> { w ->

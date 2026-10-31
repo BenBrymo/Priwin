@@ -279,12 +279,18 @@ private fun ListReportCard(source: String, weeks: List<ReportBuilder.ListWeek>) 
                             }
                         }
                     }
-                    if (w.waiting > 0) {
-                        Text(
-                            "${w.waiting} more waiting for their games to be played or scored",
-                            style = MaterialTheme.typography.labelSmall, color = DrawAmber,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
+                    w.pending.forEach { e ->
+                        val played = com.predictengines.app.data.DateUtils.isPlayed(e.date, e.time)
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
+                            Text("…", color = if (played) DrawAmber else TextMuted, fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 10.dp))
+                            Column {
+                                Text("${e.home} v ${e.away} · ${e.label}", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+                                Text(
+                                    "${e.leagueName} · ${e.date} · " + if (played) "Awaiting result" else "Upcoming",
+                                    style = MaterialTheme.typography.labelSmall, color = if (played) DrawAmber else TextMuted
+                                )
+                            }
+                        }
                     }
                 }
             }

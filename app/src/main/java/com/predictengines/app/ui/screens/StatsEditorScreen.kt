@@ -173,7 +173,8 @@ fun StatsEditorScreen(
     onEdit: (StatRow, Double, Int) -> Unit,
     onAdd: (StatRow) -> Unit,
     onDelete: (List<StatRow>) -> Unit,
-    onExport: (Uri) -> Unit
+    onExport: (Uri) -> Unit,
+    onRepair: () -> Unit = {}
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var market by rememberSaveable { mutableStateOf(ALL_MARKETS) }
@@ -216,6 +217,7 @@ fun StatsEditorScreen(
                     )
                     SecondaryButton(text = "Export", onClick = { exporter.launch("statschecker_updated.csv") }, icon = Icons.Filled.Download)
                 }
+                TextButton(onClick = onRepair) { Text("Check for results counted twice", color = IndigoPrimary) }
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = query, onValueChange = { query = it }, singleLine = true,

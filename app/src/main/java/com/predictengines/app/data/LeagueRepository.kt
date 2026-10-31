@@ -112,9 +112,13 @@ class LeagueRepository(context: Context) {
      * you loaded are never counted a second time.
      */
     fun autoSettleFrom(): String =
-        prefs.getString(KEY_AUTO_SETTLE, null) ?: java.time.LocalDate.now().toString().also {
+        prefs.getString(KEY_AUTO_SETTLE, null) ?: DEFAULT_AUTO_SETTLE_FROM.also {
             prefs.edit().putString(KEY_AUTO_SETTLE, it).apply()
         }
+
+    /** The day the bundled stats file is current to, plus one: games before it are already counted in the file. */
+    fun statsCurrentTo(): String =
+        runCatching { java.time.LocalDate.parse(autoSettleFrom()).minusDays(1).toString() }.getOrDefault(DEFAULT_STATS_CURRENT_TO)
 
     fun setAutoSettleFrom(date: String) {
         prefs.edit().putString(KEY_AUTO_SETTLE, date).apply()
@@ -544,6 +548,48 @@ class LeagueRepository(context: Context) {
         return add.size
     }
 
+    /**
+     * True when this game (same date, same two clubs, any league label) already has stats changes recorded
+     * under a different fixture key, e.g. after a league or club name changed. Counting it again would double it.
+     */
+    fun countedUnderAnotherKey(fx: String): Boolean {
+        val me = gameOf(fx) ?: return false
+        return loadLedger().any { it.fx != fx && gameOf(it.fx) == me }
+    }
+
+    private fun gameOf(fx: String): String? {
+        val p = fx.split('|')
+        if (p.size < 4) return null
+        return p[1] + "|" + listOf(p[2], p[3]).sorted().joinToString("|")
+    }
+
+    /**
+     * Finds changes counted twice for one game (the same game under two keys, or the same change repeated), takes the
+     * extra ones back out of the stats and returns how many were removed.
+     */
+    fun repairLedger(): Int {
+        val ledger = loadLedger()
+        val keepFx = HashMap<String, String>() // game -> the fixture key that stays
+        val extras = ArrayList<LedgerEntry>()
+        val seen = HashSet<String>()
+        val kept = ArrayList<LedgerEntry>()
+        for (e in ledger) {
+            val g = gameOf(e.fx)
+            if (g != null) {
+                val owner = keepFx.getOrPut(g) { e.fx }
+                if (owner != e.fx) { extras.add(e); continue }
+            }
+            if (!seen.add("${e.fx}|${e.rowKey}|${e.tag}")) { extras.add(e); continue }
+            kept.add(e)
+        }
+        if (extras.isEmpty()) return 0
+        val rows = loadStats()
+        val undone = StatsUpdater.apply(rows, extras.map { StatDelta(it.rowKey, it.dv, it.dg, it.tag) }, sign = -1)
+        if (undone.isNotEmpty()) saveUserRows(undone)
+        saveLedger(kept)
+        return extras.size
+    }
+
     private fun loadImportedStats(): List<StatRow> {
         val f = statsFile
         if (!f.exists()) return emptyList()
@@ -582,6 +628,11 @@ class LeagueRepository(context: Context) {
         } catch (e: Exception) {
             return ImportResult.Failure("Couldn't save the file: ${e.message}")
         }
+        // Rows the new file supplies take its values; the app's earlier changes to those rows must not be applied
+        // (or taken back) on top of them again.
+        val supplied = TeamNames.unifyStats(parsed.rows).map { StatsUpdater.rowKey(it) }.toSet()
+        val ledger = loadLedger()
+        saveLedger(ledger.filter { it.rowKey !in supplied })
         val info = ImportInfo(displayName(uri), merged.size, parsed.skipped, System.currentTimeMillis())
         prefs.edit().putString(KEY_STATS_INFO, toJson(info)).apply()
         return ImportResult.Success(info)
@@ -649,6 +700,8 @@ class LeagueRepository(context: Context) {
     }
 
     private companion object {
+        const val DEFAULT_STATS_CURRENT_TO = "2026-10-26"
+        const val DEFAULT_AUTO_SETTLE_FROM = "2026-10-27"
         const val KEY_CUSTOM = "custom_leagues"
         const val KEY_HIDDEN = "hidden_leagues"
         const val KEY_LAST_LEAGUE = "last_league"

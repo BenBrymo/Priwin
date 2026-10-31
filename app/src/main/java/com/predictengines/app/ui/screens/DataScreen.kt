@@ -256,7 +256,8 @@ fun DataScreen(
                 style = MaterialTheme.typography.bodyLarge, color = TextPrimary
             )
             Text(
-                "Earlier games are left alone so results already counted in your stats file aren't counted twice.",
+                "Earlier games are left alone: the stats file already counts them, so they can never change a record twice. " +
+                    "Set this to the day after your stats file ends (it was current to 26 Oct 2026, so 27 Oct 2026).",
                 style = MaterialTheme.typography.bodyMedium, color = TextSecondary
             )
             TextButton(onClick = { editingSettleDate = true }) { Text("Change start date", color = IndigoPrimary) }

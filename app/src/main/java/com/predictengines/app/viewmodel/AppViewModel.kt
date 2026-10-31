@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.predictengines.app.data.Analysis
 import com.predictengines.app.data.DataKind
 import com.predictengines.app.data.DateUtils
+import com.predictengines.app.data.ConsensusVote
+import com.predictengines.app.data.ConsensusPick
 import com.predictengines.app.data.Fixture
 import com.predictengines.app.data.FixtureItem
 import com.predictengines.app.data.FixtureSummary
@@ -282,12 +284,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun refreshTopPicks() {
         topCache?.let { cached ->
             // games that kicked off since the list was built drop out
-            val live = cached.filter { !DateUtils.isPlayed(it.date, it.time) }
+            val lists = composeLists(cached, handicapCache, over15Cache)
             _state.update {
                 it.copy(
-                    topPicks = live, topPicksLoading = false,
-                    handicapPicks = handicapCache.filter { p -> !DateUtils.isPlayed(p.date, p.time) },
-                    over15Picks = over15Cache.filter { p -> !DateUtils.isPlayed(p.date, p.time) },
+                    topPicks = lists.first, topPicksLoading = false,
+                    handicapPicks = lists.second, over15Picks = lists.third,
                     missingByLeague = missingCache
                 )
             }
@@ -324,13 +325,45 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (gen == cacheGen.get()) {
                 topCache = top.first; handicapCache = top.second; over15Cache = top.third
             }
+            val lists = withContext(Dispatchers.IO) { composeLists(top.first, top.second, top.third) }
             _state.update {
                 it.copy(
-                    topPicks = top.first, handicapPicks = top.second, over15Picks = top.third,
+                    topPicks = lists.first, handicapPicks = lists.second, over15Picks = lists.third,
                     missingByLeague = missingCache, topPicksLoading = false
                 )
             }
         }
+    }
+
+    /**
+     * The weekly lists as shown: the ranked upcoming picks, plus the picks whose games have since been played, which
+     * stay in their week (taken from what was written down when the list was built). Each week holds at most the
+     * list's usual 20 upcoming-plus-played picks.
+     */
+    private fun composeLists(top: List<TopPick>, hcp: List<TopPick>, o15: List<TopPick>): Triple<List<TopPick>, List<TopPick>, List<TopPick>> {
+        val visible = _state.value.leagues.map { it.id }.toSet()
+        val played = listPicks.load().values.filter { it.leagueId in visible && DateUtils.isPlayed(it.date, it.time) }
+        fun merge(source: String, upcoming: List<TopPick>): List<TopPick> {
+            // one pick per game: the one that first made the list
+            val past = played.filter { it.source == source }
+                .distinctBy { "${it.leagueId}|${it.date}|${it.home}|${it.away}" }.map { e ->
+                TopPick(
+                    leagueId = e.leagueId, leagueName = e.leagueName, date = e.date, time = e.time,
+                    homeDisplay = e.homeDisplay.ifBlank { e.home }, awayDisplay = e.awayDisplay.ifBlank { e.away },
+                    home = e.home, away = e.away,
+                    pick = ConsensusPick(
+                        key = e.key, label = e.label, group = e.group,
+                        backers = e.backers.map { (m, c) -> ConsensusVote(m, c) },
+                        against = emptyList(), abstain = emptyList(), modelCount = e.modelCount, strength = e.strength
+                    )
+                )
+            }
+            val live = upcoming.filter { !DateUtils.isPlayed(it.date, it.time) }
+            return TopPicksEngine.withPlayed(live, past)
+        }
+        return Triple(
+            merge(ListPicksStore.TOP, top), merge(ListPicksStore.HANDICAP, hcp), merge(ListPicksStore.OVER15, o15)
+        )
     }
 
     /** Played games of a league that have no score in the matches file or among your entries. */
@@ -350,7 +383,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         fun entries(source: String, list: List<TopPick>) = list.map { tp ->
             ListPicksStore.Entry(
                 source, tp.leagueId, tp.leagueName, tp.date, tp.home, tp.away,
-                tp.pick.key, tp.pick.label, tp.pick.group, tp.time
+                tp.pick.key, tp.pick.label, tp.pick.group, tp.time,
+                tp.homeDisplay, tp.awayDisplay, tp.pick.strength,
+                tp.pick.backers.map { it.model to it.confidence }, tp.pick.modelCount
             )
         }
         listPicks.add(entries(ListPicksStore.TOP, top) + entries(ListPicksStore.HANDICAP, hcp) + entries(ListPicksStore.OVER15, o15))
@@ -634,6 +669,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val fx = fixtureKey(league.id, date, home, away)
             val tag = "tick:${pick.key}"
             val score = _state.value.scores[scoreKey(date, home, away)]
+            val allowed = withContext(Dispatchers.IO) { date >= repo.autoSettleFrom() && !repo.countedUnderAnotherKey(fx) }
+            if (!allowed) {
+                if (correct != null) postMessage("Not added to the stats: this game is already in the stats file (played before ${repo.autoSettleFrom()}) or already counted")
+                return@launch
+            }
             val changed = withContext(Dispatchers.IO) {
                 val deltas = if (correct == null) emptyList()
                 else StatsUpdater.tickDeltas(pick.key, correct, home, away, score, repo.loadStats())
@@ -641,6 +681,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             if (correct != null) postMessage(if (changed > 0) "Stats data updated ($changed rows)" else "No stats rows to update for this pick")
             reloadKeepingView(league)
+        }
+    }
+
+    /** Takes back stats changes that were counted twice for one game. */
+    fun repairStatsChanges() {
+        viewModelScope.launch {
+            val n = withContext(Dispatchers.IO) { repo.repairLedger() }
+            postMessage(if (n == 0) "Checked: no stats change was counted twice" else "Fixed: $n duplicate stats changes taken back")
+            _state.value.selected?.let { reloadKeepingView(it) }
         }
     }
 
@@ -709,7 +758,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         extras: MatchExtras?, marks: MutableMap<String, PredictionRecord>
     ): Int {
         val fx = fixtureKey(league.id, date, home, away)
-        var rows = repo.updateStatsForFixture(fx, { it == "score" }, StatsUpdater.scoreDeltas(home, away, hg, ag, repo.loadStats()))
+        // The stats change only for a game that is newer than the stats file and not yet counted under another key.
+        val countStats = date >= repo.autoSettleFrom() && !repo.countedUnderAnotherKey(fx)
+        var rows = if (countStats) repo.updateStatsForFixture(fx, { it == "score" }, StatsUpdater.scoreDeltas(home, away, hg, ag, repo.loadStats())) else 0
         val played = Match(date, home, away, hg, ag)
         val analysis = analyze(home, away, null, date, true)
         for (pick in analysis.trackable) {
@@ -717,7 +768,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val existing = marks[id]
             if (existing != null && !existing.auto) continue // the user's own tick always wins
             val verdict = ResultJudge.judge(pick.key, home, away, hg, ag, extras)
-            val statsFeed = pick.source == "Stats" && !StatsUpdater.isScoreDecided(pick.key)
+            val statsFeed = countStats && pick.source == "Stats" && !StatsUpdater.isScoreDecided(pick.key)
             if (verdict == null) {
                 if (existing != null) {
                     marks.remove(id)

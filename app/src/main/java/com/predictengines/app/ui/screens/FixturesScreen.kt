@@ -39,6 +39,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import com.predictengines.app.ui.components.inputColors
 import com.predictengines.app.ui.components.PrimaryButton
+import com.predictengines.app.ui.theme.DrawAmber
 import com.predictengines.app.ui.components.urgencyColor
 import com.predictengines.app.ui.components.rememberNow
 import com.predictengines.app.ui.components.TodayDot
@@ -161,13 +162,13 @@ fun FixturesScreen(
             else if (section == 1) ResultsEntry(state, onSaveScore, scoreHints)
             else if (section == 2) TopPicksList(state, onOpenTopPick)
             else if (section == 3) TopPicksList(
-                state, onOpenTopPick, picks = state.handicapPicks, prefix = "h", showBest = false,
+                state, onOpenTopPick, picks = state.handicapPicks, prefix = "h", source = "Handicap", showBest = false,
                 title = "Brymo handicap picks of each week",
                 subtitle = "best 20 per week across all leagues · Brymo's strongest +2 handicap pick per game · tap a card to open the analysis",
                 emptyText = "No upcoming games have a Brymo handicap pick yet."
             )
             else if (section == 4) TopPicksList(
-                state, onOpenTopPick, picks = state.over15Picks, prefix = "o", showBest = false,
+                state, onOpenTopPick, picks = state.over15Picks, prefix = "o", source = "Over 1.5", showBest = false,
                 title = "Over 1.5 goals of each week",
                 subtitle = "best 20 per week across all leagues · backed by Poisson and/or Stats, both backing it first · tap a card to open the analysis",
                 emptyText = "No upcoming games have Poisson or Stats backing Over 1.5 goals yet."
@@ -182,6 +183,7 @@ private fun TopPicksList(
     onOpenTopPick: (TopPick) -> Unit,
     picks: List<TopPick> = state.topPicks,
     prefix: String = "t",
+    source: String = "Top 20",
     showBest: Boolean = true,
     title: String = "Top 20 picks of each week",
     subtitle: String? = null,
@@ -264,9 +266,16 @@ private fun TopPicksList(
                     ) {
                         items(
                             list,
-                            key = { (_, p) -> "${p.leagueId}|${p.date}|${p.home}|${p.away}" }
+                            key = { (_, p) -> "${p.leagueId}|${p.date}|${p.home}|${p.away}|${p.pick.key}" }
                         ) { (rank, tp) ->
-                            TopPickCard(rank, tp, onClick = { onOpenTopPick(tp) }, modifier = Modifier.width(300.dp), showBest = showBest)
+                            TopPickCard(
+                                rank, tp, onClick = { onOpenTopPick(tp) }, modifier = Modifier.width(300.dp), showBest = showBest,
+                                result = ListResult(
+                                    played = DateUtils.isPlayed(tp.date, tp.time),
+                                    correct = state.marks[PredictionRecord.idOf(tp.leagueId, tp.date, tp.home, tp.away, source, tp.pick.key)]?.correct,
+                                    score = if (tp.leagueId == state.selected?.id) state.scores[scoreKey(tp.date, tp.home, tp.away)] else null
+                                )
+                            )
                         }
                     }
                 }
@@ -276,7 +285,13 @@ private fun TopPicksList(
 }
 
 @Composable
-private fun TopPickCard(rank: Int, tp: TopPick, onClick: () -> Unit, modifier: Modifier = Modifier, showBest: Boolean = true) {
+private class ListResult(val played: Boolean, val correct: Boolean?, val score: Match?)
+
+@Composable
+private fun TopPickCard(
+    rank: Int, tp: TopPick, onClick: () -> Unit, modifier: Modifier = Modifier, showBest: Boolean = true,
+    result: ListResult? = null
+) {
     val pick = tp.pick
     AppCard(modifier = modifier, onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -303,7 +318,19 @@ private fun TopPickCard(rank: Int, tp: TopPick, onClick: () -> Unit, modifier: M
             }
         }
         Spacer(Modifier.height(6.dp))
-        CountdownChip(tp.date, tp.time)
+        if (result != null && result.played) {
+            // A finished game stays on the list with its outcome.
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                when (result.correct) {
+                    true -> TagChip("✓ Correct", WinGreen)
+                    false -> TagChip("✗ Wrong", LossRed)
+                    null -> TagChip("Played · awaiting result", DrawAmber)
+                }
+                result.score?.let { Text("${it.homeGoals} - ${it.awayGoals}", style = MaterialTheme.typography.titleSmall, color = TextPrimary) }
+            }
+        } else {
+            CountdownChip(tp.date, tp.time)
+        }
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -314,7 +341,9 @@ private fun TopPickCard(rank: Int, tp: TopPick, onClick: () -> Unit, modifier: M
             if (showBest) BestPickChip(pick)
         }
         Text(
-            if (pick.isSingleModel) {
+            if (pick.backers.isEmpty()) {
+                "Recorded before it was played"
+            } else if (pick.isSingleModel) {
                 "${pick.backers[0].model} only · ${pick.backers[0].confidence.roundToInt()}%"
             } else {
                 "${pick.backers.joinToString(", ") { it.model }} (${pick.backers.size} of ${pick.modelCount}) · avg ${pick.averageConfidence.roundToInt()}%"

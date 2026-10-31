@@ -302,6 +302,7 @@ fun AppRoot(vm: AppViewModel) {
                     Tab.REPORTS -> ReportScreen(state)
                     Tab.STATS -> StatsEditorScreen(
                         state = state,
+                        onRepair = vm::repairStatsChanges,
                         onEdit = vm::editStat,
                         onAdd = vm::addStat,
                         onDelete = vm::deleteStats,
