@@ -89,6 +89,7 @@ fun ReportScreen(state: AppUiState) {
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        item(key = "performance") { PerformanceCards(state, shownMarks, visible) }
         items(lists, key = { "list_${it.first}" }) { (src, listWeeks) -> ListReportCard(src, listWeeks) }
         items(weeks, key = { it.weekStart?.toString() ?: "no_date" }) { week -> WeekCard(week) }
     }

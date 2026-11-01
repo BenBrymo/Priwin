@@ -8,7 +8,7 @@ enum class KryptoMode(val label: String) {
 }
 
 /** A warning raised by one Kryptonite for one team. */
-data class KryptoFlag(val ruleId: String, val team: String, val text: String)
+data class KryptoFlag(val ruleId: String, val team: String, val text: String, val playerId: String = "")
 
 /** The description of one Kryptonite, shown on the Data screen. */
 data class KryptoRule(val id: String, val name: String, val description: String)
@@ -29,6 +29,22 @@ object Kryptonites {
     const val DEFENSIVE_COLLAPSE = "defensive_collapse"
     const val LONG_BREAK = "long_break"
     const val RED_CARD = "red_card"
+    const val SCORING_SPREE = "scoring_spree"
+    const val SPREE_COOLING = "spree_cooling"
+    const val CLEAN_SHEET_RUN = "clean_sheet_run"
+    const val CLEAN_SHEET_BROKEN = "clean_sheet_broken"
+    const val FORM_SPLIT = "form_split"
+    const val MODELS_DISAGREE = "models_disagree"
+    const val KEY_PLAYER = "key_player"
+
+    /** A run needs [RUN_GAMES] games to count; once it ended, the follow-up flag clears after [RUN_BACK] in a row again. */
+    const val RUN_GAMES = 3
+    const val RUN_BACK = 2
+    const val SPREE_GOALS = 3
+    /** Home/away split: games per venue looked at, the least needed at each venue, and the points-per-game gap. */
+    const val SPLIT_GAMES = 5
+    const val SPLIT_MIN = 3
+    const val SPLIT_GAP = 1.5
 
     /** Draws in the last [DRAW_WINDOW] games; goals conceded in each of the last [COLLAPSE_GAMES]; days without a game. */
     const val DRAW_WINDOW = 6
@@ -103,6 +119,47 @@ object Kryptonites {
             "A team that had a player sent off in its last game is flagged. Needs the red-card columns in the matches file."
         ),
         KryptoRule(
+            SCORING_SPREE,
+            "Scoring spree",
+            "A team that scored $SPREE_GOALS or more goals in each of its last $RUN_GAMES games is flagged. " +
+                "It clears the first time the team scores fewer."
+        ),
+        KryptoRule(
+            SPREE_COOLING,
+            "Scoring spree cooling",
+            "After a scoring spree of $RUN_GAMES or more games ends, the team is flagged because the spree may be over. " +
+                "The flag stays until the team scores $SPREE_GOALS or more in $RUN_BACK games in a row again."
+        ),
+        KryptoRule(
+            CLEAN_SHEET_RUN,
+            "Clean-sheet run",
+            "A team that kept a clean sheet in each of its last $RUN_GAMES games is flagged. " +
+                "It clears the first time the team concedes."
+        ),
+        KryptoRule(
+            CLEAN_SHEET_BROKEN,
+            "Clean-sheet run broken",
+            "After a run of $RUN_GAMES or more clean sheets ends, the team is flagged. " +
+                "The flag stays until the team keeps $RUN_BACK clean sheets in a row again."
+        ),
+        KryptoRule(
+            FORM_SPLIT,
+            "Home/away form split",
+            "A team whose points per game at home and away (last $SPLIT_GAMES games at each, at least $SPLIT_MIN) differ by " +
+                "$SPLIT_GAP or more is flagged when it plays at its weaker venue."
+        ),
+        KryptoRule(
+            MODELS_DISAGREE,
+            "Models disagree",
+            "A fixture whose best consensus pick has at least one model against it is flagged, because the models do not agree."
+        ),
+        KryptoRule(
+            KEY_PLAYER,
+            "Injured or unavailable key player",
+            "A team with a key player who is injured, suspended or doubtful (set on the Players tab) is flagged. " +
+                "A red-card ban counts the team's games and ends by itself; an injury ends on its return date or when you set the player to Available."
+        ),
+        KryptoRule(
             EARLY_KICKOFF,
             "Early kickoff",
             "A game that kicks off from 11:00 to 12:30 (both included) is flagged. Games with no kickoff time are never flagged."
@@ -127,13 +184,30 @@ object Kryptonites {
     }
 
     /** Flags for [team] from the matches played before the game being looked at (any order). */
-    fun evaluate(team: String, matches: List<Match>, fixtureDate: String = ""): List<KryptoFlag> {
+    fun evaluate(
+        team: String, matches: List<Match>, fixtureDate: String = "", atHome: Boolean? = null,
+        players: List<KeyPlayer> = emptyList()
+    ): List<KryptoFlag> {
         val out = ArrayList<KryptoFlag>()
+        keyPlayers(team, matches, fixtureDate, players).forEach { out.add(it) }
+        scoringSpree(team, matches)?.let { out.add(it) }
+        cleanSheetRun(team, matches)?.let { out.add(it) }
+        runBroken(
+            team, matches, SPREE_COOLING,
+            hit = { m -> (if (m.homeTeam == team) m.homeGoals else m.awayGoals) >= SPREE_GOALS },
+            text = { n, need -> "$team's $n-game scoring spree ended · needs $need more ${if (need == 1) "game" else "games"} of $SPREE_GOALS+ goals in a row" }
+        )?.let { out.add(it) }
+        runBroken(
+            team, matches, CLEAN_SHEET_BROKEN,
+            hit = { m -> (if (m.homeTeam == team) m.awayGoals else m.homeGoals) == 0 },
+            text = { n, need -> "$team's $n-game clean-sheet run ended · needs $need more ${if (need == 1) "clean sheet" else "clean sheets"} in a row" }
+        )?.let { out.add(it) }
+        if (atHome != null) formSplit(team, matches, atHome)?.let { out.add(it) }
         goalDrought(team, matches)?.let { out.add(it) }
         drawMagnet(team, matches)?.let { out.add(it) }
         defensiveCollapse(team, matches)?.let { out.add(it) }
         longBreak(team, matches, fixtureDate)?.let { out.add(it) }
-        redCard(team, matches)?.let { out.add(it) }
+        redCard(team, matches, players)?.let { out.add(it) }
         shortRest(team, matches, fixtureDate)?.let { out.add(it) }
         fewGames(team, matches)?.let { out.add(it) }
         streakBreak(team, matches)?.let { out.add(it) }
@@ -143,9 +217,17 @@ object Kryptonites {
 
     /** The flags of a fixture: those of its home and away team. */
     fun forFixture(
-        home: String, away: String, matches: List<Match>, time: String = "", date: String = ""
+        home: String, away: String, matches: List<Match>, time: String = "", date: String = "",
+        consensus: ConsensusResult? = null, players: List<KeyPlayer> = emptyList()
     ): List<KryptoFlag> =
-        evaluate(home, matches, date) + evaluate(away, matches, date) + listOfNotNull(earlyKickoff(time))
+        evaluate(home, matches, date, true, players) + evaluate(away, matches, date, false, players) +
+            listOfNotNull(earlyKickoff(time), modelsDisagree(consensus))
+
+    private fun modelsDisagree(c: ConsensusResult?): KryptoFlag? {
+        val best = c?.picks?.firstOrNull() ?: return null
+        if (best.against.isEmpty()) return null
+        return KryptoFlag(MODELS_DISAGREE, "", "Models disagree · ${best.against.joinToString(", ")} against ${best.label}")
+    }
 
     private fun gamesOf(team: String, matches: List<Match>) =
         matches.filter { it.homeTeam == team || it.awayTeam == team }.sortedBy { it.date }
@@ -155,6 +237,70 @@ object Kryptonites {
         if (last.size < DROUGHT_GAMES) return null
         val dry = last.all { (if (it.homeTeam == team) it.homeGoals else it.awayGoals) == 0 }
         return if (dry) KryptoFlag(GOAL_DROUGHT, team, "$team has not scored in its last $DROUGHT_GAMES games") else null
+    }
+
+    private fun scoringSpree(team: String, matches: List<Match>): KryptoFlag? {
+        val last = gamesOf(team, matches).takeLast(RUN_GAMES)
+        if (last.size < RUN_GAMES) return null
+        val hot = last.all { (if (it.homeTeam == team) it.homeGoals else it.awayGoals) >= SPREE_GOALS }
+        return if (hot) KryptoFlag(SCORING_SPREE, team, "$team scored $SPREE_GOALS+ goals in each of its last $RUN_GAMES games") else null
+    }
+
+    private fun cleanSheetRun(team: String, matches: List<Match>): KryptoFlag? {
+        val last = gamesOf(team, matches).takeLast(RUN_GAMES)
+        if (last.size < RUN_GAMES) return null
+        val tight = last.all { (if (it.homeTeam == team) it.awayGoals else it.homeGoals) == 0 }
+        return if (tight) KryptoFlag(CLEAN_SHEET_RUN, team, "$team kept a clean sheet in each of its last $RUN_GAMES games") else null
+    }
+
+    /**
+     * Follow-up of a run: after a run of [RUN_GAMES]+ games where [hit] was true ended, the team is flagged until
+     * [hit] is true [RUN_BACK] games in a row again.
+     */
+    private fun runBroken(
+        team: String, matches: List<Match>, ruleId: String,
+        hit: (Match) -> Boolean, text: (Int, Int) -> String
+    ): KryptoFlag? {
+        var run = 0
+        var flagged = false
+        var broken = 0
+        var since = 0
+        for (m in gamesOf(team, matches)) {
+            val h = hit(m)
+            if (!flagged) {
+                if (h) run++ else {
+                    if (run >= RUN_GAMES) { flagged = true; broken = run; since = 0 }
+                    run = 0
+                }
+            } else if (h) {
+                since++
+                if (since >= RUN_BACK) { flagged = false; run = since }
+            } else since = 0
+        }
+        return if (flagged) KryptoFlag(ruleId, team, text(broken, RUN_BACK - since)) else null
+    }
+
+    private fun formSplit(team: String, matches: List<Match>, atHome: Boolean): KryptoFlag? {
+        fun ppg(g: List<Match>, home: Boolean): Double =
+            g.fold(0) { acc, m ->
+                val mine = if (home) m.homeGoals else m.awayGoals
+                val theirs = if (home) m.awayGoals else m.homeGoals
+                acc + (if (mine > theirs) 3 else if (mine == theirs) 1 else 0)
+            } / g.size.toDouble()
+        val all = gamesOf(team, matches)
+        val h = all.filter { it.homeTeam == team }.takeLast(SPLIT_GAMES)
+        val a = all.filter { it.awayTeam == team }.takeLast(SPLIT_GAMES)
+        if (h.size < SPLIT_MIN || a.size < SPLIT_MIN) return null
+        val hp = ppg(h, true)
+        val ap = ppg(a, false)
+        val gap = hp - ap
+        val weakerIsHome = gap < 0
+        if (kotlin.math.abs(gap) < SPLIT_GAP || weakerIsHome != atHome) return null
+        val where = if (atHome) "at home" else "away"
+        return KryptoFlag(
+            FORM_SPLIT, team,
+            "$team averages %.1f pts/game at home but %.1f away · playing $where".format(hp, ap)
+        )
     }
 
     private fun drawMagnet(team: String, matches: List<Match>): KryptoFlag? {
@@ -179,8 +325,25 @@ object Kryptonites {
         return if (days >= LONG_BREAK_DAYS) KryptoFlag(LONG_BREAK, team, "$team has not played for $days days") else null
     }
 
-    private fun redCard(team: String, matches: List<Match>): KryptoFlag? {
+    private fun keyPlayers(team: String, matches: List<Match>, fixtureDate: String, players: List<KeyPlayer>): List<KryptoFlag> =
+        players.filter { it.team == team }.mapNotNull { p ->
+            val label = "${p.name} (${p.position.short})"
+            when (KeyPlayers.statusFor(p, fixtureDate, matches)) {
+                PlayerStatus.AVAILABLE -> null
+                PlayerStatus.DOUBTFUL -> KryptoFlag(KEY_PLAYER, team, "$team: $label is doubtful, may be unavailable", p.id)
+                PlayerStatus.INJURED -> KryptoFlag(KEY_PLAYER, team, "$team: $label is injured", p.id)
+                PlayerStatus.SUSPENDED -> {
+                    val left = KeyPlayers.gamesLeft(p, matches)
+                    val tail = if (left > 0) " ($left more ${if (left == 1) "game" else "games"})" else ""
+                    KryptoFlag(KEY_PLAYER, team, "$team: $label is suspended$tail", p.id)
+                }
+            }
+        }
+
+    private fun redCard(team: String, matches: List<Match>, players: List<KeyPlayer>): KryptoFlag? {
         val last = gamesOf(team, matches).lastOrNull() ?: return null
+        // The sent-off player is a key player already suspended for it: the key-player flag says it, no second warning.
+        if (players.any { it.team == team && it.status == PlayerStatus.SUSPENDED && it.banFrom == last.date }) return null
         val x = last.extras ?: return null
         val reds = (if (last.homeTeam == team) x.homeReds else x.awayReds) ?: return null
         return if (reds > 0) KryptoFlag(RED_CARD, team, "$team had a player sent off in its last game") else null

@@ -62,7 +62,8 @@ object ReportBuilder {
 
     /** Newest week first; the "no date" group last. */
     fun weeks(all: Collection<PredictionRecord>, pending: Map<LocalDate?, Int> = emptyMap()): List<WeekReport> {
-        val records = all.filter { it.source !in LIST_SOURCES } // the weekly lists have their own reports
+        // the weekly lists have their own reports; picks a Kryptonite held back are only judged for the performance cards
+        val records = all.filter { it.source !in LIST_SOURCES && !it.source.endsWith(PerformanceReport.HIDDEN_SUFFIX) }
         val byWeek = records.groupBy { weekStartOf(it.date) }
         val keys = (byWeek.keys + pending.keys).distinct()
         return keys.map { start ->

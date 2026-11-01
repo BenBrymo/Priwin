@@ -29,6 +29,12 @@ import com.predictengines.app.data.MatchExtras
 import com.predictengines.app.data.ScoreCell
 import com.predictengines.app.data.ScoreConflict
 import com.predictengines.app.data.ListPicksStore
+import com.predictengines.app.data.PerformanceReport
+import com.predictengines.app.data.RedEvent
+import com.predictengines.app.data.PlayerStatus
+import com.predictengines.app.data.PlayersStore
+import com.predictengines.app.data.KeyPlayers
+import com.predictengines.app.data.KeyPlayer
 import com.predictengines.app.data.ResultExtrasStore
 import com.predictengines.app.data.settleSignature
 import com.predictengines.app.engine.ResultJudge
@@ -63,6 +69,9 @@ data class AppUiState(
     val duplicateLeagues: List<League> = emptyList(),
     /** What each Kryptonite does to flagged fixtures and picks (rule id -> mode). */
     val kryptoModes: Map<String, KryptoMode> = emptyMap(),
+    val players: List<KeyPlayer> = emptyList(),
+    val answeredReds: Set<String> = emptySet(),
+    val pendingReds: List<RedEvent> = emptyList(),
     val leagues: List<League> = emptyList(),
     val selected: League? = null,
     val isLoading: Boolean = true,
@@ -133,6 +142,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val backup = BackupManager(application)
     private val extrasStore = ResultExtrasStore(application)
     private val listPicks = ListPicksStore(application)
+    private val playersStore = PlayersStore(application)
+    @Volatile private var savedPlayers = playersStore.load()
     private val settling = java.util.concurrent.atomic.AtomicBoolean(false)
     private val results = ResultsStore(application)
     private val linksStore = NameLinksStore(application)
@@ -167,7 +178,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun computeLeague(league: League): LoadedData {
         val gen = cacheGen.get()
         // Same inputs as last time (nothing edited, app not updated)? Reuse what was worked out then.
-        val fingerprint = repo.fingerprint(league)
+        val fingerprint = repo.fingerprint(league) + "|k" + KeyPlayers.stamp(savedPlayers.players, league.id)
         disk.load(league.id, fingerprint)?.let { saved ->
             if (gen == cacheGen.get()) cache[league.id] = saved
             return saved
@@ -199,7 +210,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // The user's name links must be in place before any file is read, so every file sees the same names.
         val links = linksStore.load()
         TeamMatcher.setUserLinks(links.map { it.a to it.b })
-        _state.update { it.copy(leagues = leagues, kryptoModes = repo.kryptoModes(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
+        _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, leagues = leagues, kryptoModes = repo.kryptoModes(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
         val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
         selectLeague(start.id)
     }
@@ -262,6 +273,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     statsTeams = data.stats.map { it.team }.distinct().sorted()
                 )
             }
+            refreshReds()
             refreshTopPicks()
             autoSettleLoaded(league)
         }
@@ -303,6 +315,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(topPicksLoading = true) }
             val leagues = _state.value.leagues
             val gen = cacheGen.get()
+            var held = Triple<List<TopPick>, List<TopPick>, List<TopPick>>(emptyList(), emptyList(), emptyList())
             val top = withContext(Dispatchers.Default) {
                 val all = ArrayList<TopPick>()
                 val hcp = ArrayList<TopPick>()
@@ -324,9 +337,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 missingCache = missing
                 val modes = repo.kryptoModes()
-                Triple(TopPicksEngine.rank(all, modes = modes), TopPicksEngine.rank(hcp, modes = modes), TopPicksEngine.rank(o15, modes = modes))
+                val shown = Triple(TopPicksEngine.rank(all, modes = modes), TopPicksEngine.rank(hcp, modes = modes), TopPicksEngine.rank(o15, modes = modes))
+                held = Triple(
+                    TopPicksEngine.heldBack(all, shown.first), TopPicksEngine.heldBack(hcp, shown.second), TopPicksEngine.heldBack(o15, shown.third)
+                )
+                shown
             }
-            withContext(Dispatchers.IO) { recordListPicks(top.first, top.second, top.third) }
+            withContext(Dispatchers.IO) { recordListPicks(top.first, top.second, top.third, held) }
             if (gen == cacheGen.get()) {
                 topCache = top.first; handicapCache = top.second; over15Cache = top.third
             }
@@ -384,16 +401,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Writes down the picks on the three weekly lists, so they can be settled and reported after their games. */
-    private fun recordListPicks(top: List<TopPick>, hcp: List<TopPick>, o15: List<TopPick>) {
+    private fun recordListPicks(
+        top: List<TopPick>, hcp: List<TopPick>, o15: List<TopPick>,
+        held: Triple<List<TopPick>, List<TopPick>, List<TopPick>> = Triple(emptyList(), emptyList(), emptyList())
+    ) {
         fun entries(source: String, list: List<TopPick>) = list.map { tp ->
             ListPicksStore.Entry(
                 source, tp.leagueId, tp.leagueName, tp.date, tp.home, tp.away,
                 tp.pick.key, tp.pick.label, tp.pick.group, tp.time,
                 tp.homeDisplay, tp.awayDisplay, tp.pick.strength,
-                tp.pick.backers.map { it.model to it.confidence }, tp.pick.modelCount
+                tp.pick.backers.map { it.model to it.confidence }, tp.pick.modelCount,
+                tp.flags.map { f -> f.ruleId }.distinct()
             )
         }
-        listPicks.add(entries(ListPicksStore.TOP, top) + entries(ListPicksStore.HANDICAP, hcp) + entries(ListPicksStore.OVER15, o15))
+        val hide = PerformanceReport.HIDDEN_SUFFIX
+        listPicks.add(
+            entries(ListPicksStore.TOP, top) + entries(ListPicksStore.HANDICAP, hcp) + entries(ListPicksStore.OVER15, o15) +
+                entries(ListPicksStore.TOP + hide, held.first) + entries(ListPicksStore.HANDICAP + hide, held.second) +
+                entries(ListPicksStore.OVER15 + hide, held.third)
+        )
         _state.update { it.copy(listEntries = listPicks.load().values.toList()) }
     }
 
@@ -434,11 +460,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val brymo = BrymoEngine.predict(home, away, before)
                 val poisson = PoissonEngine.predict(home, away, before)
                 val stats = StatsEngine.predict(home, away, st)
+                val consensus = ConsensusEngine.compute(home, away, brymo, poisson, stats)
                 FixtureSummary(
-                    ConsensusEngine.compute(home, away, brymo, poisson, stats),
+                    consensus,
                     ConsensusEngine.handicapPick(home, away, brymo),
                     ConsensusEngine.over15Backers(home, away, poisson, stats),
-                    Kryptonites.forFixture(home, away, before, f.time, f.date)
+                    Kryptonites.forFixture(
+                        home, away, before, f.time, f.date, consensus,
+                        savedPlayers.players.filter { it.leagueId == leagueId }
+                    )
                 )
             } else null
             FixtureItem(index, f, home, away, summary)
@@ -687,6 +717,70 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             if (correct != null) postMessage(if (changed > 0) "Stats data updated ($changed rows)" else "No stats rows to update for this pick")
             reloadKeepingView(league)
+        }
+    }
+
+    // ---- key players -----------------------------------------------------------------------
+
+    /** Red cards of the open league's teams (last game, recent) that still wait for "who was sent off?". */
+    private fun refreshReds() {
+        val league = _state.value.selected ?: return
+        val pending = KeyPlayers.pendingReds(league.id, matches, savedPlayers.answered, java.time.LocalDate.now())
+        _state.update { it.copy(pendingReds = pending, players = savedPlayers.players, answeredReds = savedPlayers.answered) }
+    }
+
+    private fun persistPlayers(next: PlayersStore.Saved) {
+        savedPlayers = next
+        playersStore.save(next)
+        _state.update { it.copy(players = next.players, answeredReds = next.answered) }
+    }
+
+    private fun afterPlayersChanged() {
+        invalidateCache()
+        _state.value.selected?.let { reloadKeepingView(it) }
+    }
+
+    /** Adds or updates a key player (with a new photo when [photoUri] is given). */
+    fun savePlayer(player: KeyPlayer, photoUri: Uri?) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                var p = player
+                if (photoUri != null &&
+                    playersStore.savePhoto(p.id, getApplication<Application>().contentResolver, photoUri)
+                ) p = p.copy(photoStamp = System.currentTimeMillis())
+                if (p.status == PlayerStatus.SUSPENDED && p.banGames > 0 && p.banFrom.isBlank()) {
+                    p = p.copy(banFrom = java.time.LocalDate.now().toString())
+                }
+                persistPlayers(savedPlayers.copy(players = savedPlayers.players.filter { it.id != p.id } + p))
+            }
+            afterPlayersChanged()
+            postMessage("Saved ${player.name}")
+        }
+    }
+
+    fun deletePlayer(id: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                playersStore.deletePhoto(id)
+                persistPlayers(savedPlayers.copy(players = savedPlayers.players.filter { it.id != id }))
+            }
+            afterPlayersChanged()
+        }
+    }
+
+    /** Answers "who was sent off?": a key player (suspended for [games] games from that game) or nobody listed. */
+    fun answerRed(event: RedEvent, playerId: String?, games: Int) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                val players = if (playerId == null) savedPlayers.players else savedPlayers.players.map {
+                    if (it.id == playerId) it.copy(
+                        status = PlayerStatus.SUSPENDED, banGames = games.coerceIn(1, 50), banFrom = event.date, returnDate = ""
+                    ) else it
+                }
+                persistPlayers(PlayersStore.Saved(players, savedPlayers.answered + event.key))
+            }
+            afterPlayersChanged()
+            postMessage(if (playerId == null) "Noted: someone else was sent off" else "Suspension saved")
         }
     }
 
@@ -979,8 +1073,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val leagues = repo.leagues()
                     val marks = withContext(Dispatchers.IO) { results.load() }
                     val extras = withContext(Dispatchers.IO) { extrasStore.loadExtras() }
+                    savedPlayers = withContext(Dispatchers.IO) { playersStore.load() }
                     invalidateCache()
-                    _state.update { it.copy(leagues = leagues, kryptoModes = repo.kryptoModes(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = marks, nameLinks = links, extras = extras, autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
+                    _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, leagues = leagues, kryptoModes = repo.kryptoModes(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = marks, nameLinks = links, extras = extras, autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
                     val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
                     selectLeague(start.id)
                     postMessage("Backup restored (${result.files} files)")

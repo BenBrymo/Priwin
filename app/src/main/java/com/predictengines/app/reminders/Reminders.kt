@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat
 import com.predictengines.app.MainActivity
 import com.predictengines.app.data.DateUtils
 import com.predictengines.app.data.ListPicksStore
+import com.predictengines.app.data.PerformanceReport
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -70,7 +71,7 @@ object ReminderScheduler {
         val today = now.toLocalDate()
         val hidden = c.getSharedPreferences("predict_engines", Context.MODE_PRIVATE)
             .getString("hidden_leagues", "").orEmpty().split('\n').filter { it.isNotBlank() }.toSet()
-        val picks = ListPicksStore(c).load().values.filter { it.leagueId !in hidden }
+        val picks = ListPicksStore(c).load().values.filter { it.leagueId !in hidden && !it.source.endsWith(PerformanceReport.HIDDEN_SUFFIX) }
         fun on(day: LocalDate) = picks.filter { e ->
             DateUtils.parse(e.date) == day && !DateUtils.isPlayed(e.date, e.time, now)
         }

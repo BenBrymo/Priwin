@@ -99,6 +99,16 @@ object TopPicksEngine {
     }
 
     /**
+     * Picks the Kryptonite switches kept off the list: those on the list as it would be with every switch on Warn only,
+     * but not on the list as shown. They are written down (and judged later) so the reports can say if holding them back paid.
+     */
+    fun heldBack(all: List<TopPick>, shown: List<TopPick>, limit: Int = DEFAULT_LIMIT): List<TopPick> {
+        fun id(t: TopPick) = "${t.leagueId}|${t.date}|${t.home}|${t.away}|${t.pick.key}"
+        val shownIds = shown.mapTo(HashSet()) { id(it) }
+        return rank(all, limit, emptyMap()).filter { id(it) !in shownIds && it.flags.isNotEmpty() }
+    }
+
+    /**
      * The [limit] strongest picks of EACH Monday-Sunday week, across all leagues. Weeks run earliest first;
      * inside a week the strongest comes first (more backers, then earlier kickoff, break ties).
      */

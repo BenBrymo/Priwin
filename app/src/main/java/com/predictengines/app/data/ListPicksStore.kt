@@ -28,7 +28,9 @@ class ListPicksStore(context: Context) {
         val strength: Double = 0.0,
         /** Who backed the pick and how confident each was, as (model, percent). */
         val backers: List<Pair<String, Double>> = emptyList(),
-        val modelCount: Int = 3
+        val modelCount: Int = 3,
+        /** Ids of the Kryptonite rules that flagged the fixture when the pick was written down; null = not recorded (older picks). */
+        val krypto: List<String>? = null
     ) {
         val id: String get() = PredictionRecord.idOf(leagueId, date, home, away, source, key)
     }
@@ -49,7 +51,8 @@ class ListPicksStore(context: Context) {
                     o.optJSONArray("bk")?.let { b ->
                         (0 until b.length()).map { i -> b.getJSONArray(i).let { x -> x.getString(0) to x.getDouble(1) } }
                     } ?: emptyList(),
-                    o.optInt("mc", 3)
+                    o.optInt("mc", 3),
+                    o.optJSONArray("kr")?.let { k -> (0 until k.length()).map { i -> k.getString(i) } }
                 )
                 out[e.id] = e
             }
@@ -66,7 +69,9 @@ class ListPicksStore(context: Context) {
         for (e in entries) {
             val old = all[e.id]
             // A pick already written down is only filled in (time, names, strength) and never moved or removed.
-            if (old == null || (old.time.isBlank() && e.time.isNotBlank()) || (old.backers.isEmpty() && e.backers.isNotEmpty())) {
+            if (old == null || (old.time.isBlank() && e.time.isNotBlank()) || (old.backers.isEmpty() && e.backers.isNotEmpty()) ||
+                (old.krypto == null && e.krypto != null)
+            ) {
                 all[e.id] = e; changed = true
             }
         }
@@ -78,6 +83,7 @@ class ListPicksStore(context: Context) {
                     .put("h", e.home).put("a", e.away).put("k", e.key).put("lb", e.label).put("g", e.group).put("tm", e.time)
                     .put("hd", e.homeDisplay).put("ad", e.awayDisplay).put("st", e.strength).put("mc", e.modelCount)
                     .put("bk", JSONArray().also { b -> e.backers.forEach { (m, c) -> b.put(JSONArray().put(m).put(c)) } })
+                    .also { j -> e.krypto?.let { k -> j.put("kr", JSONArray(k)) } }
             )
         }
         try {

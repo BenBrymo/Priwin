@@ -47,6 +47,13 @@ class BackupManager(context: Context) {
                     count++
                 }
             }
+            val photos = File(files, PHOTO_DIR)
+            if (photos.exists()) {
+                photos.walkTopDown().filter { it.isFile }.forEach { f ->
+                    put(PHOTO_DIR + "/" + f.name, f.readBytes())
+                    count++
+                }
+            }
             val p = JSONObject()
             for ((k, v) in prefs.all) if (v is String && (k == KEY_CUSTOM || k.startsWith("krypto_") || k == KEY_HIDDEN || k == KEY_LAST || k == KEY_AUTO || k.startsWith("info_"))) p.put(k, v)
             put(PREFS_FILE, p.toString().toByteArray())
@@ -80,6 +87,7 @@ class BackupManager(context: Context) {
             // wipe what the backup replaces, then lay the backup down
             for (name in TOP_FILES) File(files, name).delete()
             File(files, LEAGUE_DIR).deleteRecursively()
+            File(files, PHOTO_DIR).deleteRecursively()
             File(files, "league_cache").deleteRecursively()
             var count = 0
             for ((name, bytes) in entries) {
@@ -105,14 +113,16 @@ class BackupManager(context: Context) {
     /** Only files this app itself writes may be restored, and never outside its own folder. */
     private fun allowed(name: String): Boolean {
         if (name.contains("..") || name.startsWith("/") || name.contains('\\')) return false
-        return name == MARKER || name == PREFS_FILE || name in TOP_FILES || (name.startsWith("$LEAGUE_DIR/") && name.length > LEAGUE_DIR.length + 1)
+        return name == MARKER || name == PREFS_FILE || name in TOP_FILES || (name.startsWith("$LEAGUE_DIR/") && name.length > LEAGUE_DIR.length + 1) ||
+            (name.startsWith("$PHOTO_DIR/") && name.length > PHOTO_DIR.length + 1 && name.count { it == '/' } == 1)
     }
 
     private companion object {
         const val MARKER = "priwin_backup.json"
         const val PREFS_FILE = "settings.json"
         const val LEAGUE_DIR = "league_data"
-        val TOP_FILES = listOf("prediction_marks.json", "name_links.json", "result_extras.json", "settled_fixtures.json", "list_picks.json")
+        val TOP_FILES = listOf("prediction_marks.json", "name_links.json", "result_extras.json", "settled_fixtures.json", "list_picks.json", "key_players.json")
+        const val PHOTO_DIR = "player_photos"
         const val KEY_CUSTOM = "custom_leagues"
         const val KEY_HIDDEN = "hidden_leagues"
         const val KEY_LAST = "last_league"

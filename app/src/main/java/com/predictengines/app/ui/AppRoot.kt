@@ -42,6 +42,8 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import com.predictengines.app.ui.components.LocalKeyPlayers
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -58,6 +60,12 @@ import com.predictengines.app.ui.screens.DataScreen
 import com.predictengines.app.ui.screens.FixturesScreen
 import com.predictengines.app.ui.screens.StatsEditorScreen
 import com.predictengines.app.ui.screens.MatchupScreen
+import com.predictengines.app.ui.components.inputColors
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import com.predictengines.app.ui.screens.PlayersScreen
+import androidx.compose.material.icons.filled.Groups
 import com.predictengines.app.ui.screens.ReportScreen
 import com.predictengines.app.ui.theme.CardSurface
 import com.predictengines.app.ui.theme.DeepSpace
@@ -72,6 +80,7 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     FIXTURES("Fixtures", Icons.Filled.SportsSoccer),
     MATCHUP("Matchup", Icons.Filled.Insights),
     REPORTS("Reports", Icons.Filled.Assessment),
+    PLAYERS("Players", Icons.Filled.Groups),
     STATS("Stats", Icons.Filled.Edit),
     DATA("Data", Icons.Filled.Storage)
 }
@@ -147,6 +156,52 @@ fun AppRoot(vm: AppViewModel) {
         )
     }
 
+    // A red card in a team's last game: ask who was sent off, so a key player's ban is counted.
+    var redSnoozed by rememberSaveable { mutableStateOf("") }
+    val red = state.pendingReds.firstOrNull { it.key != redSnoozed }
+    if (red != null) {
+        val squad = state.players.filter { it.leagueId == red.leagueId && it.team == red.team }
+        var banGames by remember(red.key) { mutableStateOf("1") }
+        AlertDialog(
+            onDismissRequest = { redSnoozed = red.key },
+            containerColor = CardSurface,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary,
+            title = { Text("Who was sent off?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "${red.team} had a red card against ${red.opponent} (${red.date}).",
+                        style = MaterialTheme.typography.bodyMedium, color = TextPrimary
+                    )
+                    OutlinedTextField(
+                        value = banGames, onValueChange = { banGames = it.filter { c -> c.isDigit() }.take(2) },
+                        label = { Text("Ban length in games") }, singleLine = true, colors = inputColors(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (squad.isEmpty()) {
+                        Text(
+                            "${red.team} has no key players yet. Add them on the Players tab to have a ban counted.",
+                            style = MaterialTheme.typography.bodyMedium, color = TextSecondary
+                        )
+                    } else {
+                        squad.forEach { p ->
+                            TextButton(
+                                onClick = { vm.answerRed(red, p.id, banGames.toIntOrNull() ?: 1) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("${p.name} (${p.position.short})", color = IndigoPrimary, modifier = Modifier.weight(1f)) }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { vm.answerRed(red, null, 1) }) { Text("Someone else", color = IndigoPrimary) }
+            },
+            dismissButton = { TextButton(onClick = { redSnoozed = red.key }) { Text("Later", color = TextSecondary) } }
+        )
+    }
+
     if (showMissingList) {
         AlertDialog(
             onDismissRequest = { showMissingList = false },
@@ -176,6 +231,7 @@ fun AppRoot(vm: AppViewModel) {
         )
     }
 
+    CompositionLocalProvider(LocalKeyPlayers provides state.players) {
     Scaffold(
         containerColor = DeepSpace,
         snackbarHost = { SnackbarHost(snackbar) },
@@ -300,6 +356,7 @@ fun AppRoot(vm: AppViewModel) {
                         onLink = vm::linkNames
                     )
                     Tab.REPORTS -> ReportScreen(state)
+                    Tab.PLAYERS -> PlayersScreen(state, onSave = vm::savePlayer, onDelete = vm::deletePlayer)
                     Tab.STATS -> StatsEditorScreen(
                         state = state,
                         onRepair = vm::repairStatsChanges,
@@ -327,5 +384,6 @@ fun AppRoot(vm: AppViewModel) {
                 }
             }
         }
+    }
     }
 }
