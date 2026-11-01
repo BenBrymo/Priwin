@@ -32,7 +32,9 @@ data class KeyPlayer(
     val returnDate: String = "",
     val banGames: Int = 0,
     val banFrom: String = "",
-    val photoStamp: Long = 0L
+    val photoStamp: Long = 0L,
+    /** Which part of a tall photo shows in the round picture: 0 = the top (heads), 1 = the bottom. */
+    val photoFocus: Float = 0f
 )
 
 /** A team whose last game had a red card for it, waiting for the user to say who was sent off. */

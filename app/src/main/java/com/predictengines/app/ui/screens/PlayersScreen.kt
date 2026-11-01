@@ -40,6 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -49,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -264,7 +266,11 @@ fun PlayerAvatar(p: KeyPlayer, size: Dp) {
         contentAlignment = Alignment.Center
     ) {
         if (bmp != null) {
-            Image(bmp, contentDescription = p.name, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            // anchored toward the top (heads) unless the player's own position says otherwise
+            Image(
+                bmp, contentDescription = p.name, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
+                alignment = BiasAlignment(0f, p.photoFocus * 2f - 1f)
+            )
         } else {
             val initials = p.name.split(' ').filter { it.isNotBlank() }.take(2).joinToString("") { it.take(1).uppercase() }
             Text(initials, style = MaterialTheme.typography.titleSmall, color = TextSecondary)
@@ -286,9 +292,11 @@ private fun PlayerDialog(
     var returnDate by remember { mutableStateOf(initial?.returnDate.orEmpty()) }
     var games by remember { mutableStateOf(if ((initial?.banGames ?: 0) > 0) initial!!.banGames.toString() else "") }
     var picked by remember { mutableStateOf<Uri?>(null) }
+    var focus by remember { mutableStateOf(initial?.photoFocus ?: 0f) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) picked = uri }
     val id = remember { initial?.id ?: java.util.UUID.randomUUID().toString() }
-    val preview = (initial ?: KeyPlayer(id, leagueId, team, name)).copy(name = name)
+    val preview = (initial ?: KeyPlayer(id, leagueId, team, name)).copy(name = name, photoFocus = focus)
+    val hasPhoto = picked != null || (initial?.photoStamp ?: 0L) > 0L
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -303,7 +311,7 @@ private fun PlayerDialog(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (picked != null) {
-                        PickedPhoto(picked!!)
+                        PickedPhoto(picked!!, focus)
                     } else {
                         PlayerAvatar(preview, 64.dp)
                     }
@@ -313,6 +321,10 @@ private fun PlayerDialog(
                         Spacer(Modifier.width(6.dp))
                         Text(if ((initial?.photoStamp ?: 0L) > 0L || picked != null) "Change photo" else "Add photo", color = IndigoPrimary)
                     }
+                }
+                if (hasPhoto) {
+                    Text("Photo position (slide to show the head)", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+                    Slider(value = focus, onValueChange = { focus = it }, valueRange = 0f..1f)
                 }
                 OutlinedTextField(
                     value = name, onValueChange = { name = it }, label = { Text("Name") },
@@ -359,7 +371,7 @@ private fun PlayerDialog(
                     val base = initial ?: KeyPlayer(id, leagueId, team, name.trim())
                     onSave(
                         base.copy(
-                            name = name.trim(), position = position, status = status,
+                            name = name.trim(), position = position, status = status, photoFocus = focus,
                             returnDate = if (status == PlayerStatus.AVAILABLE) "" else returnDate.trim(),
                             banGames = ban,
                             // a new or changed ban counts from the day it is saved; an untouched one keeps its start
@@ -376,7 +388,7 @@ private fun PlayerDialog(
 
 /** A just-picked photo, shown before it is saved. */
 @Composable
-private fun PickedPhoto(uri: Uri) {
+private fun PickedPhoto(uri: Uri, focus: Float) {
     val ctx = LocalContext.current
     val bmp = remember(uri) {
         runCatching {
@@ -387,6 +399,9 @@ private fun PickedPhoto(uri: Uri) {
         }.getOrNull()
     }
     Box(Modifier.size(64.dp).clip(CircleShape).background(CardSurfaceAlt), contentAlignment = Alignment.Center) {
-        if (bmp != null) Image(bmp, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        if (bmp != null) Image(
+            bmp, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
+            alignment = BiasAlignment(0f, focus * 2f - 1f)
+        )
     }
 }

@@ -37,7 +37,8 @@ class PlayersStore(private val context: android.content.Context) {
                         returnDate = p.optString("r", ""),
                         banGames = p.optInt("bg", 0),
                         banFrom = p.optString("bf", ""),
-                        photoStamp = p.optLong("ph", 0L)
+                        photoStamp = p.optLong("ph", 0L),
+                        photoFocus = p.optDouble("pf", 0.0).toFloat().coerceIn(0f, 1f)
                     )
                 }.getOrNull()
             }
@@ -55,7 +56,7 @@ class PlayersStore(private val context: android.content.Context) {
                 arr.put(
                     JSONObject().put("id", p.id).put("l", p.leagueId).put("t", p.team).put("n", p.name)
                         .put("p", p.position.name).put("s", p.status.name).put("r", p.returnDate)
-                        .put("bg", p.banGames).put("bf", p.banFrom).put("ph", p.photoStamp)
+                        .put("bg", p.banGames).put("bf", p.banFrom).put("ph", p.photoStamp).put("pf", p.photoFocus.toDouble())
                 )
             }
             val o = JSONObject().put("players", arr).put("answered", JSONArray(s.answered.toList()))
