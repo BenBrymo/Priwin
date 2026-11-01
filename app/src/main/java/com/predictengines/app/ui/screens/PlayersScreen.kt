@@ -27,6 +27,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Help
+import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -181,7 +185,7 @@ fun PlayersScreen(
                             Spacer(Modifier.height(4.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 TagChip(p.position.short, IndigoPrimary)
-                                TagChip(statusLabel(p), statusColor(p.status))
+                                StatusIcon(p)
                             }
                         }
                         IconButton(onClick = { editing = p }) {
@@ -224,11 +228,27 @@ fun PlayersScreen(
     }
 }
 
-private fun statusLabel(p: KeyPlayer): String = when (p.status) {
-    PlayerStatus.SUSPENDED -> if (p.banGames > 0) "Suspended · ${p.banGames} ${if (p.banGames == 1) "game" else "games"}" else "Suspended"
-    PlayerStatus.INJURED -> if (p.returnDate.isNotBlank()) "Injured · back ${p.returnDate}" else "Injured"
-    PlayerStatus.DOUBTFUL -> if (p.returnDate.isNotBlank()) "Doubtful · until ${p.returnDate}" else "Doubtful"
-    PlayerStatus.AVAILABLE -> "Available"
+/** The status as a coloured icon alone (its name is read out by screen readers); ban length or return date as small text when set. */
+@Composable
+private fun StatusIcon(p: KeyPlayer) {
+    val icon = when (p.status) {
+        PlayerStatus.AVAILABLE -> Icons.Filled.CheckCircle
+        PlayerStatus.DOUBTFUL -> Icons.Filled.Help
+        PlayerStatus.INJURED -> Icons.Filled.LocalHospital
+        PlayerStatus.SUSPENDED -> Icons.Filled.Block
+    }
+    val detail = when (p.status) {
+        PlayerStatus.SUSPENDED -> if (p.banGames > 0) "${p.banGames} ${if (p.banGames == 1) "game" else "games"}" else ""
+        PlayerStatus.INJURED, PlayerStatus.DOUBTFUL -> if (p.returnDate.isNotBlank()) "back ${p.returnDate}" else ""
+        PlayerStatus.AVAILABLE -> ""
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = p.status.label, tint = statusColor(p.status), modifier = Modifier.size(26.dp))
+        if (detail.isNotEmpty()) {
+            Spacer(Modifier.width(6.dp))
+            Text(detail, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+        }
+    }
 }
 
 /** The player's photo in a circle, or their initials when there is none. */

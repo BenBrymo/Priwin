@@ -42,6 +42,10 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import com.predictengines.app.ui.components.LocalKeyPlayers
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -85,9 +89,11 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     DATA("Data", Icons.Filled.Storage)
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AppRoot(vm: AppViewModel) {
     val state by vm.state.collectAsState()
+    val navScope = rememberCoroutineScope()
     var tabIndex by rememberSaveable { mutableIntStateOf(0) }
     val tab = Tab.entries[tabIndex]
     val snackbar = remember { SnackbarHostState() }
@@ -241,8 +247,16 @@ fun AppRoot(vm: AppViewModel) {
                     NavigationBarItem(
                         selected = index == tabIndex,
                         onClick = { tabIndex = index },
-                        icon = { Icon(t.icon, contentDescription = t.label) },
-                        label = { Text(t.label) },
+                        // icons only; a long press names the tab
+                        icon = {
+                            Box(
+                                modifier = Modifier.combinedClickable(
+                                    onClick = { tabIndex = index },
+                                    onLongClick = { navScope.launch { snackbar.currentSnackbarData?.dismiss(); snackbar.showSnackbar(t.label) } }
+                                )
+                            ) { Icon(t.icon, contentDescription = t.label) }
+                        },
+                        alwaysShowLabel = false,
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = TextPrimary,
                             selectedTextColor = TextPrimary,
