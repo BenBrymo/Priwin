@@ -26,6 +26,8 @@ object ResultJudge {
             key == "FTS_A" -> firstToScore(false, hg, ag, x)
             key.startsWith("C_") -> line(key.drop(2), x?.corners)
             key.startsWith("K_") -> line(key.drop(2), x?.cards)
+            key.startsWith("TC_H_") -> line(key.drop(5), x?.homeCorners)
+            key.startsWith("TC_A_") -> line(key.drop(5), x?.awayCorners)
             key.length > 1 && (key[0] == 'O' || key[0] == 'U') -> line(key, total)
             key.startsWith("B:") -> handicap(key.removePrefix("B:"), home, away, hg, ag)
             else -> null

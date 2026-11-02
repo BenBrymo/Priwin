@@ -26,7 +26,7 @@ object StatsUpdater {
 
     /** Pick keys whose result the score alone decides. */
     fun isScoreDecided(key: String): Boolean = when {
-        key.startsWith("C_") || key.startsWith("K_") || key.startsWith("FTS") -> false
+        key.startsWith("C_") || key.startsWith("K_") || key.startsWith("FTS") || key.startsWith("TC_") -> false
         else -> true
     }
 
@@ -101,7 +101,7 @@ object StatsUpdater {
             Kind.WIN_OR_DRAW -> gf >= ga
             Kind.BTTS -> hg > 0 && ag > 0
             Kind.GOALS -> if (metric.over) hg + ag > metric.line else hg + ag < metric.line
-            Kind.FIRST_TO_SCORE, Kind.CORNERS, Kind.CARDS -> null
+            Kind.FIRST_TO_SCORE, Kind.CORNERS, Kind.CARDS, Kind.TEAM_CORNERS -> null
         }
     }
 
@@ -138,6 +138,16 @@ object StatsUpdater {
                     add(forMetric(rowsOf, Metric(kind, line, over), venue), pickedHappened)
                     add(forMetric(rowsOf, Metric(kind, line, !over), venue), !pickedHappened)
                 }
+            }
+            key.startsWith("TC_") -> {
+                // one team's own corners: only that team's row at its own venue is evidence
+                val homeSide = key.startsWith("TC_H_")
+                val over = key.drop(5).firstOrNull() == 'O'
+                val line = key.drop(6).toDoubleOrNull() ?: return emptyList()
+                val rowsOf = if (homeSide) h else a
+                val venue = if (homeSide) Scope.HOME else Scope.AWAY
+                add(forMetric(rowsOf, Metric(Kind.TEAM_CORNERS, line, over), venue), correct)
+                add(forMetric(rowsOf, Metric(Kind.TEAM_CORNERS, line, !over), venue), !correct)
             }
             key == "FTS_H" || key == "FTS_A" -> {
                 val homePicked = key == "FTS_H"

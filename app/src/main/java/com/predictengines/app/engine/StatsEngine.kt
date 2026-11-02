@@ -35,7 +35,7 @@ object StatsEngine {
 
     enum class Scope { HOME, AWAY, TOTAL }
 
-    enum class Kind { WIN, DRAW, LOSS, WIN_TO_NIL, WIN_OR_DRAW, BTTS, FIRST_TO_SCORE, GOALS, CORNERS, CARDS }
+    enum class Kind { WIN, DRAW, LOSS, WIN_TO_NIL, WIN_OR_DRAW, BTTS, FIRST_TO_SCORE, GOALS, CORNERS, CARDS, TEAM_CORNERS }
 
     /** [line] and [over] only matter for GOALS / CORNERS / CARDS. */
     data class Metric(val kind: Kind, val line: Double = 0.0, val over: Boolean = true)
@@ -43,6 +43,8 @@ object StatsEngine {
     private val GOAL_LINES = listOf(1.5, 2.5, 3.5)
     private val CORNER_LINES = listOf(8.5, 9.5, 10.5, 11.5)
     private val CARD_LINES = listOf(3.5, 4.5, 5.5, 6.5)
+    /** A team's OWN corners (not the match total): "Team Corners Under 6.5 Home" is the home team's corners at home. */
+    private val TEAM_CORNER_LINES = listOf(5.5, 6.5)
 
     private const val SHRINK_GAMES = 4.0
     private const val ASSUMED_GAMES_WHEN_MISSING = 3
@@ -57,7 +59,7 @@ object StatsEngine {
 
     // ---- market names ----------------------------------------------------------------------
 
-    private val LINE_MARKET = Regex("^(corners|cards)?(over|under)(\\d+\\.\\d+)$")
+    private val LINE_MARKET = Regex("^(corners|cards|teamcorners|teamscorners)?(over|under)(\\d+\\.\\d+)$")
     private val WIN_OR_DRAW = Regex("^(win|wins|w)or(draw|draws|d)$")
     // "Win to 0", "Win to Nil", "Win to Nill" (the statschecker spelling), "Wins to Zero"
     private val WIN_TO_NIL = Regex("^(win|wins)(to)?(0|nil|nill|zero)$")
@@ -85,6 +87,7 @@ object StatsEngine {
                 return@run when (m.groupValues[1]) {
                     "corners" -> if (line in CORNER_LINES) Metric(Kind.CORNERS, line, over) else null
                     "cards" -> if (line in CARD_LINES) Metric(Kind.CARDS, line, over) else null
+                    "teamcorners", "teamscorners" -> if (line in TEAM_CORNER_LINES) Metric(Kind.TEAM_CORNERS, line, over) else null
                     else -> if (line in GOAL_LINES) Metric(Kind.GOALS, line, over) else null
                 }
             }
@@ -114,6 +117,15 @@ object StatsEngine {
         Kind.GOALS -> overBaseline(m, mapOf(1.5 to 0.76, 2.5 to 0.52, 3.5 to 0.30))
         Kind.CORNERS -> overBaseline(m, mapOf(8.5 to 0.73, 9.5 to 0.61, 10.5 to 0.49, 11.5 to 0.37))
         Kind.CARDS -> overBaseline(m, mapOf(3.5 to 0.64, 4.5 to 0.46, 5.5 to 0.30, 6.5 to 0.17))
+        Kind.TEAM_CORNERS -> {
+            // how often one team stays under the line: a home team wins more corners than an away team
+            val under = when (scope) {
+                Scope.HOME -> if (m.line < 6.0) 0.45 else 0.62
+                Scope.AWAY -> if (m.line < 6.0) 0.62 else 0.78
+                Scope.TOTAL -> if (m.line < 6.0) 0.53 else 0.70
+            }
+            if (m.over) 1.0 - under else under
+        }
     }
 
     private fun overBaseline(m: Metric, overRates: Map<Double, Double>): Double {
@@ -207,6 +219,12 @@ object StatsEngine {
                 out.add(Selection("${prefix}_U${fmt(line)}", group, "$group Under ${fmt(line)}",
                     Metric(kind, line, false), Metric(kind, line, false), "$prefix${fmt(line)}"))
             }
+        }
+        for (line in TEAM_CORNER_LINES) {
+            out.add(Selection("TC_H_U${fmt(line)}", "Team corners", "$home corners under ${fmt(line)}",
+                Metric(Kind.TEAM_CORNERS, line, false), null))
+            out.add(Selection("TC_A_U${fmt(line)}", "Team corners", "$away corners under ${fmt(line)}",
+                null, Metric(Kind.TEAM_CORNERS, line, false)))
         }
         out.add(Selection("FTS_H", "First to score", "$home score first", Metric(Kind.FIRST_TO_SCORE), null, "fts"))
         out.add(Selection("FTS_A", "First to score", "$away score first", null, Metric(Kind.FIRST_TO_SCORE), "fts"))

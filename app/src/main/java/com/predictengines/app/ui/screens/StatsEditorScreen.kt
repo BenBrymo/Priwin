@@ -90,6 +90,7 @@ private val MARKET_ORDER: List<String> = buildList {
     lines("", listOf("1.5", "2.5", "3.5"))
     lines("Corners ", listOf("8.5", "9.5", "10.5", "11.5"))
     lines("Cards ", listOf("3.5", "4.5", "5.5", "6.5"))
+    for (l in listOf("5.5", "6.5")) { add("Team Corners Under $l Home"); add("Team Corners Under $l Away") }
 }.map { it.lowercase(Locale.ROOT) }
 
 private fun marketRank(name: String): Int {

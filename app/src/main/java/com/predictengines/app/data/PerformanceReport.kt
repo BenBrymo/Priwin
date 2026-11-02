@@ -135,6 +135,8 @@ object PerformanceReport {
         key == "BTTS_Y" -> "Both teams score"
         key == "BTTS_N" -> "Not both teams score"
         key.startsWith("C_") -> "Corners " + key.drop(2).replace("_", " ")
+        key.startsWith("TC_H_") -> "Home team corners " + (if (key.getOrNull(5) == 'O') "over " else "under ") + key.drop(6)
+        key.startsWith("TC_A_") -> "Away team corners " + (if (key.getOrNull(5) == 'O') "over " else "under ") + key.drop(6)
         key.length > 1 && key[0] == 'O' && key[1].isDigit() -> "Over " + key.drop(1)
         key.length > 1 && key[0] == 'U' && key[1].isDigit() -> "Under " + key.drop(1)
         else -> key.replace("_", " ")

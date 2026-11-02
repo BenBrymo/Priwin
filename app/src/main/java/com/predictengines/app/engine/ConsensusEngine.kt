@@ -286,6 +286,7 @@ object ConsensusEngine {
         key.startsWith("BTTS") -> "BTTS"
         key.startsWith("C_") -> "Corners"
         key.startsWith("K_") -> "Cards"
+        key.startsWith("TC_") -> "Team corners"
         key.startsWith("FTS") -> "First to score"
         key.startsWith("WTN") -> "Win to nil"
         key.startsWith("B:") -> "Handicap / other"
