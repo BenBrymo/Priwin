@@ -14,7 +14,7 @@ import java.io.File
  */
 class PlayersStore(private val context: android.content.Context) {
 
-    data class Saved(val players: List<KeyPlayer>, val answered: Set<String>)
+    data class Saved(val players: List<KeyPlayer>, val answered: Set<String>, val news: List<TeamNews> = emptyList())
 
     private val dir get() = context.applicationContext.filesDir
     private val file get() = File(dir, "key_players.json")
@@ -43,7 +43,18 @@ class PlayersStore(private val context: android.content.Context) {
                 }.getOrNull()
             }
             val ans = o.optJSONArray("answered") ?: JSONArray()
-            Saved(players, (0 until ans.length()).map { ans.getString(it) }.toSet())
+            val na = o.optJSONArray("news") ?: JSONArray()
+            val news = (0 until na.length()).mapNotNull { i ->
+                val n = na.getJSONObject(i)
+                runCatching {
+                    val type = NewsType.valueOf(n.optString("ty", "OTHER"))
+                    TeamNews(
+                        n.getString("id"), n.getString("l"), n.getString("t"), type, n.optString("d", ""),
+                        n.optString("no", ""), n.optInt("g", type.defaultGames), n.optString("e", "")
+                    )
+                }.getOrNull()
+            }
+            Saved(players, (0 until ans.length()).map { ans.getString(it) }.toSet(), news)
         }
     } catch (e: Exception) {
         Saved(emptyList(), emptySet())
@@ -59,8 +70,15 @@ class PlayersStore(private val context: android.content.Context) {
                         .put("bg", p.banGames).put("bf", p.banFrom).put("ph", p.photoStamp).put("pf", p.photoFocus.toDouble())
                 )
             }
-            val o = JSONObject().put("players", arr).put("answered", JSONArray(s.answered.toList()))
-            if (s.players.isEmpty() && s.answered.isEmpty()) file.delete() else file.writeText(o.toString(), Charsets.UTF_8)
+            val na = JSONArray()
+            for (n in s.news) {
+                na.put(
+                    JSONObject().put("id", n.id).put("l", n.leagueId).put("t", n.team).put("ty", n.type.name)
+                        .put("d", n.date).put("no", n.note).put("g", n.games).put("e", n.endDate)
+                )
+            }
+            val o = JSONObject().put("players", arr).put("answered", JSONArray(s.answered.toList())).put("news", na)
+            if (s.players.isEmpty() && s.answered.isEmpty() && s.news.isEmpty()) file.delete() else file.writeText(o.toString(), Charsets.UTF_8)
         } catch (e: Exception) {
             // best effort
         }

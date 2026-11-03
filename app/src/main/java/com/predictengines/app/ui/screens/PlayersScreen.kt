@@ -63,9 +63,11 @@ import androidx.compose.ui.unit.dp
 import com.predictengines.app.data.KeyPlayer
 import com.predictengines.app.data.PlayerPosition
 import com.predictengines.app.data.PlayerStatus
+import com.predictengines.app.data.TeamNews
 import com.predictengines.app.ui.components.AppCard
 import com.predictengines.app.ui.components.PillChip
 import com.predictengines.app.ui.components.PrimaryButton
+import com.predictengines.app.ui.components.SecondaryButton
 import com.predictengines.app.ui.components.TagChip
 import com.predictengines.app.ui.components.inputColors
 import com.predictengines.app.ui.theme.CardSurface
@@ -91,9 +93,13 @@ private fun statusColor(s: PlayerStatus): Color = when (s) {
 fun PlayersScreen(
     state: AppUiState,
     onSave: (KeyPlayer, Uri?) -> Unit,
-    onDelete: (String) -> Unit
+    onDelete: (String) -> Unit,
+    onSaveNews: (TeamNews) -> Unit,
+    onDeleteNews: (String) -> Unit
 ) {
     val league = state.selected
+    var newsEditing by remember { mutableStateOf<TeamNews?>(null) }
+    var newsAdding by remember { mutableStateOf(false) }
     var openTeam by rememberSaveable(league?.id) { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf<KeyPlayer?>(null) }
     var adding by remember { mutableStateOf(false) }
@@ -168,6 +174,15 @@ fun PlayersScreen(
                 }
                 Spacer(Modifier.height(8.dp))
                 PrimaryButton("Add a key player", onClick = { adding = true }, icon = Icons.Filled.Add, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(8.dp))
+                SecondaryButton("Add team news", onClick = { newsAdding = true }, icon = Icons.Filled.Add, modifier = Modifier.fillMaxWidth())
+            }
+            val teamNews = state.news.filter { it.leagueId == league.id && it.team == team }
+            if (teamNews.isNotEmpty()) {
+                item { Text("Team news", style = MaterialTheme.typography.titleSmall, color = TextPrimary) }
+                items(teamNews.sortedByDescending { it.date }, key = { "news-" + it.id }) { n ->
+                    NewsRow(n, onEdit = { newsEditing = n }, onDelete = { onDeleteNews(n.id) })
+                }
             }
             if (list.isEmpty()) {
                 item {
@@ -202,6 +217,12 @@ fun PlayersScreen(
         }
     }
 
+    if (newsAdding && team != null) {
+        NewsDialog(initial = null, leagueId = league.id, team = team, onSave = { onSaveNews(it); newsAdding = false }, onDismiss = { newsAdding = false })
+    }
+    newsEditing?.let { n ->
+        NewsDialog(initial = n, leagueId = n.leagueId, team = n.team, onSave = { onSaveNews(it); newsEditing = null }, onDismiss = { newsEditing = null })
+    }
     if (adding && team != null) {
         PlayerDialog(
             initial = null, leagueId = league.id, team = team,

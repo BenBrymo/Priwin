@@ -69,6 +69,7 @@ data class AppUiState(
     val duplicateLeagues: List<League> = emptyList(),
     /** What each Kryptonite does to flagged fixtures and picks (rule id -> mode). */
     val kryptoModes: Map<String, KryptoMode> = emptyMap(),
+    val news: List<com.predictengines.app.data.TeamNews> = emptyList(),
     val kryptoConfig: com.predictengines.app.data.KryptoConfig = com.predictengines.app.data.KryptoConfig(),
     val players: List<KeyPlayer> = emptyList(),
     val answeredReds: Set<String> = emptySet(),
@@ -179,7 +180,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun computeLeague(league: League): LoadedData {
         val gen = cacheGen.get()
         // Same inputs as last time (nothing edited, app not updated)? Reuse what was worked out then.
-        val fingerprint = repo.fingerprint(league) + "|k" + KeyPlayers.stamp(savedPlayers.players, league.id)
+        val fingerprint = repo.fingerprint(league) + "|k" + KeyPlayers.stamp(savedPlayers.players, league.id) + "|n" + KeyPlayers.newsStamp(savedPlayers.news, league.id)
         disk.load(league.id, fingerprint)?.let { saved ->
             if (gen == cacheGen.get()) cache[league.id] = saved
             return saved
@@ -211,7 +212,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // The user's name links must be in place before any file is read, so every file sees the same names.
         val links = linksStore.load()
         TeamMatcher.setUserLinks(links.map { it.a to it.b })
-        _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
+        _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, news = savedPlayers.news, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
         val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
         selectLeague(start.id)
     }
@@ -468,7 +469,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     ConsensusEngine.over15Backers(home, away, poisson, stats),
                     Kryptonites.forFixture(
                         home, away, before, f.time, f.date, consensus,
-                        savedPlayers.players.filter { it.leagueId == leagueId }
+                        savedPlayers.players.filter { it.leagueId == leagueId },
+                        savedPlayers.news.filter { it.leagueId == leagueId }
                     )
                 )
             } else null
@@ -727,13 +729,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun refreshReds() {
         val league = _state.value.selected ?: return
         val pending = KeyPlayers.pendingReds(league.id, matches, savedPlayers.answered, java.time.LocalDate.now())
-        _state.update { it.copy(pendingReds = pending, players = savedPlayers.players, answeredReds = savedPlayers.answered) }
+        _state.update { it.copy(pendingReds = pending, players = savedPlayers.players, answeredReds = savedPlayers.answered, news = savedPlayers.news) }
     }
 
     private fun persistPlayers(next: PlayersStore.Saved) {
         savedPlayers = next
         playersStore.save(next)
-        _state.update { it.copy(players = next.players, answeredReds = next.answered) }
+        _state.update { it.copy(players = next.players, answeredReds = next.answered, news = next.news) }
     }
 
     private fun afterPlayersChanged() {
@@ -769,6 +771,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Adds or updates a piece of team news; the team's flags are rebuilt. */
+    fun saveNews(item: com.predictengines.app.data.TeamNews) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                persistPlayers(savedPlayers.copy(news = savedPlayers.news.filter { it.id != item.id } + item))
+            }
+            afterPlayersChanged()
+            postMessage("Saved: ${item.team} · ${item.type.label}")
+        }
+    }
+
+    fun deleteNews(id: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { persistPlayers(savedPlayers.copy(news = savedPlayers.news.filter { it.id != id })) }
+            afterPlayersChanged()
+        }
+    }
+
     /** Answers "who was sent off?": a key player (suspended for [games] games from that game) or nobody listed. */
     fun answerRed(event: RedEvent, playerId: String?, games: Int) {
         viewModelScope.launch {
@@ -778,7 +798,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         status = PlayerStatus.SUSPENDED, banGames = games.coerceIn(1, 50), banFrom = event.date, returnDate = ""
                     ) else it
                 }
-                persistPlayers(PlayersStore.Saved(players, savedPlayers.answered + event.key))
+                persistPlayers(savedPlayers.copy(players = players, answered = savedPlayers.answered + event.key))
             }
             afterPlayersChanged()
             postMessage(if (playerId == null) "Noted: someone else was sent off" else "Suspension saved")
@@ -1098,7 +1118,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val extras = withContext(Dispatchers.IO) { extrasStore.loadExtras() }
                     savedPlayers = withContext(Dispatchers.IO) { playersStore.load() }
                     invalidateCache()
-                    _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = marks, nameLinks = links, extras = extras, autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
+                    _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, news = savedPlayers.news, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = marks, nameLinks = links, extras = extras, autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
                     val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
                     selectLeague(start.id)
                     postMessage("Backup restored (${result.files} files)")

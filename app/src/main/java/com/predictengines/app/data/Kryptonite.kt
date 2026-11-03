@@ -62,6 +62,8 @@ object Kryptonites {
     const val FORM_SPLIT = "form_split"
     const val MODELS_DISAGREE = "models_disagree"
     const val KEY_PLAYER = "key_player"
+    const val CONGESTION = "congestion"
+    const val TEAM_NEWS = "team_news"
 
     /** The user's choices, set when the app starts and whenever they change. */
     @Volatile var config: KryptoConfig = KryptoConfig()
@@ -178,6 +180,14 @@ object Kryptonites {
             ALL_MARKETS
         ) { "A team whose previous game was fewer than ${p(SHORT_REST, "days")} days before the fixture is flagged." },
         KryptoRule(
+            CONGESTION, "Fixture congestion", "Schedule",
+            listOf(KryptoParam("games", "Games (this one included)", 3, 2, 8), KryptoParam("days", "Within this many days", 8, 3, 21)),
+            ALL_MARKETS
+        ) {
+            "A team playing ${p(CONGESTION, "games")} games within ${p(CONGESTION, "days")} days (this one included) is flagged. " +
+                "It replaces Short rest for the same team, because it is the stronger warning."
+        },
+        KryptoRule(
             LONG_BREAK, "Long break", "Schedule",
             listOf(KryptoParam("days", "This many days or more since the last game", 14, 5, 60)),
             ALL_MARKETS
@@ -192,6 +202,12 @@ object Kryptonites {
         ) {
             "A team with a key player who is injured, suspended or doubtful (set on the Players tab) is flagged. " +
                 "A red-card ban counts the team's games and ends by itself; an injury ends on its return date or when you set the player to Available."
+        },
+        KryptoRule(
+            TEAM_NEWS, "Team news", "Players", emptyList(), ALL_MARKETS
+        ) {
+            "News you note on the Players tab (manager change, club turmoil, travel or fatigue, pitch or weather, other) flags the team's fixtures " +
+                "for the number of games or until the date you set. Defaults: manager change and club turmoil 2 games, the others 1 game."
         },
         KryptoRule(
             RED_CARD, "Red card last game", "Players", emptyList(), ALL_MARKETS
@@ -222,10 +238,11 @@ object Kryptonites {
     /** Flags for [team] from the matches played before the game being looked at (any order). */
     fun evaluate(
         team: String, matches: List<Match>, fixtureDate: String = "", atHome: Boolean? = null,
-        players: List<KeyPlayer> = emptyList()
+        players: List<KeyPlayer> = emptyList(), news: List<TeamNews> = emptyList()
     ): List<KryptoFlag> {
         val out = ArrayList<KryptoFlag>()
         keyPlayers(team, matches, fixtureDate, players).forEach { out.add(it) }
+        teamNews(team, matches, fixtureDate, news).forEach { out.add(it) }
         scoringSpree(team, matches)?.let { out.add(it) }
         cleanSheetRun(team, matches)?.let { out.add(it) }
         val sg = p(SPREE_COOLING, "goals")
@@ -245,7 +262,8 @@ object Kryptonites {
         defensiveCollapse(team, matches)?.let { out.add(it) }
         longBreak(team, matches, fixtureDate)?.let { out.add(it) }
         redCard(team, matches, players)?.let { out.add(it) }
-        shortRest(team, matches, fixtureDate)?.let { out.add(it) }
+        // Congestion is the stronger form of Short rest: when it fires, Short rest is not shown for the same team.
+        (congestion(team, matches, fixtureDate) ?: shortRest(team, matches, fixtureDate))?.let { out.add(it) }
         fewGames(team, matches)?.let { out.add(it) }
         streakBreak(team, matches)?.let { out.add(it) }
         losingBroken(team, matches)?.let { out.add(it) }
@@ -255,9 +273,9 @@ object Kryptonites {
     /** The flags of a fixture: those of its home and away team. */
     fun forFixture(
         home: String, away: String, matches: List<Match>, time: String = "", date: String = "",
-        consensus: ConsensusResult? = null, players: List<KeyPlayer> = emptyList()
+        consensus: ConsensusResult? = null, players: List<KeyPlayer> = emptyList(), news: List<TeamNews> = emptyList()
     ): List<KryptoFlag> =
-        evaluate(home, matches, date, true, players) + evaluate(away, matches, date, false, players) +
+        evaluate(home, matches, date, true, players, news) + evaluate(away, matches, date, false, players, news) +
             listOfNotNull(earlyKickoff(time), modelsDisagree(consensus))
 
     private fun modelsDisagree(c: ConsensusResult?): KryptoFlag? {
@@ -389,6 +407,28 @@ object Kryptonites {
         val x = last.extras ?: return null
         val reds = (if (last.homeTeam == team) x.homeReds else x.awayReds) ?: return null
         return if (reds > 0) KryptoFlag(RED_CARD, team, "$team had a player sent off in its last game") else null
+    }
+
+    private fun teamNews(team: String, matches: List<Match>, fixtureDate: String, news: List<TeamNews>): List<KryptoFlag> =
+        news.filter { it.team == team && KeyPlayers.newsActive(it, fixtureDate, matches) }.map { n ->
+            val tail = when {
+                n.endDate.isNotBlank() -> " (until ${n.endDate})"
+                else -> KeyPlayers.gamesLeftNews(n, matches).let { " ($it more ${plural(it, "game", "games")})" }
+            }
+            val note = if (n.note.isBlank()) "" else ": ${n.note.trim()}"
+            KryptoFlag(TEAM_NEWS, team, "$team · ${n.type.label}$note$tail")
+        }
+
+    /** The fixture is the team's [games]th within [days] days: games before it that fall in the window, plus this one. */
+    private fun congestion(team: String, matches: List<Match>, fixtureDate: String): KryptoFlag? {
+        val fx = DateUtils.parse(fixtureDate) ?: return null
+        val need = p(CONGESTION, "games"); val window = p(CONGESTION, "days")
+        val prior = gamesOf(team, matches).mapNotNull { DateUtils.parse(it.date) }.count {
+            val d = java.time.temporal.ChronoUnit.DAYS.between(it, fx)
+            d in 1..(window - 1).toLong()
+        }
+        if (prior + 1 < need) return null
+        return KryptoFlag(CONGESTION, team, "$team: game ${prior + 1} in $window days")
     }
 
     private fun shortRest(team: String, matches: List<Match>, fixtureDate: String): KryptoFlag? {
