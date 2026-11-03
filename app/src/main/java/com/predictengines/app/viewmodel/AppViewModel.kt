@@ -77,6 +77,8 @@ data class AppUiState(
     val leagues: List<League> = emptyList(),
     val selected: League? = null,
     val isLoading: Boolean = true,
+    /** What the loader is doing right now, shown under the loading animation. */
+    val loadStep: String = "",
     val teams: List<String> = emptyList(),
     val matchCount: Int = 0,
     val matchesImport: ImportInfo? = null,
@@ -176,20 +178,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         topJob?.cancel()
     }
 
+    private fun step(text: String) {
+        _state.update { if (it.loadStep == text) it else it.copy(loadStep = text) }
+    }
+
     /** Reads and scores one league (slow: parses files and predicts every fixture). Cached by [load]. */
     private fun computeLeague(league: League): LoadedData {
         val gen = cacheGen.get()
+        step("${league.name} · checking saved work")
         // Same inputs as last time (nothing edited, app not updated)? Reuse what was worked out then.
         val fingerprint = repo.fingerprint(league) + "|k" + KeyPlayers.stamp(savedPlayers.players, league.id) + "|n" + KeyPlayers.newsStamp(savedPlayers.news, league.id)
         disk.load(league.id, fingerprint)?.let { saved ->
             if (gen == cacheGen.get()) cache[league.id] = saved
             return saved
         }
+        step("${league.name} · reading the matches file")
         val m = repo.loadMatches(league)
         val teams = m.flatMap { listOf(it.homeTeam, it.awayTeam) }.distinct().sorted()
+        step("${league.name} · reading stats and fixtures")
         val st = repo.loadStats()
         val led = repo.loadLedger()
-        val items = buildFixtureItems(repo.loadFixtures(league), m, teams, st, league.id, led)
+        val items = buildFixtureItems(repo.loadFixtures(league), m, teams, st, league.id, led, league.name)
         val data = LoadedData(
             m, teams, items,
             repo.importInfo(league, DataKind.MATCHES),
@@ -239,7 +248,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (fresh) invalidateCache()
         val job = viewModelScope.launch {
             val cached = cache[league.id]
-            if (cached == null) _state.update { it.copy(isLoading = true) }
+            if (cached == null) _state.update { it.copy(isLoading = true, loadStep = "") }
             val data = cached ?: withContext(Dispatchers.IO) {
                 computeLeague(league)
             }
@@ -314,7 +323,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         topJob?.cancel()
         topJob = viewModelScope.launch {
-            _state.update { it.copy(topPicksLoading = true) }
+            _state.update { it.copy(topPicksLoading = true, loadStep = "") }
             val leagues = _state.value.leagues
             val gen = cacheGen.get()
             var held = Triple<List<TopPick>, List<TopPick>, List<TopPick>>(emptyList(), emptyList(), emptyList())
@@ -323,8 +332,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val hcp = ArrayList<TopPick>()
                 val o15 = ArrayList<TopPick>()
                 val missing = HashMap<String, Int>()
-                for (league in leagues) {
+                for ((li, league) in leagues.withIndex()) {
                     try {
+                        step("Top picks · league ${li + 1} of ${leagues.size}")
                         // Uses (and fills) the same per-league cache, so the other leagues are ready before you open them.
                         val data = cache[league.id] ?: computeLeague(league)
                         if (data.fixtures.isEmpty()) continue
@@ -338,6 +348,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 missingCache = missing
+                step("Top picks · ranking and checking Kryptonites")
                 val modes = repo.kryptoModes()
                 val shown = Triple(TopPicksEngine.rank(all, modes = modes), TopPicksEngine.rank(hcp, modes = modes), TopPicksEngine.rank(o15, modes = modes))
                 held = Triple(
@@ -448,10 +459,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         teams: List<String>,
         statRows: List<StatRow>,
         leagueId: String = "",
-        led: List<LedgerEntry> = emptyList()
+        led: List<LedgerEntry> = emptyList(),
+        leagueName: String = ""
     ): List<FixtureItem> {
         val sorted = fixtures.sortedBy { DateUtils.sortKey(it.date, it.time) }
         return sorted.mapIndexed { index, f ->
+            if (leagueName.isNotEmpty() && index % 4 == 0) step("$leagueName · scoring fixture ${index + 1} of ${sorted.size}")
             val home = TeamMatcher.resolve(f.homeTeam, teams)
             val away = TeamMatcher.resolve(f.awayTeam, teams)
             val summary = if (home != null && away != null && home != away) {

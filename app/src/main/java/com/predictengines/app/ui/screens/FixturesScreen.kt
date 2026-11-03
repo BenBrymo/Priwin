@@ -195,7 +195,7 @@ private fun TopPicksList(
     var folded by rememberSaveable { mutableStateOf(emptySet<String>()) }
     if (state.topPicksLoading && picks.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = IndigoPrimary)
+            com.predictengines.app.ui.components.ThinkingLoader(step = state.loadStep)
         }
         return
     }
@@ -396,7 +396,7 @@ private fun ResultsEntry(
     val fmt = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
 
     if (state.isLoading) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = IndigoPrimary) }
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { com.predictengines.app.ui.components.ThinkingLoader(step = state.loadStep) }
         return
     }
     if (missing.isEmpty()) {
@@ -479,7 +479,7 @@ private fun LeagueFixtures(
     val leagueName = state.selected?.name.orEmpty()
     if (state.isLoading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = IndigoPrimary)
+            com.predictengines.app.ui.components.ThinkingLoader(step = state.loadStep)
         }
         return
     }
@@ -870,7 +870,7 @@ private fun FixtureDetail(
         val analysis = state.fixtureAnalysis
         if (analysis == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = IndigoPrimary, modifier = Modifier.size(36.dp))
+                com.predictengines.app.ui.components.ThinkingLoader(step = "Brymo, Poisson and Stats are reading this fixture")
             }
         } else {
             Column(

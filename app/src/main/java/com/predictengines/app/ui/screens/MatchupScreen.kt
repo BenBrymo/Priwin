@@ -50,7 +50,7 @@ fun MatchupScreen(
 ) {
     if (state.isLoading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = IndigoPrimary)
+            com.predictengines.app.ui.components.ThinkingLoader(step = state.loadStep)
         }
         return
     }
