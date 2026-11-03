@@ -71,7 +71,7 @@ private const val ALL_MARKETS = "All markets"
 private const val LOW_PERCENT = 50.0
 
 /** The order the market tables (and the market dropdown) are shown in. Markets not listed come last, A-Z. */
-private val MARKET_ORDER: List<String> = buildList {
+private val MARKET_NAMES: List<String> = buildList {
     addAll(
         listOf(
             "Total Wins", "Home Wins", "Away Wins", "Home Win to Nill", "Away Win to Nill",
@@ -91,7 +91,9 @@ private val MARKET_ORDER: List<String> = buildList {
     lines("Corners ", listOf("8.5", "9.5", "10.5", "11.5"))
     lines("Cards ", listOf("3.5", "4.5", "5.5", "6.5"))
     for (l in listOf("5.5", "6.5")) { add("Team Corners Under $l Home"); add("Team Corners Under $l Away") }
-}.map { it.lowercase(Locale.ROOT) }
+}
+
+private val MARKET_ORDER: List<String> = MARKET_NAMES.map { it.lowercase(Locale.ROOT) }
 
 private fun marketRank(name: String): Int {
     val i = MARKET_ORDER.indexOf(name.trim().lowercase(Locale.ROOT))
@@ -343,6 +345,12 @@ fun StatsEditorScreen(
                         label = { Text("Team") }, colors = inputColors(), modifier = Modifier.fillMaxWidth())
                     if (markets.isNotEmpty()) {
                         LabeledDropdown("Existing markets", markets, null, { mk = it }, Modifier.fillMaxWidth(), StatsAccent)
+                    }
+                    // markets the app understands that have no record in the file yet (e.g. Team Corners Under 6.5 Home)
+                    val have = markets.map { it.trim().lowercase(Locale.ROOT) }.toSet()
+                    val notYet = MARKET_NAMES.filter { it.lowercase(Locale.ROOT) !in have }
+                    if (notYet.isNotEmpty()) {
+                        LabeledDropdown("Markets with no record yet", notYet, null, { mk = it }, Modifier.fillMaxWidth(), StatsAccent)
                     }
                     OutlinedTextField(value = mk, onValueChange = { mk = it }, singleLine = true,
                         label = { Text("Market (pick above or type a new one)") }, colors = inputColors(), modifier = Modifier.fillMaxWidth())
