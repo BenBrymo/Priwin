@@ -54,8 +54,6 @@ object StatsEngine {
     private const val MIN_MARKET_EDGE = 0.03
     private const val ONE_TEAM_FACTOR = 0.6
     private const val HALF = 0.5
-    /** A stat from the other venue (a Home stat for an away game) still counts, but much less. */
-    private const val OFF_VENUE_FACTOR = 0.4
 
     // ---- market names ----------------------------------------------------------------------
 
@@ -142,7 +140,7 @@ object StatsEngine {
 
     // ---- per-team stats --------------------------------------------------------------------
 
-    private class Stat(val row: StatRow, val scope: Scope, val metric: Metric, val offVenue: Boolean = false) {
+    private class Stat(val row: StatRow, val scope: Scope, val metric: Metric) {
         val base = baseline(metric, scope)
         val rate: Double = run {
             val r = if (row.games > 0) row.value / row.games else (row.percent ?: 0.0) / 100.0
@@ -150,8 +148,7 @@ object StatsEngine {
         }
         val shrunk: Double = run {
             val g = (if (row.games > 0) row.games else ASSUMED_GAMES_WHEN_MISSING).toDouble()
-            val s = (rate * g + base * SHRINK_GAMES) / (g + SHRINK_GAMES)
-            if (offVenue) base + (s - base) * OFF_VENUE_FACTOR else s
+            (rate * g + base * SHRINK_GAMES) / (g + SHRINK_GAMES)
         }
         /** 0 = at baseline (or worse), 1 = perfect. */
         val edge: Double = max(0.0, (shrunk - base) / (1.0 - base))
@@ -173,14 +170,12 @@ object StatsEngine {
         }
 
         /**
-         * Preferred scope first (e.g. HOME for the home team), then the Total market, then, as a weak
-         * last resort, the other venue's stat, so a team with any data still contributes something.
+         * The team's own venue first (HOME for the home team, AWAY for the away team), then the Total market.
+         * The other venue's stat is never borrowed: how a team plays at home says nothing about how it plays away.
          */
         fun get(metric: Metric, preferred: Scope): Stat? {
             byKey[preferred to metric]?.let { return it }
-            byKey[Scope.TOTAL to metric]?.let { return it }
-            val other = when (preferred) { Scope.HOME -> Scope.AWAY; Scope.AWAY -> Scope.HOME; Scope.TOTAL -> return null }
-            return byKey[other to metric]?.let { Stat(it.row, it.scope, it.metric, offVenue = true) }
+            return byKey[Scope.TOTAL to metric]
         }
     }
 
@@ -249,8 +244,10 @@ object StatsEngine {
         val seen = HashSet<String>()
         fun record(team: String, s: Stat, supports: String) {
             if (!seen.add("$team|${s.row.market}|$supports")) return
-            val note = if (s.offVenue) " (other-venue stat, reduced weight)" else ""
-            signals.add(StatSignal(team, s.row.market, s.row.season, s.row.value, s.row.games, s.rate * 100, supports + note))
+            // say which side the team is playing, and flag a Total row used because it has no row for its own venue
+            val role = if (team == home) "home" else "away"
+            val note = if (s.scope == Scope.TOTAL) " (Total stat)" else ""
+            signals.add(StatSignal("$team ($role)", s.row.market, s.row.season, s.row.value, s.row.games, s.rate * 100, supports + note))
         }
 
         // ---- 1X2 ----

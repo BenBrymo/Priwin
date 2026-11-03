@@ -45,12 +45,10 @@ object StatsUpdater {
         return out
     }
 
-    /** Same fallback order the model uses: the preferred venue, then Total, then the other venue. */
+    /** Same order the model uses: the team's own venue, then Total. The other venue's row is never ticked. */
     private fun forMetric(rows: List<StatRow>, metric: Metric, preferred: Scope): StatRow? {
         best(rows, preferred, metric)?.let { return it }
-        best(rows, Scope.TOTAL, metric)?.let { return it }
-        val other = when (preferred) { Scope.HOME -> Scope.AWAY; Scope.AWAY -> Scope.HOME; Scope.TOTAL -> return null }
-        return best(rows, other, metric)
+        return best(rows, Scope.TOTAL, metric)
     }
 
     private fun teamRows(team: String, all: List<StatRow>, names: List<String>): List<StatRow> {
