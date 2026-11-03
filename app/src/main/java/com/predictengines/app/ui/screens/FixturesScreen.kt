@@ -332,7 +332,7 @@ private fun TopPickCard(
             }
         } else {
             CountdownChip(tp.date, tp.time)
-            KryptoBadges(tp.flags, Modifier.padding(top = 6.dp))
+            KryptoBadges(Kryptonites.relevant(tp.flags, tp.pick.group), Modifier.padding(top = 6.dp))
         }
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {

@@ -82,7 +82,7 @@ object TopPicksEngine {
         upcoming: List<TopPick>, played: List<TopPick>, limit: Int = DEFAULT_LIMIT,
         modes: Map<String, KryptoMode> = emptyMap()
     ): List<TopPick> {
-        val strongestFirst = compareBy<TopPick> { Kryptonites.effect(it.flags, modes) == KryptoMode.BOTTOM }
+        val strongestFirst = compareBy<TopPick> { Kryptonites.effect(it.flags, modes, it.pick.group) == KryptoMode.BOTTOM }
             .thenByDescending { it.pick.strength }
             .thenByDescending { it.pick.backers.size }
             .thenBy { DateUtils.sortKey(it.date, it.time) }
@@ -105,7 +105,7 @@ object TopPicksEngine {
     fun heldBack(all: List<TopPick>, shown: List<TopPick>, limit: Int = DEFAULT_LIMIT): List<TopPick> {
         fun id(t: TopPick) = "${t.leagueId}|${t.date}|${t.home}|${t.away}|${t.pick.key}"
         val shownIds = shown.mapTo(HashSet()) { id(it) }
-        return rank(all, limit, emptyMap()).filter { id(it) !in shownIds && it.flags.isNotEmpty() }
+        return rank(all, limit, emptyMap()).filter { id(it) !in shownIds && Kryptonites.relevant(it.flags, it.pick.group).isNotEmpty() }
     }
 
     /**
@@ -113,11 +113,11 @@ object TopPicksEngine {
      * inside a week the strongest comes first (more backers, then earlier kickoff, break ties).
      */
     fun rank(all: List<TopPick>, limit: Int = DEFAULT_LIMIT, modes: Map<String, KryptoMode> = emptyMap()): List<TopPick> {
-        val strongestFirst = compareBy<TopPick> { Kryptonites.effect(it.flags, modes) == KryptoMode.BOTTOM }
+        val strongestFirst = compareBy<TopPick> { Kryptonites.effect(it.flags, modes, it.pick.group) == KryptoMode.BOTTOM }
             .thenByDescending { it.pick.strength }
             .thenByDescending { it.pick.backers.size }
             .thenBy { DateUtils.sortKey(it.date, it.time) }
-        return all.filter { Kryptonites.effect(it.flags, modes) != KryptoMode.HIDE }.groupBy { ReportBuilder.weekStartOf(it.date) }
+        return all.filter { Kryptonites.effect(it.flags, modes, it.pick.group) != KryptoMode.HIDE }.groupBy { ReportBuilder.weekStartOf(it.date) }
             .entries.sortedBy { it.key?.toEpochDay() ?: Long.MAX_VALUE }
             .flatMap { (_, picks) -> picks.sortedWith(strongestFirst).take(limit) }
     }

@@ -84,6 +84,9 @@ fun DataScreen(
     onHideLeague: (League) -> Unit,
     onResetLeague: (League) -> Unit,
     onSetKryptoMode: (String, KryptoMode) -> Unit,
+    onSetKryptoParam: (String, String, Int) -> Unit,
+    onSetKryptoMarkets: (String, Set<String>) -> Unit,
+    onResetKryptoRule: (com.predictengines.app.data.KryptoRule) -> Unit,
     onShowLeague: (League) -> Unit,
     onUnlink: (NameLink) -> Unit,
     onExportMatches: (Uri) -> Unit,
@@ -268,27 +271,10 @@ fun DataScreen(
 
         AppCard(
             title = "Kryptonites",
-            subtitle = "Rules that watch teams' results and flag their fixtures and picks. Choose what each one does.",
+            subtitle = "Rules that watch teams' results and flag their fixtures and picks. Open a group to change a rule's numbers, the pick types it counts for, and what it does.",
             accentColor = LossRed
         ) {
-            Kryptonites.RULES.forEach { rule ->
-                Text(rule.name, style = MaterialTheme.typography.titleSmall, color = TextPrimary)
-                Text(rule.description, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-                Spacer(Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    KryptoMode.entries.forEach { m ->
-                        PillChip(
-                            text = m.label,
-                            selected = (state.kryptoModes[rule.id] ?: KryptoMode.WARN) == m,
-                            onClick = { onSetKryptoMode(rule.id, m) }
-                        )
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-            }
+            KryptoSettings(state, onSetKryptoMode, onSetKryptoParam, onSetKryptoMarkets, onResetKryptoRule)
         }
 
         ReminderCard()

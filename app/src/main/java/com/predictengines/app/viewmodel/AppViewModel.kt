@@ -69,6 +69,7 @@ data class AppUiState(
     val duplicateLeagues: List<League> = emptyList(),
     /** What each Kryptonite does to flagged fixtures and picks (rule id -> mode). */
     val kryptoModes: Map<String, KryptoMode> = emptyMap(),
+    val kryptoConfig: com.predictengines.app.data.KryptoConfig = com.predictengines.app.data.KryptoConfig(),
     val players: List<KeyPlayer> = emptyList(),
     val answeredReds: Set<String> = emptySet(),
     val pendingReds: List<RedEvent> = emptyList(),
@@ -210,7 +211,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // The user's name links must be in place before any file is read, so every file sees the same names.
         val links = linksStore.load()
         TeamMatcher.setUserLinks(links.map { it.a to it.b })
-        _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, leagues = leagues, kryptoModes = repo.kryptoModes(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
+        _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
         val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
         selectLeague(start.id)
     }
@@ -411,7 +412,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 tp.pick.key, tp.pick.label, tp.pick.group, tp.time,
                 tp.homeDisplay, tp.awayDisplay, tp.pick.strength,
                 tp.pick.backers.map { it.model to it.confidence }, tp.pick.modelCount,
-                tp.flags.map { f -> f.ruleId }.distinct()
+                com.predictengines.app.data.Kryptonites.relevant(tp.flags, tp.pick.group).map { f -> f.ruleId }.distinct()
             )
         }
         val hide = PerformanceReport.HIDDEN_SUFFIX
@@ -793,6 +794,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         postMessage("Kryptonite set to: ${mode.label}")
     }
 
+    /** Re-reads the Kryptonite numbers and pick types, and rebuilds the flags when numbers changed. */
+    private fun kryptoConfigChanged(numbersChanged: Boolean) {
+        _state.update { it.copy(kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig()) }
+        if (numbersChanged) afterPlayersChanged() else { topCache = null; refreshTopPicks() }
+    }
+
+    fun setKryptoParam(ruleId: String, key: String, value: Int) {
+        repo.setKryptoParam(ruleId, key, value)
+        kryptoConfigChanged(true)
+    }
+
+    fun setKryptoMarkets(ruleId: String, markets: Set<String>) {
+        repo.setKryptoMarkets(ruleId, markets)
+        kryptoConfigChanged(false)
+    }
+
+    fun resetKryptoRule(rule: com.predictengines.app.data.KryptoRule) {
+        repo.resetKryptoRule(rule)
+        kryptoConfigChanged(true)
+        postMessage("${rule.name} set back to its defaults")
+    }
+
     /** Takes back stats changes that were counted twice for one game. */
     fun repairStatsChanges() {
         viewModelScope.launch {
@@ -1075,7 +1098,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val extras = withContext(Dispatchers.IO) { extrasStore.loadExtras() }
                     savedPlayers = withContext(Dispatchers.IO) { playersStore.load() }
                     invalidateCache()
-                    _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, leagues = leagues, kryptoModes = repo.kryptoModes(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = marks, nameLinks = links, extras = extras, autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
+                    _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = marks, nameLinks = links, extras = extras, autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
                     val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
                     selectLeague(start.id)
                     postMessage("Backup restored (${result.files} files)")

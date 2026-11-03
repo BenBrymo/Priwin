@@ -91,6 +91,37 @@ class LeagueRepository(context: Context) {
         prefs.edit().putString("krypto_$ruleId", mode.name).apply()
     }
 
+    /** The user's changed numbers and pick types (anything not changed uses the default in [Kryptonites.RULES]). */
+    fun loadKryptoConfig(): KryptoConfig {
+        val params = HashMap<String, Int>()
+        val markets = HashMap<String, Set<String>>()
+        for (r in Kryptonites.RULES) {
+            for (q in r.params) prefs.getString("krypto_p_${r.id}_${q.key}", null)?.toIntOrNull()?.let { params["${r.id}.${q.key}"] = it.coerceIn(q.min, q.max) }
+            prefs.getString("krypto_m_${r.id}", null)?.let { s ->
+                markets[r.id] = s.split(',').filter { it in Kryptonites.MARKETS }.toSet()
+            }
+        }
+        return KryptoConfig(params, markets).also { Kryptonites.config = it }
+    }
+
+    fun setKryptoParam(ruleId: String, key: String, value: Int?) {
+        val k = "krypto_p_${ruleId}_$key"
+        prefs.edit().apply { if (value == null) remove(k) else putString(k, value.toString()) }.apply()
+    }
+
+    fun setKryptoMarkets(ruleId: String, markets: Set<String>?) {
+        val k = "krypto_m_$ruleId"
+        prefs.edit().apply { if (markets == null) remove(k) else putString(k, markets.joinToString(",")) }.apply()
+    }
+
+    /** Puts one rule back to its default numbers, pick types and mode. */
+    fun resetKryptoRule(rule: KryptoRule) {
+        val e = prefs.edit()
+        e.remove("krypto_${rule.id}"); e.remove("krypto_m_${rule.id}")
+        rule.params.forEach { e.remove("krypto_p_${rule.id}_${it.key}") }
+        e.apply()
+    }
+
     fun hideLeague(league: League) {
         prefs.edit().putString(KEY_HIDDEN, (hiddenIds() + league.id).joinToString("\n")).apply()
     }
@@ -268,7 +299,7 @@ class LeagueRepository(context: Context) {
             "v$CACHE_VERSION", installed.toString(), league.assetFile.orEmpty(),
             stamp(File(dir, "matches.csv")), stamp(File(dir, "fixtures.csv")), stamp(File(dir, "added_results.csv")),
             stamp(statsFile), stamp(deletedFile), stamp(ledgerFile),
-            stamp(File(appContext.filesDir, "name_links.json"))
+            stamp(File(appContext.filesDir, "name_links.json")), "kc" + Kryptonites.config.paramStamp()
         ).joinToString("|")
     }
 
@@ -719,7 +750,7 @@ class LeagueRepository(context: Context) {
         const val KEY_AUTO_SETTLE = "auto_settle_from"
         const val KEY_STATS_INFO = "info_stats"
         const val BUILT_IN_STATS = "stats/statschecker_2026_2027.csv"
-        const val CACHE_VERSION = 15
+        const val CACHE_VERSION = 16
         const val MAX_FILE_BYTES = 20 * 1024 * 1024
     }
 }
