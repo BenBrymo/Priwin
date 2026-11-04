@@ -12,7 +12,7 @@ import kotlin.math.sqrt
 object PerformanceReport {
 
     const val ALL_LISTS = "All lists"
-    val LISTS = listOf("Top 20", "Handicap", "Over 1.5")
+    val LISTS = listOf("Top 20", "Handicap", "Over 1.5", "Loki")
 
     enum class Window(val label: String) {
         ALL("All time"), SEASON("This season"), WEEKS12("Last 12 weeks"), WEEKS4("Last 4 weeks")
@@ -84,7 +84,9 @@ object PerformanceReport {
         val backers: Int,
         val modelCount: Int,
         /** True for a pick a Kryptonite kept off the list (it is judged, but not counted as a list pick). */
-        val hidden: Boolean
+        val hidden: Boolean,
+        /** For Loki picks: the names of the Lokis that made it. */
+        val tags: List<String> = emptyList()
     )
 
     /** One Kryptonite rule: picks that carried its flag against picks that did not (among picks whose flags were recorded). */
@@ -101,7 +103,9 @@ object PerformanceReport {
         val agreement: List<Row>,
         /** Picks with at least one flag, with none, with no flag information, and picks a Kryptonite hid. */
         val flagged: Tally, val clean: Tally, val unknown: Tally, val hidden: Tally,
-        val rules: List<RuleRow>
+        val rules: List<RuleRow>,
+        /** For Loki picks: how each Loki did (a pick made by two Lokis counts for both). */
+        val tags: List<Row> = emptyList()
     )
 
     private fun ordered(rows: List<Row>): List<Row> =
@@ -199,7 +203,10 @@ object PerformanceReport {
             SourceReport(
                 src, tally(recs), leagues, markets, confidence, agreement,
                 tally(flaggedRecs), tally(known.filter { flagsOf(it).isEmpty() }),
-                tally(recs.filter { meta[it.id]?.krypto == null }), tally(hiddenRecs), rules
+                tally(recs.filter { meta[it.id]?.krypto == null }), tally(hiddenRecs), rules,
+                recs.flatMap { r -> meta[r.id]?.tags.orEmpty().map { it to r } }.groupBy({ it.first }, { it.second })
+                    .map { (n, x) -> tally(x).let { Row(n, it, verdict(it, MIN_BAND)) } }
+                    .sortedWith(compareBy<Row> { it.verdict == Verdict.FEW }.thenByDescending { it.tally.adjusted }.thenBy { it.name })
             )
         }
     }

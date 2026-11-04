@@ -114,6 +114,8 @@ data class AppUiState(
     val listEntries: List<ListPicksStore.Entry> = emptyList(),
     val handicapPicks: List<TopPick> = emptyList(),
     val over15Picks: List<TopPick> = emptyList(),
+    val lokiPicks: List<TopPick> = emptyList(),
+    val lokiConfig: com.predictengines.app.data.LokiConfig = com.predictengines.app.data.LokiConfig(),
 
     /** Corners / cards / first scorer the user typed in for played games, keyed by fixture. */
     val extras: Map<String, MatchExtras> = emptyMap(),
@@ -169,6 +171,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var topCache: List<TopPick>? = null
     private var handicapCache: List<TopPick> = emptyList()
     private var over15Cache: List<TopPick> = emptyList()
+    private var lokiCache: List<TopPick> = emptyList()
     private var missingCache: Map<String, Int> = emptyMap()
 
     private fun invalidateCache() {
@@ -221,7 +224,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // The user's name links must be in place before any file is read, so every file sees the same names.
         val links = linksStore.load()
         TeamMatcher.setUserLinks(links.map { it.a to it.b })
-        _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, news = savedPlayers.news, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
+        _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, news = savedPlayers.news, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), lokiConfig = repo.loadLokiConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
         val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
         selectLeague(start.id)
     }
@@ -316,6 +319,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 it.copy(
                     topPicks = lists.first, topPicksLoading = false,
                     handicapPicks = lists.second, over15Picks = lists.third,
+                    lokiPicks = composeLoki(lokiCache),
                     missingByLeague = missingCache
                 )
             }
@@ -327,10 +331,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val leagues = _state.value.leagues
             val gen = cacheGen.get()
             var held = Triple<List<TopPick>, List<TopPick>, List<TopPick>>(emptyList(), emptyList(), emptyList())
+            var loki = emptyList<TopPick>()
             val top = withContext(Dispatchers.Default) {
                 val all = ArrayList<TopPick>()
                 val hcp = ArrayList<TopPick>()
                 val o15 = ArrayList<TopPick>()
+                val lk = ArrayList<TopPick>()
                 val missing = HashMap<String, Int>()
                 for ((li, league) in leagues.withIndex()) {
                     try {
@@ -343,6 +349,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         all += TopPicksEngine.candidates(league, data.fixtures)
                         hcp += TopPicksEngine.handicapCandidates(league, data.fixtures)
                         o15 += TopPicksEngine.over15Candidates(league, data.fixtures)
+                        lk += TopPicksEngine.lokiCandidates(league, data.fixtures, data.matches)
                     } catch (e: Exception) {
                         // one unreadable league must not hide the others
                     }
@@ -354,16 +361,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 held = Triple(
                     TopPicksEngine.heldBack(all, shown.first), TopPicksEngine.heldBack(hcp, shown.second), TopPicksEngine.heldBack(o15, shown.third)
                 )
+                // Loki ignores the Kryptonite Hide / Push-down switches: it needs the flagged fixtures
+                loki = TopPicksEngine.rank(lk)
                 shown
             }
-            withContext(Dispatchers.IO) { recordListPicks(top.first, top.second, top.third, held) }
+            withContext(Dispatchers.IO) { recordListPicks(top.first, top.second, top.third, held, loki) }
             if (gen == cacheGen.get()) {
-                topCache = top.first; handicapCache = top.second; over15Cache = top.third
+                topCache = top.first; handicapCache = top.second; over15Cache = top.third; lokiCache = loki
             }
             val lists = withContext(Dispatchers.IO) { composeLists(top.first, top.second, top.third) }
+            val lokiShown = withContext(Dispatchers.IO) { composeLoki(loki) }
             _state.update {
                 it.copy(
-                    topPicks = lists.first, handicapPicks = lists.second, over15Picks = lists.third,
+                    topPicks = lists.first, handicapPicks = lists.second, over15Picks = lists.third, lokiPicks = lokiShown,
                     missingByLeague = missingCache, topPicksLoading = false
                 )
             }
@@ -376,12 +386,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * list's usual 20 upcoming-plus-played picks.
      */
     private fun composeLists(top: List<TopPick>, hcp: List<TopPick>, o15: List<TopPick>): Triple<List<TopPick>, List<TopPick>, List<TopPick>> {
+        fun merge(source: String, upcoming: List<TopPick>) = mergePlayed(source, upcoming, perGame = true)
+        return Triple(
+            merge(ListPicksStore.TOP, top), merge(ListPicksStore.HANDICAP, hcp), merge(ListPicksStore.OVER15, o15)
+        )
+    }
+
+    /** The Loki list as shown: a game can have several Loki picks, so played ones are kept per pick, not per game. */
+    private fun composeLoki(loki: List<TopPick>): List<TopPick> = mergePlayed(ListPicksStore.LOKI, loki, perGame = false)
+
+    private fun mergePlayed(source: String, upcoming: List<TopPick>, perGame: Boolean): List<TopPick> {
         val visible = _state.value.leagues.map { it.id }.toSet()
         val played = listPicks.load().values.filter { it.leagueId in visible && DateUtils.isPlayed(it.date, it.time) }
-        fun merge(source: String, upcoming: List<TopPick>): List<TopPick> {
-            // one pick per game: the one that first made the list
-            val past = played.filter { it.source == source }
-                .distinctBy { "${it.leagueId}|${it.date}|${it.home}|${it.away}" }.map { e ->
+        // one pick per game: the one that first made the list
+        val past = played.filter { it.source == source }
+                .distinctBy { if (perGame) "${it.leagueId}|${it.date}|${it.home}|${it.away}" else it.id }.map { e ->
                 TopPick(
                     leagueId = e.leagueId, leagueName = e.leagueName, date = e.date, time = e.time,
                     homeDisplay = e.homeDisplay.ifBlank { e.home }, awayDisplay = e.awayDisplay.ifBlank { e.away },
@@ -393,12 +412,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 )
             }
-            val live = upcoming.filter { !DateUtils.isPlayed(it.date, it.time) }
-            return TopPicksEngine.withPlayed(live, past, modes = _state.value.kryptoModes)
-        }
-        return Triple(
-            merge(ListPicksStore.TOP, top), merge(ListPicksStore.HANDICAP, hcp), merge(ListPicksStore.OVER15, o15)
-        )
+        val live = upcoming.filter { !DateUtils.isPlayed(it.date, it.time) }
+        return TopPicksEngine.withPlayed(live, past, modes = if (source == ListPicksStore.LOKI) emptyMap() else _state.value.kryptoModes)
     }
 
     /** Played games of a league that have no score in the matches file or among your entries. */
@@ -416,7 +431,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Writes down the picks on the three weekly lists, so they can be settled and reported after their games. */
     private fun recordListPicks(
         top: List<TopPick>, hcp: List<TopPick>, o15: List<TopPick>,
-        held: Triple<List<TopPick>, List<TopPick>, List<TopPick>> = Triple(emptyList(), emptyList(), emptyList())
+        held: Triple<List<TopPick>, List<TopPick>, List<TopPick>> = Triple(emptyList(), emptyList(), emptyList()),
+        loki: List<TopPick> = emptyList()
     ) {
         fun entries(source: String, list: List<TopPick>) = list.map { tp ->
             ListPicksStore.Entry(
@@ -431,7 +447,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         listPicks.add(
             entries(ListPicksStore.TOP, top) + entries(ListPicksStore.HANDICAP, hcp) + entries(ListPicksStore.OVER15, o15) +
                 entries(ListPicksStore.TOP + hide, held.first) + entries(ListPicksStore.HANDICAP + hide, held.second) +
-                entries(ListPicksStore.OVER15 + hide, held.third)
+                entries(ListPicksStore.OVER15 + hide, held.third) + entries(ListPicksStore.LOKI, loki)
         )
         _state.update { it.copy(listEntries = listPicks.load().values.toList()) }
     }
@@ -827,6 +843,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         postMessage("Kryptonite set to: ${mode.label}")
     }
 
+    fun setLokiOn(id: String, on: Boolean) {
+        repo.setLokiOn(id, on)
+        _state.update { it.copy(lokiConfig = repo.loadLokiConfig()) }
+        topCache = null
+        refreshTopPicks()
+    }
+
+    fun setLokiParam(id: String, value: Int) {
+        repo.setLokiParam(id, value)
+        _state.update { it.copy(lokiConfig = repo.loadLokiConfig()) }
+        topCache = null
+        refreshTopPicks()
+    }
+
     /** Re-reads the Kryptonite numbers and pick types, and rebuilds the flags when numbers changed. */
     private fun kryptoConfigChanged(numbersChanged: Boolean) {
         _state.update { it.copy(kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig()) }
@@ -1131,7 +1161,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val extras = withContext(Dispatchers.IO) { extrasStore.loadExtras() }
                     savedPlayers = withContext(Dispatchers.IO) { playersStore.load() }
                     invalidateCache()
-                    _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, news = savedPlayers.news, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = marks, nameLinks = links, extras = extras, autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
+                    _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, news = savedPlayers.news, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), lokiConfig = repo.loadLokiConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = marks, nameLinks = links, extras = extras, autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
                     val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
                     selectLeague(start.id)
                     postMessage("Backup restored (${result.files} files)")

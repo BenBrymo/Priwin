@@ -60,7 +60,7 @@ private fun tallyText(t: Tally): String =
 
 private fun listTitle(s: String) = when (s) {
     "Top 20" -> "Top 20 picks"
-    PerformanceReport.ALL_LISTS -> "All three lists"
+    PerformanceReport.ALL_LISTS -> "All lists"
     else -> s
 }
 
@@ -106,7 +106,10 @@ fun PerformanceCards(state: AppUiState, shownMarks: Map<String, PredictionRecord
         val meta = HashMap<String, PerformanceReport.PickMeta>()
         state.listEntries.forEach { e ->
             val conf = if (e.backers.isEmpty()) null else e.backers.map { b -> b.second }.average()
-            meta[e.id] = PerformanceReport.PickMeta(e.krypto, conf, e.backers.size, e.modelCount, e.source.endsWith(hide))
+            meta[e.id] = PerformanceReport.PickMeta(
+                e.krypto, conf, e.backers.size, e.modelCount, e.source.endsWith(hide),
+                if (e.source == "Loki") e.backers.map { b -> b.first } else emptyList()
+            )
         }
         val today = LocalDate.now()
         Triple(
@@ -197,6 +200,11 @@ fun PerformanceCards(state: AppUiState, shownMarks: Map<String, PredictionRecord
             Spacer(Modifier.height(10.dp))
             Text("By how many models agreed", style = MaterialTheme.typography.labelMedium, color = TextMuted)
             current.agreement.forEach { PerfRow(it) }
+            if (current.tags.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                Text("By Loki (a pick made by two Lokis counts for both)", style = MaterialTheme.typography.labelMedium, color = TextMuted)
+                current.tags.forEach { PerfRow(it) }
+            }
         }
     }
 

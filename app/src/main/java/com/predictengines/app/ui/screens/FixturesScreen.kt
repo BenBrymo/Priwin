@@ -159,6 +159,9 @@ fun FixturesScreen(
             Tab(selected = section == 4, onClick = { section = 4 }, text = {
                 TabLabel("Over 1.5", Countdown.anyToday(state.over15Picks.map { it.date to it.time }, rememberNow()))
             })
+            Tab(selected = section == 5, onClick = { section = 5 }, text = {
+                TabLabel("Loki", Countdown.anyToday(state.lokiPicks.map { it.date to it.time }, rememberNow()))
+            })
         }
         Box(Modifier.weight(1f)) {
             if (section == 0) LeagueFixtures(state, onOpen, onGoToData, onMark, onLink, onSaveScore, onRemoveScore, scoreHints)
@@ -175,6 +178,12 @@ fun FixturesScreen(
                 title = "Over 1.5 goals of each week",
                 subtitle = "best 20 per week across all leagues · backed by Poisson and/or Stats, both backing it first · tap a card to open the analysis",
                 emptyText = "No upcoming games have Poisson or Stats backing Over 1.5 goals yet."
+            )
+            else if (section == 5) TopPicksList(
+                state, onOpenTopPick, picks = state.lokiPicks, prefix = "l", source = "Loki", showBest = false,
+                title = "Loki picks of each week",
+                subtitle = "picks made from Kryptonite flags, e.g. a team that just lost its winning streak: its opponent to win or draw · the Backed-by line names the Loki · tap a card to open the analysis",
+                emptyText = "No upcoming games trigger a Loki yet. Lokis can be switched on and off on the Data tab."
             )
         }
     }

@@ -12,8 +12,8 @@ android {
         applicationId = "com.predictengines.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 46
-        versionName = "7.3"
+        versionCode = 47
+        versionName = "7.4"
 
         vectorDrawables {
             useSupportLibrary = true

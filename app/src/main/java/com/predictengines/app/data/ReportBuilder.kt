@@ -34,7 +34,7 @@ object ReportBuilder {
     private val SOURCE_ORDER = listOf("Consensus", "Brymo", "Poisson", "Stats")
 
     /** The weekly lists repeat picks that are already counted under the models, so they stay out of the totals. */
-    private val LIST_SOURCES = setOf("Top 20", "Handicap", "Over 1.5")
+    private val LIST_SOURCES = setOf("Top 20", "Handicap", "Over 1.5", "Loki")
 
     fun weekStartOf(date: String): LocalDate? =
         DateUtils.parse(date)?.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))

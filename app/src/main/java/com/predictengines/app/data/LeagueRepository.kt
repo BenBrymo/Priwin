@@ -122,6 +122,27 @@ class LeagueRepository(context: Context) {
         e.apply()
     }
 
+    // ---- Loki switches ---------------------------------------------------------------------
+
+    fun loadLokiConfig(): LokiConfig {
+        val off = prefs.getString("loki_off", "").orEmpty().split(',').filter { it.isNotBlank() }.toSet()
+        val params = HashMap<String, Int>()
+        for (r in Lokis.RULES) {
+            val q = r.param ?: continue
+            prefs.getString("loki_p_${r.id}", null)?.toIntOrNull()?.let { params[r.id] = it.coerceIn(q.min, q.max) }
+        }
+        return LokiConfig(off, params).also { Lokis.config = it }
+    }
+
+    fun setLokiOn(id: String, on: Boolean) {
+        val off = prefs.getString("loki_off", "").orEmpty().split(',').filter { it.isNotBlank() }.toSet()
+        prefs.edit().putString("loki_off", (if (on) off - id else off + id).joinToString(",")).apply()
+    }
+
+    fun setLokiParam(id: String, value: Int) {
+        prefs.edit().putString("loki_p_$id", value.toString()).apply()
+    }
+
     fun hideLeague(league: League) {
         prefs.edit().putString(KEY_HIDDEN, (hiddenIds() + league.id).joinToString("\n")).apply()
     }

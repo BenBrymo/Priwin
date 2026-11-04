@@ -87,6 +87,8 @@ fun DataScreen(
     onSetKryptoParam: (String, String, Int) -> Unit,
     onSetKryptoMarkets: (String, Set<String>) -> Unit,
     onResetKryptoRule: (com.predictengines.app.data.KryptoRule) -> Unit,
+    onSetLokiOn: (String, Boolean) -> Unit,
+    onSetLokiParam: (String, Int) -> Unit,
     onShowLeague: (League) -> Unit,
     onUnlink: (NameLink) -> Unit,
     onExportMatches: (Uri) -> Unit,
@@ -275,6 +277,14 @@ fun DataScreen(
             accentColor = LossRed
         ) {
             KryptoSettings(state, onSetKryptoMode, onSetKryptoParam, onSetKryptoMarkets, onResetKryptoRule)
+        }
+
+        AppCard(
+            title = "Lokis",
+            subtitle = "Rules that turn Kryptonite flags into picks. They appear in the Loki tab of Top picks and are judged and reported like the other lists. Lokis ignore your Hide and Push-to-bottom switches.",
+            accentColor = IndigoPrimary
+        ) {
+            LokiSettings(state, onSetLokiOn, onSetLokiParam)
         }
 
         ReminderCard()

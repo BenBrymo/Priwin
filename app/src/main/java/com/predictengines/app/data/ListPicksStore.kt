@@ -104,6 +104,7 @@ class ListPicksStore(context: Context) {
         const val TOP = "Top 20"
         const val HANDICAP = "Handicap"
         const val OVER15 = "Over 1.5"
-        val SOURCES = listOf(TOP, HANDICAP, OVER15)
+        const val LOKI = "Loki"
+        val SOURCES = listOf(TOP, HANDICAP, OVER15, LOKI)
     }
 }

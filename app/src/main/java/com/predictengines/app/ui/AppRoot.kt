@@ -391,6 +391,8 @@ fun AppRoot(vm: AppViewModel) {
                         onSetKryptoParam = vm::setKryptoParam,
                         onSetKryptoMarkets = vm::setKryptoMarkets,
                         onResetKryptoRule = vm::resetKryptoRule,
+                        onSetLokiOn = vm::setLokiOn,
+                        onSetLokiParam = vm::setLokiParam,
                         onShowLeague = vm::showLeague,
                         onUnlink = vm::unlinkNames,
                         onExportMatches = vm::exportMatches,

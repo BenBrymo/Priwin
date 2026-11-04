@@ -51,6 +51,32 @@ object TopPicksEngine {
             )
         }
 
+    /** The Loki picks (see [Lokis]) of each upcoming fixture of one league; a game can have several. */
+    fun lokiCandidates(
+        league: League, items: List<FixtureItem>, matches: List<com.predictengines.app.data.Match>,
+        now: LocalDateTime = LocalDateTime.now()
+    ): List<TopPick> =
+        items.flatMap { fx ->
+            val home = fx.home ?: return@flatMap emptyList()
+            val away = fx.away ?: return@flatMap emptyList()
+            if (DateUtils.isPlayed(fx.fixture.date, fx.fixture.time, now)) return@flatMap emptyList()
+            val flags = fx.summary?.flags.orEmpty()
+            com.predictengines.app.data.Lokis.forFixture(home, away, fx.fixture.date, matches, flags).map { lp ->
+                TopPick(
+                    leagueId = league.id, leagueName = league.name,
+                    date = fx.fixture.date, time = fx.fixture.time,
+                    homeDisplay = fx.fixture.homeTeam, awayDisplay = fx.fixture.awayTeam,
+                    home = home, away = away,
+                    pick = ConsensusPick(
+                        key = lp.key, label = lp.label, group = lp.group,
+                        backers = lp.lokis.map { ConsensusVote(it, lp.strength) },
+                        against = emptyList(), abstain = emptyList(), modelCount = lp.lokis.size, strength = lp.strength
+                    ),
+                    flags = flags
+                )
+            }
+        }
+
     /** Brymo's "+2 Handicap Likely" pick (at most one per game), ranked by Brymo's confidence. */
     fun handicapCandidates(league: League, items: List<FixtureItem>, now: LocalDateTime = LocalDateTime.now()): List<TopPick> =
         upcoming(league, items, now) { fx ->
