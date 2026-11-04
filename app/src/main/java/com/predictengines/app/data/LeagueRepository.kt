@@ -132,6 +132,17 @@ class LeagueRepository(context: Context) {
         e.apply()
     }
 
+    /** The last known count of played games without a result, per league (shown at once on the next start). */
+    fun loadMissingCounts(): Map<String, Int> =
+        prefs.getString("missing_counts", "").orEmpty().split('\n').mapNotNull { line ->
+            val i = line.lastIndexOf('=')
+            if (i <= 0) null else line.substring(i + 1).toIntOrNull()?.let { line.substring(0, i) to it }
+        }.toMap()
+
+    fun saveMissingCounts(counts: Map<String, Int>) {
+        prefs.edit().putString("missing_counts", counts.entries.joinToString("\n") { "${it.key}=${it.value}" }).apply()
+    }
+
     // ---- Loki switches ---------------------------------------------------------------------
 
     fun loadLokiConfig(): LokiConfig {

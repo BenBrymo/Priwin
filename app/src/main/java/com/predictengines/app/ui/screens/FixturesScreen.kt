@@ -132,21 +132,9 @@ fun FixturesScreen(
                 val waiting = missingResults(state).size
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Results")
-                    if (waiting > 0) {
+                    if (waiting > 0 || state.isLoading) {
                         Spacer(Modifier.width(6.dp))
-                        Box(
-                            modifier = Modifier
-                                .defaultMinSize(minWidth = 18.dp, minHeight = 18.dp)
-                                .clip(CircleShape)
-                                .background(WinGreen)
-                                .padding(horizontal = 5.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                if (waiting > 99) "99+" else waiting.toString(),
-                                style = MaterialTheme.typography.labelSmall, color = Color.Black, maxLines = 1
-                            )
-                        }
+                        com.predictengines.app.ui.components.ResultBadge(count = waiting, checking = state.isLoading)
                     }
                 }
             })

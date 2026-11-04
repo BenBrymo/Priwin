@@ -304,23 +304,10 @@ fun AppRoot(vm: AppViewModel) {
                                 selected = league.id == state.selected?.id,
                                 onClick = { vm.selectLeague(league.id) }
                             )
-                            if (n > 0) {
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .offset(x = 6.dp, y = (-6).dp)
-                                        .defaultMinSize(minWidth = 18.dp, minHeight = 18.dp)
-                                        .clip(CircleShape)
-                                        .background(WinGreen)
-                                        .padding(horizontal = 5.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        if (n > 99) "99+" else n.toString(),
-                                        style = MaterialTheme.typography.labelSmall, color = Color.Black, maxLines = 1
-                                    )
-                                }
-                            }
+                            com.predictengines.app.ui.components.ResultBadge(
+                                count = n, checking = league.id in state.missingChecking,
+                                modifier = Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-6).dp)
+                            )
                         }
                     }
                 }

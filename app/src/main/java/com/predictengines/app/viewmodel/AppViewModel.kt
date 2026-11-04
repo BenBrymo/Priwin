@@ -56,6 +56,8 @@ import com.predictengines.app.engine.StatsEngine
 import com.predictengines.app.engine.TeamStatsEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -110,6 +112,8 @@ data class AppUiState(
     /** Brymo's best handicap picks and the best "Over 1.5 goals" picks, best 20 per week across all leagues. */
     /** Played games with no score, per league id (from every league's loaded data). */
     val missingByLeague: Map<String, Int> = emptyMap(),
+    /** Leagues whose count of played games without a result is being worked out right now. */
+    val missingChecking: Set<String> = emptySet(),
     /** Picks that were on the weekly lists (Top 20 / Handicap / Over 1.5), settled or still waiting. */
     val listEntries: List<ListPicksStore.Entry> = emptyList(),
     val handicapPicks: List<TopPick> = emptyList(),
@@ -225,8 +229,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val links = linksStore.load()
         TeamMatcher.setUserLinks(links.map { it.a to it.b })
         _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, news = savedPlayers.news, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), lokiConfig = repo.loadLokiConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
+        // the last known counts show at once; they are refreshed straight away, without scoring anything
+        _state.update { it.copy(missingByLeague = repo.loadMissingCounts().filterKeys { id -> leagues.any { l -> l.id == id } }) }
         val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
         selectLeague(start.id)
+        refreshMissing()
     }
 
     // ---- league selection & loading --------------------------------------------------------
@@ -288,6 +295,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             refreshReds()
+            refreshMissing(league)
             refreshTopPicks()
             autoSettleLoaded(league)
         }
@@ -414,6 +422,39 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         val live = upcoming.filter { !DateUtils.isPlayed(it.date, it.time) }
         return TopPicksEngine.withPlayed(live, past, modes = if (source == ListPicksStore.LOKI) emptyMap() else _state.value.kryptoModes)
+    }
+
+    /**
+     * Counts, for each league (or just [only]), the played games that have no result yet, from the fixtures and results
+     * files alone (no predictions), all leagues at the same time. The counts are kept for the next start.
+     */
+    private fun refreshMissing(only: League? = null) {
+        val leagues = if (only != null) listOf(only) else _state.value.leagues
+        if (leagues.isEmpty()) return
+        viewModelScope.launch {
+            _state.update { it.copy(missingChecking = it.missingChecking + leagues.map { l -> l.id }) }
+            val counts = withContext(Dispatchers.IO) {
+                leagues.map { l -> async { l.id to runCatching { countMissingFor(l) }.getOrDefault(0) } }.awaitAll().toMap()
+            }
+            _state.update { it.copy(missingByLeague = it.missingByLeague + counts, missingChecking = it.missingChecking - counts.keys) }
+            withContext(Dispatchers.IO) { repo.saveMissingCounts(_state.value.missingByLeague) }
+        }
+    }
+
+    private fun countMissingFor(league: League): Int {
+        val fixtures = repo.loadFixtures(league)
+        if (fixtures.isEmpty()) return 0
+        val played = repo.loadMatches(league)
+        if (played.isEmpty()) return 0
+        val teams = played.flatMap { listOf(it.homeTeam, it.awayTeam) }.distinct().sorted()
+        val known = played.mapTo(HashSet()) { scoreKey(it.date, it.homeTeam, it.awayTeam) }
+        val now = java.time.LocalDateTime.now()
+        return fixtures.count { f ->
+            val h = TeamMatcher.resolve(f.homeTeam, teams)
+            val a = TeamMatcher.resolve(f.awayTeam, teams)
+            h != null && a != null && f.date.isNotBlank() && DateUtils.isPlayed(f.date, f.time, now) &&
+                scoreKey(f.date, h, a) !in known
+        }
     }
 
     /** Played games of a league that have no score in the matches file or among your entries. */
