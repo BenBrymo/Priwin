@@ -74,7 +74,7 @@ class LeagueDiskCache(context: Context) {
             .put("a", fx.away ?: JSONObject.NULL)
         val c = fx.summary?.consensus
         fx.summary?.flags?.takeIf { it.isNotEmpty() }?.let { fl ->
-            o.put("kf", arr(fl) { x -> JSONArray().put(x.ruleId).put(x.team).put(x.text).put(x.playerId) })
+            o.put("kf", arr(fl) { x -> JSONArray().put(x.ruleId).put(x.team).put(x.text).put(x.playerId).put(x.since) })
         }
         fx.summary?.handicap?.let { o.put("hcp", JSONArray().put(it.label).put(it.confidencePercent)) }
         fx.summary?.over15?.takeIf { it.isNotEmpty() }?.let { v ->
@@ -145,7 +145,7 @@ class LeagueDiskCache(context: Context) {
                     f.optJSONArray("hcp")?.let { Prediction(it.getString(0), it.getDouble(1)) },
                     f.optJSONArray("o15")?.let { a -> list(a) { x -> (x as JSONArray).let { ConsensusVote(it.getString(0), it.getDouble(1)) } } }
                         ?: emptyList(),
-                    f.optJSONArray("kf")?.let { a -> list(a) { x -> (x as JSONArray).let { KryptoFlag(it.getString(0), it.getString(1), it.getString(2), it.optString(3, "")) } } }
+                    f.optJSONArray("kf")?.let { a -> list(a) { x -> (x as JSONArray).let { KryptoFlag(it.getString(0), it.getString(1), it.getString(2), it.optString(3, ""), it.optString(4, "")) } } }
                         ?: emptyList()
                 )
             } else null

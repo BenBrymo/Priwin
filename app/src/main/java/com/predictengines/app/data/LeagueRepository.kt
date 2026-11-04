@@ -101,7 +101,17 @@ class LeagueRepository(context: Context) {
                 markets[r.id] = s.split(',').filter { it in Kryptonites.MARKETS }.toSet()
             }
         }
-        return KryptoConfig(params, markets).also { Kryptonites.config = it }
+        val dismissed = prefs.getString("krypto_dismissed", "").orEmpty().split('\n').filter { it.isNotBlank() }.toSet()
+        return KryptoConfig(params, markets, dismissed).also { Kryptonites.config = it }
+    }
+
+    fun dismissKryptoFlag(key: String) {
+        val now = prefs.getString("krypto_dismissed", "").orEmpty().split('\n').filter { it.isNotBlank() }.toSet()
+        prefs.edit().putString("krypto_dismissed", (now + key).joinToString("\n")).apply()
+    }
+
+    fun clearDismissedFlags() {
+        prefs.edit().remove("krypto_dismissed").apply()
     }
 
     fun setKryptoParam(ruleId: String, key: String, value: Int?) {
@@ -771,7 +781,7 @@ class LeagueRepository(context: Context) {
         const val KEY_AUTO_SETTLE = "auto_settle_from"
         const val KEY_STATS_INFO = "info_stats"
         const val BUILT_IN_STATS = "stats/statschecker_2026_2027.csv"
-        const val CACHE_VERSION = 18
+        const val CACHE_VERSION = 19
         const val MAX_FILE_BYTES = 20 * 1024 * 1024
     }
 }

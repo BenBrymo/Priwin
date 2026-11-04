@@ -1,6 +1,10 @@
 package com.predictengines.app.ui.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import com.predictengines.app.ui.theme.TextSecondary
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,17 +23,29 @@ import com.predictengines.app.ui.theme.LossRed
 /** The key players of every league, so a flag about a player can show that player's picture. */
 val LocalKeyPlayers = staticCompositionLocalOf<List<KeyPlayer>> { emptyList() }
 
+/** Dismisses a flag (the x on it); null where flags cannot be dismissed. */
+val LocalKryptoDismiss = staticCompositionLocalOf<((KryptoFlag) -> Unit)?> { null }
+
 /** The Kryptonite warnings of a fixture or pick: one red tag per flag, with the player's picture when it is about a player. */
 @Composable
 fun KryptoBadges(flags: List<KryptoFlag>, modifier: Modifier = Modifier) {
     if (flags.isEmpty()) return
     val players = LocalKeyPlayers.current
+    val dismiss = LocalKryptoDismiss.current
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Spacer(Modifier.height(2.dp))
         flags.forEach { flag ->
             val player = if (flag.playerId.isBlank()) null else players.firstOrNull { it.id == flag.playerId }
             if (player == null) {
-                TagChip("⚠ Kryptonite · ${flag.text}", LossRed)
+                if (dismiss != null && flag.dismissKey.isNotEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TagChip("⚠ Kryptonite · ${flag.text}", LossRed, Modifier.weight(1f, fill = false))
+                        Text(
+                            "✕", color = TextSecondary,
+                            modifier = Modifier.clickable { dismiss(flag) }.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                } else TagChip("⚠ Kryptonite · ${flag.text}", LossRed)
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     PlayerAvatar(player, 36.dp)

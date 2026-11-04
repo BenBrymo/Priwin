@@ -863,6 +863,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (numbersChanged) afterPlayersChanged() else { topCache = null; refreshTopPicks() }
     }
 
+    /** Takes a flag off its team until the rule triggers again (the next occurrence has a new date). */
+    fun dismissKryptoFlag(flag: com.predictengines.app.data.KryptoFlag) {
+        val key = flag.dismissKey
+        if (key.isEmpty()) return
+        repo.dismissKryptoFlag(key)
+        kryptoConfigChanged(true)
+        postMessage("Flag dismissed")
+    }
+
+    fun restoreDismissedFlags() {
+        repo.clearDismissedFlags()
+        kryptoConfigChanged(true)
+        postMessage("Dismissed flags are back")
+    }
+
     fun setKryptoParam(ruleId: String, key: String, value: Int) {
         repo.setKryptoParam(ruleId, key, value)
         kryptoConfigChanged(true)

@@ -44,8 +44,15 @@ fun KryptoSettings(
     onSetMode: (String, KryptoMode) -> Unit,
     onSetParam: (String, String, Int) -> Unit,
     onSetMarkets: (String, Set<String>) -> Unit,
-    onReset: (KryptoRule) -> Unit
+    onReset: (KryptoRule) -> Unit,
+    onRestoreDismissed: () -> Unit = {}
 ) {
+    val dismissedCount = state.kryptoConfig.dismissed.size
+    if (dismissedCount > 0) {
+        TextButton(onClick = onRestoreDismissed) {
+            Text("Bring back $dismissedCount dismissed ${if (dismissedCount == 1) "flag" else "flags"}", color = IndigoPrimary)
+        }
+    }
     Kryptonites.GROUPS.forEach { group ->
         val rules = Kryptonites.RULES.filter { it.group == group }
         if (rules.isEmpty()) return@forEach
@@ -116,6 +123,10 @@ private fun ParamRow(rule: KryptoRule, q: KryptoParam, value: Int, onSetParam: (
         Column(Modifier.weight(1f)) {
             Text(q.label, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
             if (value != q.default) Text("default ${show(q.default)}", style = MaterialTheme.typography.bodySmall, color = TextMuted)
+        }
+        if (q.isToggle) {
+            androidx.compose.material3.Switch(checked = value == 1, onCheckedChange = { onSetParam(rule.id, q.key, if (it) 1 else 0) })
+            return@Row
         }
         TextButton(onClick = { onSetParam(rule.id, q.key, (value - q.step).coerceAtLeast(q.min)) }, enabled = value > q.min) {
             Text("−", color = IndigoPrimary, style = MaterialTheme.typography.titleLarge)

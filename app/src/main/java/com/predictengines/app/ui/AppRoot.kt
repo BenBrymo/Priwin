@@ -237,7 +237,10 @@ fun AppRoot(vm: AppViewModel) {
         )
     }
 
-    CompositionLocalProvider(LocalKeyPlayers provides state.players) {
+    CompositionLocalProvider(
+        LocalKeyPlayers provides state.players,
+        com.predictengines.app.ui.components.LocalKryptoDismiss provides { f: com.predictengines.app.data.KryptoFlag -> vm.dismissKryptoFlag(f) }
+    ) {
     Scaffold(
         containerColor = DeepSpace,
         snackbarHost = { SnackbarHost(snackbar) },
@@ -391,6 +394,7 @@ fun AppRoot(vm: AppViewModel) {
                         onSetKryptoParam = vm::setKryptoParam,
                         onSetKryptoMarkets = vm::setKryptoMarkets,
                         onResetKryptoRule = vm::resetKryptoRule,
+                        onRestoreDismissed = vm::restoreDismissedFlags,
                         onSetLokiOn = vm::setLokiOn,
                         onSetLokiParam = vm::setLokiParam,
                         onShowLeague = vm::showLeague,

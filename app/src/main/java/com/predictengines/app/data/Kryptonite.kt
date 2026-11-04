@@ -8,13 +8,22 @@ enum class KryptoMode(val label: String) {
 }
 
 /** A warning raised by one Kryptonite for one team. */
-data class KryptoFlag(val ruleId: String, val team: String, val text: String, val playerId: String = "")
+data class KryptoFlag(
+    val ruleId: String, val team: String, val text: String, val playerId: String = "",
+    /** For flags that follow a run of results: the date of the game that raised it (used to dismiss and expire it). */
+    val since: String = ""
+) {
+    /** What a dismissal is remembered by: this rule, this team, this occurrence. Blank for flags that cannot be dismissed. */
+    val dismissKey: String get() = if (since.isBlank()) "" else "$ruleId|$team|$since"
+}
 
 /** One number a rule uses (a streak length, a number of days...), which the user can change. */
 class KryptoParam(
     val key: String, val label: String, val default: Int, val min: Int, val max: Int, val step: Int = 1,
     /** True when the number is a time of day in minutes after midnight (shown as hh:mm). */
-    val isTime: Boolean = false
+    val isTime: Boolean = false,
+    /** True for an on/off switch (0 = off, 1 = on). */
+    val isToggle: Boolean = false
 )
 
 /** One Kryptonite, shown on the Data screen: its group, its numbers, the pick types it applies to, and a description. */
@@ -29,13 +38,17 @@ class KryptoRule(
 )
 
 /** The user's choices: changed numbers ("rule.key" to value) and changed pick-type lists (rule id to types). */
-class KryptoConfig(val params: Map<String, Int> = emptyMap(), val markets: Map<String, Set<String>> = emptyMap()) {
+class KryptoConfig(
+    val params: Map<String, Int> = emptyMap(), val markets: Map<String, Set<String>> = emptyMap(),
+    /** Flags the user dismissed (see [KryptoFlag.dismissKey]). */
+    val dismissed: Set<String> = emptySet()
+) {
     fun param(ruleId: String, key: String): Int =
         params["$ruleId.$key"] ?: Kryptonites.RULES.firstOrNull { it.id == ruleId }?.params?.firstOrNull { it.key == key }?.default ?: 0
     fun marketsOf(ruleId: String): Set<String> =
         markets[ruleId] ?: Kryptonites.RULES.firstOrNull { it.id == ruleId }?.markets ?: emptySet()
     /** Changes when a number changes (flags depend on the numbers, not on the pick types). */
-    fun paramStamp(): String = params.toSortedMap().toString().hashCode().toString()
+    fun paramStamp(): String = (params.toSortedMap().toString() + dismissed.sorted().joinToString("|")).hashCode().toString()
 }
 
 /**
@@ -62,6 +75,7 @@ object Kryptonites {
     const val FORM_SPLIT = "form_split"
     const val MODELS_DISAGREE = "models_disagree"
     const val KEY_PLAYER = "key_player"
+    const val UNBEATEN_ENDED = "unbeaten_ended"
     const val CONGESTION = "congestion"
     const val TEAM_NEWS = "team_news"
 
@@ -81,24 +95,47 @@ object Kryptonites {
     private val RESULT_MARKETS = setOf("1X2", "Double chance", "Handicap / other", "Win to nil", "First to score")
     private val GOAL_MARKETS = setOf("Goals", "Over/Under", "BTTS")
 
+    private fun expiryNote(rule: String): String {
+        val g = p(rule, "xg"); val d = p(rule, "xd")
+        if (g == 0 && d == 0) return " It never expires by itself."
+        val parts = listOfNotNull(if (g > 0) "$g games" else null, if (d > 0) "$d days" else null)
+        return " It also drops by itself after " + parts.joinToString(" or ") + ", whichever comes first. You can dismiss it with the x on the flag."
+    }
+
     private fun plural(n: Int, one: String, many: String) = if (n == 1) one else many
 
     val RULES = listOf(
         KryptoRule(
             STREAK_BREAK, "Winning streak broken", "Form",
-            listOf(KryptoParam("trigger", "Wins in a row before a loss counts", 4, 1, 15), KryptoParam("clear", "Wins in a row to clear it", 3, 1, 10)),
+            listOf(KryptoParam("trigger", "Wins in a row before a loss counts", 3, 1, 15), KryptoParam("clear", "Wins in a row to clear it", 3, 1, 10), KryptoParam("xg", "Drop the flag after this many games (0 = never)", 5, 0, 20), KryptoParam("xd", "Drop the flag after this many days (0 = never)", 30, 0, 180, step = 5)),
             RESULT_MARKETS
         ) {
             "A team that won ${p(STREAK_BREAK, "trigger")} or more games in a row and then loses is flagged. A draw does not flag it. " +
-                "The flag stays until the team wins ${p(STREAK_BREAK, "clear")} in a row again."
+                "The flag stays until the team wins ${p(STREAK_BREAK, "clear")} in a row again." + expiryNote(STREAK_BREAK)
         },
         KryptoRule(
             LOSING_BROKEN, "Losing streak broken", "Form",
-            listOf(KryptoParam("trigger", "Losses in a row before a win counts", 4, 1, 15), KryptoParam("clear", "Wins in a row to clear it", 3, 1, 10)),
+            listOf(
+                KryptoParam("trigger", "Losses in a row before a win counts", 3, 1, 15), KryptoParam("clear", "Games in a row to clear it", 3, 1, 10),
+                KryptoParam("easy", "Clear on games without a loss (off = wins only)", 0, 0, 1, isToggle = true), KryptoParam("xg", "Drop the flag after this many games (0 = never)", 5, 0, 20), KryptoParam("xd", "Drop the flag after this many days (0 = never)", 30, 0, 180, step = 5)
+            ),
             RESULT_MARKETS
         ) {
             "A team that lost ${p(LOSING_BROKEN, "trigger")} or more games in a row and then wins is flagged. A draw does not flag it. " +
-                "The flag stays until the team wins ${p(LOSING_BROKEN, "clear")} more in a row."
+                "The flag stays until the team " + (if (p(LOSING_BROKEN, "easy") == 1) "goes ${p(LOSING_BROKEN, "clear")} games in a row without a loss." else "wins ${p(LOSING_BROKEN, "clear")} more in a row.") +
+                expiryNote(LOSING_BROKEN)
+        },
+        KryptoRule(
+            UNBEATEN_ENDED, "Unbeaten streak ended", "Form",
+            listOf(
+                KryptoParam("trigger", "Games unbeaten (wins or draws) before a loss counts", 5, 2, 20),
+                KryptoParam("clear", "Games in a row without a loss to clear it", 3, 1, 10), KryptoParam("xg", "Drop the flag after this many games (0 = never)", 5, 0, 20), KryptoParam("xd", "Drop the flag after this many days (0 = never)", 30, 0, 180, step = 5)
+            ),
+            RESULT_MARKETS
+        ) {
+            "A team that went ${p(UNBEATEN_ENDED, "trigger")} or more games without losing (wins and draws both count) and then loses is flagged. " +
+                "The flag stays until the team goes ${p(UNBEATEN_ENDED, "clear")} games in a row without a loss. " +
+                "When Winning streak broken flags the same team, only that stronger flag shows." + expiryNote(UNBEATEN_ENDED)
         },
         KryptoRule(
             GOAL_DROUGHT, "Goal drought", "Form",
@@ -130,12 +167,12 @@ object Kryptonites {
             SPREE_COOLING, "Scoring spree cooling", "Form",
             listOf(
                 KryptoParam("run", "Length of the spree that ended", 3, 1, 10), KryptoParam("goals", "Goals scored in each", 3, 1, 8),
-                KryptoParam("back", "Games in a row to clear it", 2, 1, 10)
+                KryptoParam("back", "Games in a row to clear it", 2, 1, 10), KryptoParam("xg", "Drop the flag after this many games (0 = never)", 5, 0, 20), KryptoParam("xd", "Drop the flag after this many days (0 = never)", 30, 0, 180, step = 5)
             ),
             GOAL_MARKETS
         ) {
             "After a scoring spree of ${p(SPREE_COOLING, "run")} or more games ends, the team is flagged because the spree may be over. " +
-                "The flag stays until the team scores ${p(SPREE_COOLING, "goals")} or more in ${p(SPREE_COOLING, "back")} games in a row again."
+                "The flag stays until the team scores ${p(SPREE_COOLING, "goals")} or more in ${p(SPREE_COOLING, "back")} games in a row again." + expiryNote(SPREE_COOLING)
         },
         KryptoRule(
             CLEAN_SHEET_RUN, "Clean-sheet run", "Form",
@@ -146,11 +183,11 @@ object Kryptonites {
         },
         KryptoRule(
             CLEAN_SHEET_BROKEN, "Clean-sheet run broken", "Form",
-            listOf(KryptoParam("run", "Length of the run that ended", 3, 1, 10), KryptoParam("back", "Clean sheets in a row to clear it", 2, 1, 10)),
+            listOf(KryptoParam("run", "Length of the run that ended", 3, 1, 10), KryptoParam("back", "Clean sheets in a row to clear it", 2, 1, 10), KryptoParam("xg", "Drop the flag after this many games (0 = never)", 5, 0, 20), KryptoParam("xd", "Drop the flag after this many days (0 = never)", 30, 0, 180, step = 5)),
             GOAL_MARKETS + "Win to nil"
         ) {
             "After a run of ${p(CLEAN_SHEET_BROKEN, "run")} or more clean sheets ends, the team is flagged. " +
-                "The flag stays until the team keeps ${p(CLEAN_SHEET_BROKEN, "back")} clean sheets in a row again."
+                "The flag stays until the team keeps ${p(CLEAN_SHEET_BROKEN, "back")} clean sheets in a row again." + expiryNote(CLEAN_SHEET_BROKEN)
         },
         KryptoRule(
             FORM_SPLIT, "Home/away form split", "Form",
@@ -246,14 +283,18 @@ object Kryptonites {
         scoringSpree(team, matches)?.let { out.add(it) }
         cleanSheetRun(team, matches)?.let { out.add(it) }
         val sg = p(SPREE_COOLING, "goals")
-        runBroken(
-            team, matches, SPREE_COOLING, p(SPREE_COOLING, "run"), p(SPREE_COOLING, "back"),
-            hit = { m -> (if (m.homeTeam == team) m.homeGoals else m.awayGoals) >= sg },
+        recovery(
+            team, matches, fixtureDate, SPREE_COOLING, p(SPREE_COOLING, "run"), p(SPREE_COOLING, "back"), carry = true,
+            cont = { m -> (if (m.homeTeam == team) m.homeGoals else m.awayGoals) >= sg },
+            brk = { m -> (if (m.homeTeam == team) m.homeGoals else m.awayGoals) < sg },
+            clr = { m -> (if (m.homeTeam == team) m.homeGoals else m.awayGoals) >= sg },
             text = { n, need -> "$team's $n-game scoring spree ended · needs $need more ${plural(need, "game", "games")} of $sg+ goals in a row" }
         )?.let { out.add(it) }
-        runBroken(
-            team, matches, CLEAN_SHEET_BROKEN, p(CLEAN_SHEET_BROKEN, "run"), p(CLEAN_SHEET_BROKEN, "back"),
-            hit = { m -> (if (m.homeTeam == team) m.awayGoals else m.homeGoals) == 0 },
+        recovery(
+            team, matches, fixtureDate, CLEAN_SHEET_BROKEN, p(CLEAN_SHEET_BROKEN, "run"), p(CLEAN_SHEET_BROKEN, "back"), carry = true,
+            cont = { m -> (if (m.homeTeam == team) m.awayGoals else m.homeGoals) == 0 },
+            brk = { m -> (if (m.homeTeam == team) m.awayGoals else m.homeGoals) != 0 },
+            clr = { m -> (if (m.homeTeam == team) m.awayGoals else m.homeGoals) == 0 },
             text = { n, need -> "$team's $n-game clean-sheet run ended · needs $need more ${plural(need, "clean sheet", "clean sheets")} in a row" }
         )?.let { out.add(it) }
         if (atHome != null) formSplit(team, matches, atHome)?.let { out.add(it) }
@@ -265,9 +306,13 @@ object Kryptonites {
         // Congestion is the stronger form of Short rest: when it fires, Short rest is not shown for the same team.
         (congestion(team, matches, fixtureDate) ?: shortRest(team, matches, fixtureDate))?.let { out.add(it) }
         fewGames(team, matches)?.let { out.add(it) }
-        streakBreak(team, matches)?.let { out.add(it) }
-        losingBroken(team, matches)?.let { out.add(it) }
-        return out
+        streakBreak(team, matches, fixtureDate)?.let { out.add(it) }
+        // Winning streak broken is the stronger flag: when both fire for a team, Unbeaten ended stays quiet.
+        if (out.none { it.ruleId == STREAK_BREAK }) unbeatenEnded(team, matches, fixtureDate)?.let { out.add(it) }
+        losingBroken(team, matches, fixtureDate)?.let { out.add(it) }
+        // flags the user dismissed stay off until the rule triggers again (a new occurrence has a new date)
+        val dismissed = config.dismissed
+        return if (dismissed.isEmpty()) out else out.filter { it.dismissKey.isEmpty() || it.dismissKey !in dismissed }
     }
 
     /** The flags of a fixture: those of its home and away team. */
@@ -311,31 +356,55 @@ object Kryptonites {
         return if (tight) KryptoFlag(CLEAN_SHEET_RUN, team, "$team kept a clean sheet in each of its last $n games") else null
     }
 
+    private fun won(team: String, m: Match) = (if (m.homeTeam == team) m.homeGoals else m.awayGoals) > (if (m.homeTeam == team) m.awayGoals else m.homeGoals)
+    private fun lost(team: String, m: Match) = (if (m.homeTeam == team) m.homeGoals else m.awayGoals) < (if (m.homeTeam == team) m.awayGoals else m.homeGoals)
+
     /**
-     * Follow-up of a run: after a run of [runGames]+ games where [hit] was true ended, the team is flagged until
-     * [hit] is true [back] games in a row again.
+     * The shared machinery of the "run ended" flags. A run of [trigger]+ games where [cont] is true, ended by a game
+     * where [brk] is true, raises the flag; it clears when [clr] holds for [clear] games in a row, when [dropOn] holds,
+     * or by itself after the expiry set for the rule (games and days since it was raised, 0 = never).
      */
-    private fun runBroken(
-        team: String, matches: List<Match>, ruleId: String, runGames: Int, back: Int,
-        hit: (Match) -> Boolean, text: (Int, Int) -> String
+    private fun recovery(
+        team: String, matches: List<Match>, fixtureDate: String, ruleId: String, trigger: Int, clear: Int, carry: Boolean,
+        cont: (Match) -> Boolean, brk: (Match) -> Boolean, clr: (Match) -> Boolean,
+        text: (broken: Int, need: Int) -> String,
+        dropOn: ((Match) -> Boolean)? = null
     ): KryptoFlag? {
+        val expireGames = p(ruleId, "xg"); val expireDays = p(ruleId, "xd")
         var run = 0
         var flagged = false
         var broken = 0
         var since = 0
+        var after = 0
+        var breakDate = ""
         for (m in gamesOf(team, matches)) {
-            val h = hit(m)
             if (!flagged) {
-                if (h) run++ else {
-                    if (run >= runGames) { flagged = true; broken = run; since = 0 }
-                    run = 0
+                when {
+                    cont(m) -> run++
+                    brk(m) -> {
+                        if (run >= trigger) { flagged = true; broken = run; since = 0; after = 0; breakDate = m.date }
+                        run = 0
+                    }
+                    else -> run = 0
                 }
-            } else if (h) {
-                since++
-                if (since >= back) { flagged = false; run = since }
-            } else since = 0
+            } else {
+                after++
+                if (dropOn != null && dropOn(m)) { flagged = false; run = 1 }
+                else {
+                    if (clr(m)) {
+                        since++
+                        if (since >= clear) { flagged = false; run = if (carry) since else 0 }
+                    } else since = 0
+                    if (flagged && expireGames > 0 && after >= expireGames) { flagged = false; run = 0 }
+                }
+            }
         }
-        return if (flagged) KryptoFlag(ruleId, team, text(broken, back - since)) else null
+        if (!flagged) return null
+        if (expireDays > 0) {
+            val fx = DateUtils.parse(fixtureDate); val bd = DateUtils.parse(breakDate)
+            if (fx != null && bd != null && java.time.temporal.ChronoUnit.DAYS.between(bd, fx) > expireDays) return null
+        }
+        return KryptoFlag(ruleId, team, text(broken, clear - since), since = breakDate)
     }
 
     private fun formSplit(team: String, matches: List<Match>, atHome: Boolean): KryptoFlag? {
@@ -446,80 +515,32 @@ object Kryptonites {
         return KryptoFlag(FEW_GAMES, team, "$team has only $n ${if (n == 1) "result" else "results"} on file")
     }
 
-    private fun streakBreak(team: String, matches: List<Match>): KryptoFlag? {
-        val trigger = p(STREAK_BREAK, "trigger"); val clear = p(STREAK_BREAK, "clear")
-        val games = matches.filter { it.homeTeam == team || it.awayTeam == team }.sortedBy { it.date }
-        var wins = 0          // wins in a row while not flagged
-        var flagged = false
-        var broken = 0        // the length of the streak that was broken
-        var since = 0         // wins in a row since the flag was raised
-        for (m in games) {
-            val mine = if (m.homeTeam == team) m.homeGoals else m.awayGoals
-            val theirs = if (m.homeTeam == team) m.awayGoals else m.homeGoals
-            val won = mine > theirs
-            val lost = mine < theirs
-            if (!flagged) {
-                when {
-                    won -> wins++
-                    lost -> {
-                        if (wins >= trigger) { flagged = true; broken = wins; since = 0 }
-                        wins = 0
-                    }
-                    else -> wins = 0 // a draw ends the streak but raises no flag
-                }
-            } else {
-                if (won) {
-                    since++
-                    if (since >= clear) { flagged = false; wins = since }
-                } else {
-                    since = 0
-                }
-            }
-        }
-        if (!flagged) return null
-        val need = clear - since
-        return KryptoFlag(
-            STREAK_BREAK, team,
-            "$team lost after a $broken-game winning streak · needs $need more ${plural(need, "win", "wins")} in a row"
+    private fun streakBreak(team: String, matches: List<Match>, fixtureDate: String): KryptoFlag? =
+        recovery(
+            team, matches, fixtureDate, STREAK_BREAK, p(STREAK_BREAK, "trigger"), p(STREAK_BREAK, "clear"), carry = true,
+            cont = { won(team, it) }, brk = { lost(team, it) }, clr = { won(team, it) },
+            text = { n, need -> "$team lost after a $n-game winning streak · needs $need more ${plural(need, "win", "wins")} in a row" }
         )
-    }
 
-    private fun losingBroken(team: String, matches: List<Match>): KryptoFlag? {
-        val trigger = p(LOSING_BROKEN, "trigger"); val clear = p(LOSING_BROKEN, "clear")
-        val games = matches.filter { it.homeTeam == team || it.awayTeam == team }.sortedBy { it.date }
-        var losses = 0
-        var flagged = false
-        var broken = 0
-        var since = 0
-        for (m in games) {
-            val mine = if (m.homeTeam == team) m.homeGoals else m.awayGoals
-            val theirs = if (m.homeTeam == team) m.awayGoals else m.homeGoals
-            val won = mine > theirs
-            val lost = mine < theirs
-            if (!flagged) {
-                when {
-                    lost -> losses++
-                    won -> {
-                        if (losses >= trigger) { flagged = true; broken = losses; since = 0 }
-                        losses = 0
-                    }
-                    else -> losses = 0 // a draw ends the losing run but raises no flag
-                }
-            } else {
-                if (won) {
-                    since++
-                    if (since >= clear) { flagged = false; losses = 0 }
-                } else {
-                    since = 0
-                    if (lost) { flagged = false; losses = 1 } // lost again: the run of form is back to normal
-                }
-            }
-        }
-        if (!flagged) return null
-        val need = clear - since
-        return KryptoFlag(
-            LOSING_BROKEN, team,
-            "$team won after a $broken-game losing streak · needs $need more ${plural(need, "win", "wins")} in a row"
+    private fun unbeatenEnded(team: String, matches: List<Match>, fixtureDate: String): KryptoFlag? =
+        recovery(
+            team, matches, fixtureDate, UNBEATEN_ENDED, p(UNBEATEN_ENDED, "trigger"), p(UNBEATEN_ENDED, "clear"), carry = true,
+            cont = { !lost(team, it) }, brk = { lost(team, it) }, clr = { !lost(team, it) },
+            text = { n, need -> "$team lost after $n games unbeaten · needs $need more ${plural(need, "game", "games")} without a loss" }
+        )
+
+    private fun losingBroken(team: String, matches: List<Match>, fixtureDate: String): KryptoFlag? {
+        val easy = p(LOSING_BROKEN, "easy") == 1
+        return recovery(
+            team, matches, fixtureDate, LOSING_BROKEN, p(LOSING_BROKEN, "trigger"), p(LOSING_BROKEN, "clear"), carry = false,
+            cont = { lost(team, it) }, brk = { won(team, it) },
+            clr = if (easy) { m -> !lost(team, m) } else { m -> won(team, m) },
+            text = { n, need ->
+                if (easy) "$team won after a $n-game losing streak · needs $need more ${plural(need, "game", "games")} without a loss"
+                else "$team won after a $n-game losing streak · needs $need more ${plural(need, "win", "wins")} in a row"
+            },
+            // lost again: the run of form is back to normal
+            dropOn = { lost(team, it) }
         )
     }
 

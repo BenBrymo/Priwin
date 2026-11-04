@@ -87,6 +87,7 @@ fun DataScreen(
     onSetKryptoParam: (String, String, Int) -> Unit,
     onSetKryptoMarkets: (String, Set<String>) -> Unit,
     onResetKryptoRule: (com.predictengines.app.data.KryptoRule) -> Unit,
+    onRestoreDismissed: () -> Unit,
     onSetLokiOn: (String, Boolean) -> Unit,
     onSetLokiParam: (String, Int) -> Unit,
     onShowLeague: (League) -> Unit,
@@ -276,7 +277,7 @@ fun DataScreen(
             subtitle = "Rules that watch teams' results and flag their fixtures and picks. Open a group to change a rule's numbers, the pick types it counts for, and what it does.",
             accentColor = LossRed
         ) {
-            KryptoSettings(state, onSetKryptoMode, onSetKryptoParam, onSetKryptoMarkets, onResetKryptoRule)
+            KryptoSettings(state, onSetKryptoMode, onSetKryptoParam, onSetKryptoMarkets, onResetKryptoRule, onRestoreDismissed)
         }
 
         AppCard(
