@@ -935,6 +935,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Answers "who was sent off?": a key player (suspended for [games] games from that game) or nobody listed. */
     fun answerRed(event: RedEvent, playerId: String?, games: Int) {
+        // the prompt closes at once; the reload below would only take it away after the whole league is recomputed
+        _state.update { it.copy(pendingReds = it.pendingReds.filter { r -> r.key != event.key }) }
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 val players = if (playerId == null) savedPlayers.players else savedPlayers.players.map {

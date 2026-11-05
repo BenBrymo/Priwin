@@ -163,13 +163,14 @@ fun AppRoot(vm: AppViewModel) {
     }
 
     // A red card in a team's last game: ask who was sent off, so a key player's ban is counted.
-    var redSnoozed by rememberSaveable { mutableStateOf("") }
-    val red = state.pendingReds.firstOrNull { it.key != redSnoozed }
+    // "Later" is remembered for each red card separately (until the app is closed), so one answered or snoozed prompt never brings another back
+    var redSnoozed by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    val red = state.pendingReds.firstOrNull { it.key !in redSnoozed }
     if (red != null) {
         val squad = state.players.filter { it.leagueId == red.leagueId && it.team == red.team }
         var banGames by remember(red.key) { mutableStateOf("1") }
         AlertDialog(
-            onDismissRequest = { redSnoozed = red.key },
+            onDismissRequest = { redSnoozed = redSnoozed + red.key },
             containerColor = CardSurface,
             titleContentColor = TextPrimary,
             textContentColor = TextSecondary,
@@ -204,7 +205,7 @@ fun AppRoot(vm: AppViewModel) {
             confirmButton = {
                 TextButton(onClick = { vm.answerRed(red, null, 1) }) { Text("Someone else", color = IndigoPrimary) }
             },
-            dismissButton = { TextButton(onClick = { redSnoozed = red.key }) { Text("Later", color = TextSecondary) } }
+            dismissButton = { TextButton(onClick = { redSnoozed = redSnoozed + red.key }) { Text("Later", color = TextSecondary) } }
         )
     }
 
