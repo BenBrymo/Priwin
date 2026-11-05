@@ -119,6 +119,7 @@ data class AppUiState(
     val handicapPicks: List<TopPick> = emptyList(),
     val over15Picks: List<TopPick> = emptyList(),
     val lokiPicks: List<TopPick> = emptyList(),
+    val cornerPicks: List<TopPick> = emptyList(),
     val lokiConfig: com.predictengines.app.data.LokiConfig = com.predictengines.app.data.LokiConfig(),
 
     /** Corners / cards / first scorer the user typed in for played games, keyed by fixture. */
@@ -187,6 +188,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var handicapCache: List<TopPick> = emptyList()
     private var over15Cache: List<TopPick> = emptyList()
     private var lokiCache: List<TopPick> = emptyList()
+    private var cornerCache: List<TopPick> = emptyList()
     private var missingCache: Map<String, Int> = emptyMap()
 
     private fun invalidateCache() {
@@ -340,6 +342,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     topPicks = lists.first, topPicksLoading = false,
                     handicapPicks = lists.second, over15Picks = lists.third,
                     lokiPicks = composeLoki(lokiCache),
+                    cornerPicks = composeCorners(cornerCache),
                     missingByLeague = missingCache
                 )
             }
@@ -352,11 +355,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val gen = cacheGen.get()
             var held = Triple<List<TopPick>, List<TopPick>, List<TopPick>>(emptyList(), emptyList(), emptyList())
             var loki = emptyList<TopPick>()
+            var corners = emptyList<TopPick>()
             val top = withContext(Dispatchers.Default) {
                 val all = ArrayList<TopPick>()
                 val hcp = ArrayList<TopPick>()
                 val o15 = ArrayList<TopPick>()
                 val lk = ArrayList<TopPick>()
+                val cr = ArrayList<TopPick>()
                 val missing = HashMap<String, Int>()
                 for ((li, league) in leagues.withIndex()) {
                     try {
@@ -370,6 +375,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         hcp += TopPicksEngine.handicapCandidates(league, data.fixtures)
                         o15 += TopPicksEngine.over15Candidates(league, data.fixtures)
                         lk += TopPicksEngine.lokiCandidates(league, data.fixtures, data.matches)
+                        cr += TopPicksEngine.cornerCandidates(league, data.fixtures)
                     } catch (e: Exception) {
                         // one unreadable league must not hide the others
                     }
@@ -383,17 +389,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 // Loki ignores the Kryptonite Hide / Push-down switches: it needs the flagged fixtures
                 loki = TopPicksEngine.rank(lk)
+                corners = TopPicksEngine.rank(cr, modes = modes)
                 shown
             }
-            withContext(Dispatchers.IO) { recordListPicks(top.first, top.second, top.third, held, loki) }
+            withContext(Dispatchers.IO) { recordListPicks(top.first, top.second, top.third, held, loki, corners) }
             if (gen == cacheGen.get()) {
-                topCache = top.first; handicapCache = top.second; over15Cache = top.third; lokiCache = loki
+                topCache = top.first; handicapCache = top.second; over15Cache = top.third; lokiCache = loki; cornerCache = corners
             }
             val lists = withContext(Dispatchers.IO) { composeLists(top.first, top.second, top.third) }
             val lokiShown = withContext(Dispatchers.IO) { composeLoki(loki) }
+            val cornersShown = withContext(Dispatchers.IO) { composeCorners(corners) }
             _state.update {
                 it.copy(
-                    topPicks = lists.first, handicapPicks = lists.second, over15Picks = lists.third, lokiPicks = lokiShown,
+                    topPicks = lists.first, handicapPicks = lists.second, over15Picks = lists.third, lokiPicks = lokiShown, cornerPicks = cornersShown,
                     missingByLeague = missingCache, topPicksLoading = false
                 )
             }
@@ -414,6 +422,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The Loki list as shown: a game can have several Loki picks, so played ones are kept per pick, not per game. */
     private fun composeLoki(loki: List<TopPick>): List<TopPick> = mergePlayed(ListPicksStore.LOKI, loki, perGame = false)
+
+    /** The Corners list as shown: one pick per game, played ones kept in their week. */
+    private fun composeCorners(corners: List<TopPick>): List<TopPick> = mergePlayed(ListPicksStore.CORNERS, corners, perGame = true)
 
     private fun mergePlayed(source: String, upcoming: List<TopPick>, perGame: Boolean): List<TopPick> {
         val visible = _state.value.leagues.map { it.id }.toSet()
@@ -485,7 +496,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun recordListPicks(
         top: List<TopPick>, hcp: List<TopPick>, o15: List<TopPick>,
         held: Triple<List<TopPick>, List<TopPick>, List<TopPick>> = Triple(emptyList(), emptyList(), emptyList()),
-        loki: List<TopPick> = emptyList()
+        loki: List<TopPick> = emptyList(),
+        corners: List<TopPick> = emptyList()
     ) {
         fun entries(source: String, list: List<TopPick>) = list.map { tp ->
             ListPicksStore.Entry(
@@ -500,7 +512,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         listPicks.add(
             entries(ListPicksStore.TOP, top) + entries(ListPicksStore.HANDICAP, hcp) + entries(ListPicksStore.OVER15, o15) +
                 entries(ListPicksStore.TOP + hide, held.first) + entries(ListPicksStore.HANDICAP + hide, held.second) +
-                entries(ListPicksStore.OVER15 + hide, held.third) + entries(ListPicksStore.LOKI, loki)
+                entries(ListPicksStore.OVER15 + hide, held.third) + entries(ListPicksStore.LOKI, loki) + entries(ListPicksStore.CORNERS, corners)
         )
         _state.update { it.copy(listEntries = listPicks.load().values.toList()) }
     }
@@ -553,7 +565,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         home, away, before, f.time, f.date, consensus,
                         savedPlayers.players.filter { it.leagueId == leagueId },
                         savedPlayers.news.filter { it.leagueId == leagueId }
-                    )
+                    ),
+                    ConsensusEngine.cornerBest(home, away, poisson, stats)
                 )
             } else null
             FixtureItem(index, f, home, away, summary)

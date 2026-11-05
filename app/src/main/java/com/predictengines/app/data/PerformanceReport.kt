@@ -12,7 +12,7 @@ import kotlin.math.sqrt
 object PerformanceReport {
 
     const val ALL_LISTS = "All lists"
-    val LISTS = listOf("Top 20", "Handicap", "Over 1.5", "Loki")
+    val LISTS = listOf("Top 20", "Handicap", "Over 1.5", "Loki", "Corners")
 
     enum class Window(val label: String) {
         ALL("All time"), SEASON("This season"), WEEKS12("Last 12 weeks"), WEEKS4("Last 4 weeks")

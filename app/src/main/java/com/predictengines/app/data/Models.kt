@@ -147,8 +147,13 @@ data class FixtureSummary(
     /** Poisson and/or Stats backing "Over 1.5 goals" (model, confidence). Empty when neither does. */
     val over15: List<ConsensusVote> = emptyList(),
     /** Kryptonite warnings for the two teams, as of this game's date. */
-    val flags: List<KryptoFlag> = emptyList()
+    val flags: List<KryptoFlag> = emptyList(),
+    /** The best corner line Poisson and/or Stats back for this game, for the Corners list; null when neither backs one. */
+    val corner: CornerListPick? = null
 )
+
+/** One corner selection on the Corners list: [key] is e.g. "C_U10.5" or "TC_H_O5.5", [votes] who backs it. */
+data class CornerListPick(val key: String, val label: String, val votes: List<ConsensusVote>)
 
 /**
  * A fixture from the fixtures file, with its team names resolved to the names used

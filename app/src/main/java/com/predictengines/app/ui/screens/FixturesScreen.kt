@@ -120,13 +120,14 @@ fun FixturesScreen(
     val leagueListState = androidx.compose.runtime.saveable.rememberSaveable(state.selected?.id, saver = androidx.compose.foundation.lazy.LazyListState.Saver) {
         androidx.compose.foundation.lazy.LazyListState()
     }
-    val tabToday = remember(state.fixtures, state.topPicks, state.handicapPicks, state.over15Picks, state.lokiPicks, now) {
+    val tabToday = remember(state.fixtures, state.topPicks, state.handicapPicks, state.over15Picks, state.lokiPicks, state.cornerPicks, now) {
         listOf(
             Countdown.anyToday(state.fixtures.map { it.fixture.date to it.fixture.time }, now),
             Countdown.anyToday(state.topPicks.map { it.date to it.time }, now),
             Countdown.anyToday(state.handicapPicks.map { it.date to it.time }, now),
             Countdown.anyToday(state.over15Picks.map { it.date to it.time }, now),
-            Countdown.anyToday(state.lokiPicks.map { it.date to it.time }, now)
+            Countdown.anyToday(state.lokiPicks.map { it.date to it.time }, now),
+            Countdown.anyToday(state.cornerPicks.map { it.date to it.time }, now)
         )
     }
     val waitingResults = remember(state.fixtures, state.scores, now) { missingResults(state).size }
@@ -166,6 +167,9 @@ fun FixturesScreen(
             Tab(selected = section == 5, onClick = { section = 5 }, text = {
                 TabLabel("Loki", tabToday[4])
             })
+            Tab(selected = section == 6, onClick = { section = 6 }, text = {
+                TabLabel("Corners", tabToday[5])
+            })
         }
         Box(Modifier.weight(1f)) {
             if (section == 0) LeagueFixtures(state, parts, leagueListState, onOpen, onGoToData, onMark, onLink, onSaveScore, onRemoveScore, scoreHints)
@@ -188,6 +192,12 @@ fun FixturesScreen(
                 title = "Loki picks of each week",
                 subtitle = "picks made from Kryptonite flags, e.g. a team that just lost its winning streak: its opponent to win or draw · the Backed-by line names the Loki · tap a card to open the analysis",
                 emptyText = "No upcoming games trigger a Loki yet. Lokis can be switched on and off on the Data tab."
+            )
+            else if (section == 6) TopPicksList(
+                state, onOpenTopPick, picks = state.cornerPicks, prefix = "c", source = "Corners", showBest = false,
+                title = "Corner picks of each week",
+                subtitle = "best 20 per week across all leagues · each game's best corner line, backed by Poisson and/or Stats, both backing it first · tap a card to open the analysis",
+                emptyText = "No upcoming games have Poisson or Stats backing a corner line yet (needs corner counts in the matches file)."
             )
         }
     }

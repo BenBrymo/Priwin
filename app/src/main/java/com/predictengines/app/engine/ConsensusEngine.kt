@@ -5,6 +5,7 @@ import com.predictengines.app.data.BrymoResult
 import com.predictengines.app.data.ConsensusPick
 import com.predictengines.app.data.ConsensusResult
 import com.predictengines.app.data.ConsensusVote
+import com.predictengines.app.data.CornerListPick
 import com.predictengines.app.data.Outcome
 import com.predictengines.app.data.Prediction
 import com.predictengines.app.data.PoissonCorners
@@ -154,6 +155,29 @@ object ConsensusEngine {
         stats?.takeIf { it.hasPrediction }?.let { statsOpinions(home, away, it)["O1.5"] }
             ?.let { out.add(ConsensusVote("Stats", it.confidence)) }
         return out
+    }
+
+    /**
+     * The best corner line for the Corners list: every corner selection Poisson (58%+) and/or Stats backs, the one with
+     * the most backers first, then the highest average confidence. Lines of one market and direction (Under 9.5 / 10.5)
+     * are one idea, so only the strongest of them can win. Null when neither model backs any corner line.
+     */
+    fun cornerBest(home: String, away: String, poisson: PoissonResult?, stats: StatsResult?): CornerListPick? {
+        val votes = LinkedHashMap<String, MutableList<ConsensusVote>>()
+        val labels = HashMap<String, String>()
+        fun add(model: String, ops: Map<String, Opinion>) {
+            for ((k, op) in ops) {
+                if (CORNER_KEY.matchEntire(k)?.groupValues?.get(1)?.let { it == "C_" || it.startsWith("TC_") } != true) continue
+                votes.getOrPut(k) { ArrayList() }.add(ConsensusVote(model, op.confidence))
+                labels[k] = op.label
+            }
+        }
+        poisson?.let { add("Poisson", poissonOpinions(home, away, it)) }
+        stats?.takeIf { it.hasPrediction }?.let { add("Stats", statsOpinions(home, away, it)) }
+        if (votes.isEmpty()) return null
+        fun score(v: List<ConsensusVote>) = 100.0 * (v.size - 1) + v.map { it.confidence }.average()
+        val best = votes.entries.maxByOrNull { score(it.value) } ?: return null
+        return CornerListPick(best.key, labels.getValue(best.key), best.value)
     }
 
     const val POISSON_BEST_PICKS = 5

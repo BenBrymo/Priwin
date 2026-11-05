@@ -100,6 +100,18 @@ object TopPicksEngine {
             )
         }
 
+    /** The best corner line (Poisson and/or Stats) of each upcoming game. Two backers rank above one; then average confidence. */
+    fun cornerCandidates(league: League, items: List<FixtureItem>, now: LocalDateTime = LocalDateTime.now()): List<TopPick> =
+        upcoming(league, items, now) { fx ->
+            val cp = fx.summary?.corner ?: return@upcoming null
+            val avg = cp.votes.map { it.confidence }.average()
+            ConsensusPick(
+                key = cp.key, label = cp.label, group = com.predictengines.app.engine.ConsensusEngine.category(cp.key),
+                backers = cp.votes, against = emptyList(), abstain = emptyList(), modelCount = 3,
+                strength = avg + 100.0 * (cp.votes.size - 1)
+            )
+        }
+
     /**
      * Adds the picks whose games are already played to a ranked list of upcoming picks. Played picks keep their
      * week; each week then shows its played picks plus as many upcoming ones as fit in [limit], strongest first.

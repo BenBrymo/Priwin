@@ -80,6 +80,10 @@ class LeagueDiskCache(context: Context) {
         fx.summary?.over15?.takeIf { it.isNotEmpty() }?.let { v ->
             o.put("o15", arr(v) { x -> JSONArray().put(x.model).put(x.confidence) })
         }
+        fx.summary?.corner?.let { cp ->
+            o.put("cr", JSONObject().put("k", cp.key).put("l", cp.label)
+                .put("v", arr(cp.votes) { x -> JSONArray().put(x.model).put(x.confidence) }))
+        }
         if (c != null) {
             o.put("models", JSONArray(c.models))
             o.put("picks", arr(c.picks) { p ->
@@ -146,7 +150,13 @@ class LeagueDiskCache(context: Context) {
                     f.optJSONArray("o15")?.let { a -> list(a) { x -> (x as JSONArray).let { ConsensusVote(it.getString(0), it.getDouble(1)) } } }
                         ?: emptyList(),
                     f.optJSONArray("kf")?.let { a -> list(a) { x -> (x as JSONArray).let { KryptoFlag(it.getString(0), it.getString(1), it.getString(2), it.optString(3, ""), it.optString(4, "")) } } }
-                        ?: emptyList()
+                        ?: emptyList(),
+                    f.optJSONObject("cr")?.let { c ->
+                        CornerListPick(
+                            c.getString("k"), c.getString("l"),
+                            list(c.getJSONArray("v")) { x -> (x as JSONArray).let { ConsensusVote(it.getString(0), it.getDouble(1)) } }
+                        )
+                    }
                 )
             } else null
             FixtureItem(
