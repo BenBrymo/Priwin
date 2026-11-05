@@ -238,6 +238,7 @@ fun AppRoot(vm: AppViewModel) {
         )
     }
 
+    com.predictengines.app.ui.components.ProvideClock {
     CompositionLocalProvider(
         LocalKeyPlayers provides state.players,
         com.predictengines.app.ui.components.LocalKryptoDismiss provides { f: com.predictengines.app.data.KryptoFlag -> vm.dismissKryptoFlag(f) }
@@ -395,6 +396,7 @@ fun AppRoot(vm: AppViewModel) {
                 }
             }
         }
+    }
     }
     }
 }

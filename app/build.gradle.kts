@@ -12,8 +12,8 @@ android {
         applicationId = "com.predictengines.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 52
-        versionName = "7.9"
+        versionCode = 53
+        versionName = "8.0"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -37,7 +37,8 @@ android {
         }
         release {
             signingConfig = signingConfigs.getByName("priwin")
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

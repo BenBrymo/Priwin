@@ -37,18 +37,28 @@ fun urgencyColor(u: Urgency): Color = when (u) {
     Urgency.GREY -> TextMuted
 }
 
-/** The current time, refreshed every minute so countdowns never go stale while the screen is open. */
+/** The one shared clock: the current time, ticking on the minute (see [ProvideClock]). */
+val LocalNow = androidx.compose.runtime.compositionLocalOf { LocalDateTime.now() }
+
+/**
+ * Runs the single clock of the app. Everything below reads it with [rememberNow], so there is one timer instead of one
+ * per card, and only the pieces that show the time redraw when the minute changes.
+ */
 @Composable
-fun rememberNow(): LocalDateTime {
+fun ProvideClock(content: @Composable () -> Unit) {
     var now by remember { mutableStateOf(LocalDateTime.now()) }
     LaunchedEffect(Unit) {
         while (true) {
-            delay(60_000)
+            delay(60_000L - System.currentTimeMillis() % 60_000L)
             now = LocalDateTime.now()
         }
     }
-    return now
+    androidx.compose.runtime.CompositionLocalProvider(LocalNow provides now, content = content)
 }
+
+/** The current time, refreshed every minute so countdowns never go stale while the screen is open. */
+@Composable
+fun rememberNow(): LocalDateTime = LocalNow.current
 
 /** "Tomorrow 19:00" / "In 2h 15m" / "In 5 days" for a game still to be played; nothing for played games. */
 @Composable

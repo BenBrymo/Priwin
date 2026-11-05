@@ -114,6 +114,22 @@ fun FixturesScreen(
     jumpToResults: Int = 0
 ) {
     var section by rememberSaveable { mutableIntStateOf(0) }
+    // Worked out here (not inside each sub-tab) and only when their inputs change, so opening a sub-tab is cheap.
+    val now = rememberNow()
+    val parts = rememberLeagueParts(state, now)
+    val leagueListState = androidx.compose.runtime.saveable.rememberSaveable(state.selected?.id, saver = androidx.compose.foundation.lazy.LazyListState.Saver) {
+        androidx.compose.foundation.lazy.LazyListState()
+    }
+    val tabToday = remember(state.fixtures, state.topPicks, state.handicapPicks, state.over15Picks, state.lokiPicks, now) {
+        listOf(
+            Countdown.anyToday(state.fixtures.map { it.fixture.date to it.fixture.time }, now),
+            Countdown.anyToday(state.topPicks.map { it.date to it.time }, now),
+            Countdown.anyToday(state.handicapPicks.map { it.date to it.time }, now),
+            Countdown.anyToday(state.over15Picks.map { it.date to it.time }, now),
+            Countdown.anyToday(state.lokiPicks.map { it.date to it.time }, now)
+        )
+    }
+    val waitingResults = remember(state.fixtures, state.scores, now) { missingResults(state).size }
     // The "games need results" prompt asks for the Results sub-tab.
     androidx.compose.runtime.LaunchedEffect(jumpToResults) { if (jumpToResults > 0) section = 1 }
     if (state.openFixtureId != null) {
@@ -126,10 +142,10 @@ fun FixturesScreen(
             edgePadding = 8.dp
         ) {
             Tab(selected = section == 0, onClick = { section = 0 }, text = {
-                TabLabel("This league", Countdown.anyToday(state.fixtures.map { it.fixture.date to it.fixture.time }, rememberNow()))
+                TabLabel("This league", tabToday[0])
             })
             Tab(selected = section == 1, onClick = { section = 1 }, text = {
-                val waiting = missingResults(state).size
+                val waiting = waitingResults
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Results")
                     if (waiting > 0 || state.isLoading) {
@@ -139,20 +155,20 @@ fun FixturesScreen(
                 }
             })
             Tab(selected = section == 2, onClick = { section = 2 }, text = {
-                TabLabel("Top 20 picks", Countdown.anyToday(state.topPicks.map { it.date to it.time }, rememberNow()))
+                TabLabel("Top 20 picks", tabToday[1])
             })
             Tab(selected = section == 3, onClick = { section = 3 }, text = {
-                TabLabel("Handicap", Countdown.anyToday(state.handicapPicks.map { it.date to it.time }, rememberNow()))
+                TabLabel("Handicap", tabToday[2])
             })
             Tab(selected = section == 4, onClick = { section = 4 }, text = {
-                TabLabel("Over 1.5", Countdown.anyToday(state.over15Picks.map { it.date to it.time }, rememberNow()))
+                TabLabel("Over 1.5", tabToday[3])
             })
             Tab(selected = section == 5, onClick = { section = 5 }, text = {
-                TabLabel("Loki", Countdown.anyToday(state.lokiPicks.map { it.date to it.time }, rememberNow()))
+                TabLabel("Loki", tabToday[4])
             })
         }
         Box(Modifier.weight(1f)) {
-            if (section == 0) LeagueFixtures(state, onOpen, onGoToData, onMark, onLink, onSaveScore, onRemoveScore, scoreHints)
+            if (section == 0) LeagueFixtures(state, parts, leagueListState, onOpen, onGoToData, onMark, onLink, onSaveScore, onRemoveScore, scoreHints)
             else if (section == 1) ResultsEntry(state, onSaveScore, scoreHints)
             else if (section == 2) TopPicksList(state, onOpenTopPick)
             else if (section == 3) TopPicksList(
@@ -206,6 +222,10 @@ private fun TopPicksList(
         }
         return
     }
+    val groups = remember(picks) {
+        picks.groupBy { ReportBuilder.weekStartOf(it.date) }
+            .map { (week, picks) -> week to picks.mapIndexed { i, tp -> (i + 1) to tp } }
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
@@ -221,8 +241,6 @@ private fun TopPicksList(
         // Same week groups as the league list: Monday-Sunday, foldable, games side by side.
         val thisWeek = ReportBuilder.weekStartOf(LocalDate.now().toString())
         // The list arrives week by week, strongest first inside each week: rank = position within the week.
-        val groups = picks.groupBy { ReportBuilder.weekStartOf(it.date) }
-            .map { (week, picks) -> week to picks.mapIndexed { i, tp -> (i + 1) to tp } }
         val fmt = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
         for ((week, list) in groups) {
             val key = "$prefix|${week ?: "none"}"
@@ -406,6 +424,7 @@ private fun ResultsEntry(
         return
     }
 
+    val missingGroups = remember(missing) { buildWeekGroups(missing) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
@@ -419,7 +438,7 @@ private fun ResultsEntry(
             ) {}
         }
         weekGroups(
-            prefix = "r", fixtures = missing, thisWeek = thisWeek, flipped = flipped,
+            prefix = "r", groups = missingGroups, thisWeek = thisWeek, flipped = flipped,
             onFlip = { flipped = if (it in flipped) flipped - it else flipped + it },
             defaultOpen = { _, _ -> true },
             showMarks = false,
@@ -465,6 +484,8 @@ private fun ResultsEntry(
 @Composable
 private fun LeagueFixtures(
     state: AppUiState,
+    parts: LeagueParts,
+    listState: androidx.compose.foundation.lazy.LazyListState,
     onOpen: (Int) -> Unit,
     onGoToData: () -> Unit,
     onMark: (date: String, home: String, away: String, pick: TrackablePick, correct: Boolean?) -> Unit,
@@ -496,21 +517,11 @@ private fun LeagueFixtures(
     val leagueId = state.selected?.id.orEmpty()
 
     // Upcoming fixtures stay in view. Played games and games that can't be predicted yet are folded away.
-    val upcoming = ArrayList<FixtureItem>()
-    val played = ArrayList<FixtureItem>()
-    val notReady = ArrayList<FixtureItem>()
-    val now = LocalDateTime.now()
-    for (fx in state.fixtures) {
-        when {
-            DateUtils.isPlayed(fx.fixture.date, fx.fixture.time, now) -> played.add(fx)
-            fx.summary == null -> notReady.add(fx)
-            else -> upcoming.add(fx)
-        }
-    }
-    // Kryptonites: flagged upcoming fixtures are hidden or sent to the bottom of their week when you chose that.
-    val hiddenByKrypto = upcoming.count { Kryptonites.effect(it.summary?.flags.orEmpty(), state.kryptoModes) == KryptoMode.HIDE }
-    upcoming.removeAll { Kryptonites.effect(it.summary?.flags.orEmpty(), state.kryptoModes) == KryptoMode.HIDE }
-    played.reverse() // most recent first
+    // The split, the Kryptonite hiding and the week grouping are worked out once (see rememberLeagueParts), not on every redraw.
+    val upcoming = parts.upcoming
+    val played = parts.played
+    val notReady = parts.notReady
+    val hiddenByKrypto = parts.hiddenByKrypto
     var showPlayed by rememberSaveable { mutableStateOf(false) }
     var showNotReady by rememberSaveable { mutableStateOf(false) }
     // Week groups the user has folded or unfolded (flips the default for that group).
@@ -520,11 +531,18 @@ private fun LeagueFixtures(
     // The played fixture whose score is being typed in.
     var scoring by remember { mutableStateOf<FixtureItem?>(null) }
 
+    val upcomingGroups = remember(parts) { buildWeekGroups(parts.upcoming, parts.bottomIds) }
+    val playedGroups = remember(parts, showPlayed) { if (showPlayed) buildWeekGroups(parts.played) else emptyList() }
+    val notReadyGroups = remember(parts, showNotReady) { if (showNotReady) buildWeekGroups(parts.notReady) else emptyList() }
+
     fun markId(fx: FixtureItem, key: String) =
         PredictionRecord.idOf(leagueId, fx.fixture.date, fx.home.orEmpty(), fx.away.orEmpty(), "Consensus", key)
-    val toMark = played.sumOf { fx -> fx.summary?.consensus?.picks.orEmpty().count { markId(fx, it.key) !in state.marks } }
+    val toMark = remember(parts, state.marks, leagueId) {
+        parts.played.sumOf { fx -> fx.summary?.consensus?.picks.orEmpty().count { markId(fx, it.key) !in state.marks } }
+    }
 
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -576,21 +594,20 @@ private fun LeagueFixtures(
         // Played weeks come first (most recent week on top), then upcoming weeks, then not-ready games.
         if (showPlayed) {
             weekGroups(
-                prefix = "p", fixtures = played, thisWeek = thisWeek, flipped = flipped,
+                prefix = "p", groups = playedGroups, thisWeek = thisWeek, flipped = flipped,
                 onFlip = { flipped = if (it in flipped) flipped - it else flipped + it },
                 defaultOpen = { index, _ -> index == 0 }, showMarks = true, card = card
             )
         }
         weekGroups(
-            prefix = "u", fixtures = upcoming, thisWeek = thisWeek, flipped = flipped,
+            prefix = "u", groups = upcomingGroups, thisWeek = thisWeek, flipped = flipped,
             onFlip = { flipped = if (it in flipped) flipped - it else flipped + it },
             defaultOpen = { _, week -> week == null || thisWeek == null || !week.isAfter(thisWeek.plusWeeks(1)) },
-            showMarks = false, card = card,
-            bottomLast = { Kryptonites.effect(it.summary?.flags.orEmpty(), state.kryptoModes) == KryptoMode.BOTTOM }
+            showMarks = false, card = card
         )
         if (showNotReady && notReady.isNotEmpty()) {
             weekGroups(
-                prefix = "n", fixtures = notReady, thisWeek = thisWeek, flipped = flipped,
+                prefix = "n", groups = notReadyGroups, thisWeek = thisWeek, flipped = flipped,
                 onFlip = { flipped = if (it in flipped) flipped - it else flipped + it },
                 defaultOpen = { _, _ -> true }, showMarks = false, card = card, singleGroupTitle = "Not ready"
             )
@@ -626,6 +643,59 @@ private fun LeagueFixtures(
     }
 }
 
+/** What the This league list shows, worked out once per change of fixtures, Kryptonite modes or clock minute. */
+private class LeagueParts(
+    val upcoming: List<FixtureItem>,
+    val played: List<FixtureItem>,
+    val notReady: List<FixtureItem>,
+    val hiddenByKrypto: Int,
+    /** Ids of upcoming fixtures a Kryptonite pushes to the bottom of their week. */
+    val bottomIds: Set<Int>
+)
+
+@Composable
+private fun rememberLeagueParts(state: AppUiState, now: LocalDateTime): LeagueParts =
+    remember(state.fixtures, state.kryptoModes, now) {
+        val up = ArrayList<FixtureItem>()
+        val pl = ArrayList<FixtureItem>()
+        val nr = ArrayList<FixtureItem>()
+        for (fx in state.fixtures) {
+            when {
+                DateUtils.isPlayed(fx.fixture.date, fx.fixture.time, now) -> pl.add(fx)
+                fx.summary == null -> nr.add(fx)
+                else -> up.add(fx)
+            }
+        }
+        // Kryptonites: flagged upcoming fixtures are hidden or sent to the bottom of their week when you chose that.
+        val bottom = HashSet<Int>()
+        var hidden = 0
+        val it = up.iterator()
+        while (it.hasNext()) {
+            val fx = it.next()
+            when (Kryptonites.effect(fx.summary?.flags.orEmpty(), state.kryptoModes)) {
+                KryptoMode.HIDE -> { hidden++; it.remove() }
+                KryptoMode.BOTTOM -> bottom.add(fx.id)
+                else -> {}
+            }
+        }
+        pl.reverse() // most recent first
+        LeagueParts(up, pl, nr, hidden, bottom)
+    }
+
+private class WeekGroup(val week: LocalDate?, val ordered: List<FixtureItem>)
+
+/** Monday-Sunday groups of fixtures, each in date order (pushed-down ones last). */
+private fun buildWeekGroups(fixtures: List<FixtureItem>, bottomIds: Set<Int> = emptySet()): List<WeekGroup> {
+    val groups = LinkedHashMap<LocalDate?, MutableList<FixtureItem>>()
+    for (fx in fixtures) groups.getOrPut(ReportBuilder.weekStartOf(fx.fixture.date)) { ArrayList() }.add(fx)
+    return groups.map { (week, list) ->
+        WeekGroup(
+            week,
+            list.sortedWith(compareBy<FixtureItem> { it.id in bottomIds }.thenBy { DateUtils.sortKey(it.fixture.date, it.fixture.time) })
+        )
+    }
+}
+
 /**
  * Lays fixtures out as Monday-Sunday week groups. Each group has a foldable header and its games
  * sit side by side in a horizontally scrolling row. [defaultOpen] decides which groups start unfolded
@@ -633,25 +703,22 @@ private fun LeagueFixtures(
  */
 private fun LazyListScope.weekGroups(
     prefix: String,
-    fixtures: List<FixtureItem>,
+    groups: List<WeekGroup>,
     thisWeek: LocalDate?,
     flipped: Set<String>,
     onFlip: (String) -> Unit,
     defaultOpen: (index: Int, week: LocalDate?) -> Boolean,
     showMarks: Boolean,
     card: @Composable (FixtureItem, Boolean, Modifier) -> Unit,
-    singleGroupTitle: String? = null,
-    bottomLast: (FixtureItem) -> Boolean = { false }
+    singleGroupTitle: String? = null
 ) {
-    val groups = LinkedHashMap<LocalDate?, MutableList<FixtureItem>>()
-    for (fx in fixtures) groups.getOrPut(ReportBuilder.weekStartOf(fx.fixture.date)) { ArrayList() }.add(fx)
     val fmt = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
-    groups.entries.forEachIndexed { index, (week, list) ->
+    groups.forEachIndexed { index, group ->
+        val week = group.week
+        val ordered = group.ordered
+        val list = ordered
         val key = "$prefix|${week ?: "none"}"
         val open = defaultOpen(index, week) != (key in flipped)
-        val ordered = list.sortedWith(
-            compareBy<FixtureItem> { bottomLast(it) }.thenBy { DateUtils.sortKey(it.fixture.date, it.fixture.time) }
-        )
         val title = singleGroupTitle ?: when {
             week == null -> "Date TBC"
             week == thisWeek -> "This week"
