@@ -494,6 +494,39 @@ private fun PoissonCard(p: PoissonResult, homeTeam: String, awayTeam: String, to
             accent = PoissonAccent
         )
 
+        p.corners?.let { c ->
+            Spacer(Modifier.height(20.dp))
+            Text("Corners", style = MaterialTheme.typography.labelLarge, color = TextSecondary)
+            Spacer(Modifier.height(6.dp))
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                ExpectedGoals(homeTeam, c.expectedHome, Modifier.weight(1f))
+                Text("corners", color = TextMuted, style = MaterialTheme.typography.labelLarge)
+                ExpectedGoals(awayTeam, c.expectedAway, Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Expected total %.1f · based on ${c.homeGamesUsed} / ${c.awayGamesUsed} matches with corner counts".format(c.expectedTotal),
+                style = MaterialTheme.typography.labelSmall, color = TextMuted,
+                modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(8.dp))
+            MarketsTable(
+                rows = buildList {
+                    for ((line, over) in c.totalOver) add(MarketRow("Corners over ${"%.1f".format(line)}", over))
+                    for ((line, over) in c.totalOver) add(MarketRow("Corners under ${"%.1f".format(line)}", 100 - over))
+                    for ((line, over) in c.homeOver) {
+                        add(MarketRow("$homeTeam corners over ${"%.1f".format(line)}", over))
+                        add(MarketRow("$homeTeam corners under ${"%.1f".format(line)}", 100 - over))
+                    }
+                    for ((line, over) in c.awayOver) {
+                        add(MarketRow("$awayTeam corners over ${"%.1f".format(line)}", over))
+                        add(MarketRow("$awayTeam corners under ${"%.1f".format(line)}", 100 - over))
+                    }
+                },
+                accent = PoissonAccent
+            )
+        }
+
         Spacer(Modifier.height(20.dp))
         Text("Scoreline map (%)", style = MaterialTheme.typography.labelLarge, color = TextSecondary)
         Spacer(Modifier.height(8.dp))

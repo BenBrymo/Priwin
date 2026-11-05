@@ -1,6 +1,7 @@
 package com.predictengines.app.engine
 
 import com.predictengines.app.data.Match
+import com.predictengines.app.data.PoissonCorners
 import com.predictengines.app.data.PoissonResult
 import com.predictengines.app.data.ScoreCell
 import kotlin.math.exp
@@ -18,6 +19,8 @@ import kotlin.math.exp
  *                     away = muAway * awayAttack * homeDefence
  * 5. Each side's goals are Poisson distributed and independent, giving a full scoreline grid
  *    from which 1X2, double chance, Over/Under, BTTS and correct-score odds are summed.
+ * 6. Corners use the same idea on corner counts (see [predictCorners]): expected corners per side, spread with a
+ *    negative binomial, giving match-total and per-team corner lines.
  */
 object PoissonEngine {
 
@@ -59,6 +62,101 @@ object PoissonEngine {
         p[0] = exp(-lambda)
         for (k in 1..MAX_GOALS) p[k] = p[k - 1] * lambda / k
         return p
+    }
+
+    // ---- corners ---------------------------------------------------------------------------
+
+    const val MIN_CORNER_MATCHES = 20
+    private const val MIN_TEAM_CORNER_GAMES = 3
+    private const val MAX_CORNERS = 40
+    private const val MIN_CORNER_XC = 1.5
+    private const val MAX_CORNER_XC = 12.0
+    val TOTAL_CORNER_LINES = listOf(8.5, 9.5, 10.5, 11.5)
+    val TEAM_CORNER_LINES = listOf(5.5, 6.5)
+
+    /**
+     * Negative binomial with the given mean and variance = dispersion x mean (dispersion near 1 falls back to Poisson).
+     * Built iteratively like [pmf], and normalised over 0..MAX_CORNERS.
+     */
+    internal fun cornerPmf(mean: Double, dispersion: Double): DoubleArray {
+        val p = DoubleArray(MAX_CORNERS + 1)
+        if (dispersion < 1.02) {
+            p[0] = exp(-mean)
+            for (k in 1..MAX_CORNERS) p[k] = p[k - 1] * mean / k
+        } else {
+            val prob = 1.0 / dispersion
+            val r = mean / (dispersion - 1.0)
+            p[0] = Math.pow(prob, r)
+            for (k in 1..MAX_CORNERS) p[k] = p[k - 1] * (k + r - 1) / k * (1 - prob)
+        }
+        val sum = p.sum()
+        for (k in p.indices) p[k] /= sum
+        return p
+    }
+
+    /** P(X > line) in percent. */
+    private fun overLine(pmf: DoubleArray, line: Double): Double {
+        var s = 0.0
+        for (k in pmf.indices) if (k > line) s += pmf[k]
+        return s * 100
+    }
+
+    private fun predictCorners(homeTeam: String, awayTeam: String, matches: List<Match>): PoissonCorners? {
+        val cm = matches.filter { it.extras?.homeCorners != null && it.extras?.awayCorners != null }
+        if (cm.size < MIN_CORNER_MATCHES) return null
+        val muH = cm.map { it.extras!!.homeCorners!! }.average()
+        val muA = cm.map { it.extras!!.awayCorners!! }.average()
+        if (muH <= 0.0 || muA <= 0.0) return null
+
+        // one pass: every team's corners won (attack) and conceded (defence), relative to its venue role
+        class Acc(var att: Double = 0.0, var def: Double = 0.0, var games: Int = 0)
+        val acc = HashMap<String, Acc>()
+        for (m in cm) {
+            val hc = m.extras!!.homeCorners!!
+            val ac = m.extras!!.awayCorners!!
+            val h = acc.getOrPut(m.homeTeam) { Acc() }
+            h.att += hc / muH; h.def += ac / muA; h.games++
+            val a = acc.getOrPut(m.awayTeam) { Acc() }
+            a.att += ac / muA; a.def += hc / muH; a.games++
+        }
+        fun att(t: String) = acc[t]?.let { (it.att + PRIOR_GAMES) / (it.games + PRIOR_GAMES) } ?: 1.0
+        fun def(t: String) = acc[t]?.let { (it.def + PRIOR_GAMES) / (it.games + PRIOR_GAMES) } ?: 1.0
+        val hAcc = acc[homeTeam] ?: return null
+        val aAcc = acc[awayTeam] ?: return null
+        if (hAcc.games < MIN_TEAM_CORNER_GAMES || aAcc.games < MIN_TEAM_CORNER_GAMES) return null
+
+        // how much wider than Poisson corners really are, from how far games land from what the model expected
+        var chi = 0.0
+        var n = 0
+        for (m in cm) {
+            val eh = (muH * att(m.homeTeam) * def(m.awayTeam)).coerceIn(MIN_CORNER_XC, MAX_CORNER_XC)
+            val ea = (muA * att(m.awayTeam) * def(m.homeTeam)).coerceIn(MIN_CORNER_XC, MAX_CORNER_XC)
+            val dh = m.extras!!.homeCorners!! - eh
+            val da = m.extras!!.awayCorners!! - ea
+            chi += dh * dh / eh + da * da / ea
+            n += 2
+        }
+        val dispersion = (chi / n).coerceIn(1.0, 2.0)
+
+        val xcHome = (muH * att(homeTeam) * def(awayTeam)).coerceIn(MIN_CORNER_XC, MAX_CORNER_XC)
+        val xcAway = (muA * att(awayTeam) * def(homeTeam)).coerceIn(MIN_CORNER_XC, MAX_CORNER_XC)
+        val ph = cornerPmf(xcHome, dispersion)
+        val pa = cornerPmf(xcAway, dispersion)
+
+        // match total = home + away corners (treated as independent)
+        val total = DoubleArray(2 * MAX_CORNERS + 1)
+        for (h in ph.indices) for (a in pa.indices) total[h + a] += ph[h] * pa[a]
+
+        return PoissonCorners(
+            expectedHome = xcHome,
+            expectedAway = xcAway,
+            totalOver = TOTAL_CORNER_LINES.associateWith { overLine(total, it) },
+            homeOver = TEAM_CORNER_LINES.associateWith { overLine(ph, it) },
+            awayOver = TEAM_CORNER_LINES.associateWith { overLine(pa, it) },
+            homeGamesUsed = hAcc.games,
+            awayGamesUsed = aAcc.games,
+            dispersion = dispersion
+        )
     }
 
     fun predict(homeTeam: String, awayTeam: String, matches: List<Match>): PoissonResult? {
@@ -127,7 +225,8 @@ object PoissonEngine {
             topScores = cells.sortedByDescending { it.probabilityPercent }.take(5),
             scoreGrid = grid,
             homeGamesUsed = home.games,
-            awayGamesUsed = away.games
+            awayGamesUsed = away.games,
+            corners = predictCorners(homeTeam, awayTeam, matches)
         )
     }
 }

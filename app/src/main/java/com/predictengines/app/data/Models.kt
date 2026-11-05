@@ -83,8 +83,30 @@ data class PoissonResult(
     /** scoreGrid[homeGoals][awayGoals] as percentages, 0..4 goals each. */
     val scoreGrid: List<List<Double>>,
     val homeGamesUsed: Int,
-    val awayGamesUsed: Int
+    val awayGamesUsed: Int,
+    /** Corner expectations and line probabilities; null when the matches file has too few corner counts. */
+    val corners: PoissonCorners? = null
 )
+
+/**
+ * Poisson's corner model. Each side's corners get their own expected count (venue-adjusted attack and defence
+ * strength, like goals) and are spread with a negative binomial, because corners vary more than goals.
+ * All percentages are 0..100. Total lines are 8.5/9.5/10.5/11.5, team lines 5.5/6.5.
+ */
+data class PoissonCorners(
+    val expectedHome: Double,
+    val expectedAway: Double,
+    /** Over probability of the match total, by line. */
+    val totalOver: Map<Double, Double>,
+    val homeOver: Map<Double, Double>,
+    val awayOver: Map<Double, Double>,
+    val homeGamesUsed: Int,
+    val awayGamesUsed: Int,
+    /** Spread factor used (1.0 = plain Poisson; corners are usually 1.1-1.5). */
+    val dispersion: Double
+) {
+    val expectedTotal: Double get() = expectedHome + expectedAway
+}
 
 data class TeamStats(
     val teamName: String,

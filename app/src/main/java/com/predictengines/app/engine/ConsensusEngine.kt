@@ -7,6 +7,7 @@ import com.predictengines.app.data.ConsensusResult
 import com.predictengines.app.data.ConsensusVote
 import com.predictengines.app.data.Outcome
 import com.predictengines.app.data.Prediction
+import com.predictengines.app.data.PoissonCorners
 import com.predictengines.app.data.PoissonResult
 import com.predictengines.app.data.StatsResult
 import com.predictengines.app.data.TrackablePick
@@ -33,6 +34,8 @@ object ConsensusEngine {
 
     private const val BINARY_THRESHOLD = 55.0
     private const val DOUBLE_CHANCE_THRESHOLD = 72.0
+    /** Corners are noisier than goals, so Poisson needs a bit more before it backs a corner line. */
+    private const val CORNER_THRESHOLD = 58.0
     const val DEFAULT_MAX_PICKS = 3
 
     private val ALL_KEYS = listOf(
@@ -246,6 +249,28 @@ object ConsensusEngine {
         ).forEach { (k, v) -> if (v >= BINARY_THRESHOLD) out[k] = Opinion(label(k, home, away), v) }
         listOf("1X" to p.homeOrDrawPercent, "X2" to p.awayOrDrawPercent, "12" to p.homeOrAwayPercent)
             .forEach { (k, v) -> if (v >= DOUBLE_CHANCE_THRESHOLD) out[k] = Opinion(label(k, home, away), v) }
+        p.corners?.let { c ->
+            for ((k, v) in cornerChoices(home, away, c)) if (v.confidence >= CORNER_THRESHOLD) out[k] = v
+        }
+        return out
+    }
+
+    /** Every corner selection Poisson has a probability for: match total over/under and each team's own corners. */
+    private fun cornerChoices(home: String, away: String, c: PoissonCorners): List<Pair<String, Opinion>> {
+        val out = ArrayList<Pair<String, Opinion>>()
+        fun f(l: Double) = String.format(java.util.Locale.US, "%.1f", l)
+        for ((line, over) in c.totalOver) {
+            out.add("C_O${f(line)}" to Opinion("Corners Over ${f(line)}", over))
+            out.add("C_U${f(line)}" to Opinion("Corners Under ${f(line)}", 100 - over))
+        }
+        for ((line, over) in c.homeOver) {
+            out.add("TC_H_O${f(line)}" to Opinion("$home corners over ${f(line)}", over))
+            out.add("TC_H_U${f(line)}" to Opinion("$home corners under ${f(line)}", 100 - over))
+        }
+        for ((line, over) in c.awayOver) {
+            out.add("TC_A_O${f(line)}" to Opinion("$away corners over ${f(line)}", over))
+            out.add("TC_A_U${f(line)}" to Opinion("$away corners under ${f(line)}", 100 - over))
+        }
         return out
     }
 
@@ -263,6 +288,8 @@ object ConsensusEngine {
 
     // ---- logic -----------------------------------------------------------------------------
 
+    private val CORNER_KEY = Regex("^(C_|K_|TC_H_|TC_A_)([OU])(\\d+\\.\\d+)$")
+
     /** True if [a] and [b] cannot both come true. */
     internal fun exclusive(a: String, b: String): Boolean {
         if (a == b) return false
@@ -270,6 +297,16 @@ object ConsensusEngine {
         val rulesOut = mapOf("1X" to "2", "X2" to "1", "12" to "X")
         if (rulesOut[a] == b || rulesOut[b] == a) return true
         if ((a == "BTTS_Y" && b == "BTTS_N") || (a == "BTTS_N" && b == "BTTS_Y")) return true
+        val ca = CORNER_KEY.matchEntire(a)
+        val cb = CORNER_KEY.matchEntire(b)
+        if (ca != null && cb != null) {
+            // same market (match corners, cards, or one team's corners): Over 9.5 rules out Under 9.5 and Under 8.5
+            if (ca.groupValues[1] != cb.groupValues[1] || ca.groupValues[2] == cb.groupValues[2]) return false
+            val (over, under) = if (ca.groupValues[2] == "O") ca to cb else cb to ca
+            val overLine = over.groupValues[3].toDoubleOrNull() ?: return false
+            val underLine = under.groupValues[3].toDoubleOrNull() ?: return false
+            return underLine <= overLine
+        }
         if (a.length > 1 && b.length > 1 && a[0] != b[0] && a[0] in "OU" && b[0] in "OU") {
             val (over, under) = if (a[0] == 'O') a to b else b to a
             val overLine = over.drop(1).toDoubleOrNull() ?: return false
