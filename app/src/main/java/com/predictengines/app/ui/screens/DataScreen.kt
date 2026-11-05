@@ -70,6 +70,7 @@ import com.predictengines.app.ui.theme.TextSecondary
 import com.predictengines.app.ui.theme.VioletAccent
 import com.predictengines.app.ui.theme.WinGreen
 import com.predictengines.app.viewmodel.AppUiState
+import com.predictengines.app.viewmodel.MatchesOp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -146,7 +147,9 @@ fun DataScreen(
                 canReset = state.matchesImport != null,
                 resetLabel = if (league.assetFile != null) "Restore built-in" else "Remove",
                 onLoad = { pick(DataKind.MATCHES) },
-                onReset = { onClear(DataKind.MATCHES) }
+                onReset = { onClear(DataKind.MATCHES) },
+                op = state.matchesOp?.takeIf { it.leagueId == league.id },
+                liveStep = state.loadStep
             )
             if (state.addedScoreKeys.isNotEmpty() || state.matchCount > 0) {
                 SecondaryButton(
@@ -530,7 +533,9 @@ private fun DataSourceCard(
     canReset: Boolean,
     resetLabel: String,
     onLoad: () -> Unit,
-    onReset: () -> Unit
+    onReset: () -> Unit,
+    op: MatchesOp? = null,
+    liveStep: String = ""
 ) {
     AppCard(title = title, subtitle = subtitle, accentColor = accent) {
         if (info != null) {
@@ -556,11 +561,27 @@ private fun DataSourceCard(
             Text(fallback, style = MaterialTheme.typography.bodyLarge, color = TextSecondary)
         }
 
+        if (op != null) {
+            Spacer(Modifier.height(10.dp))
+            if (op.working) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = accent)
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        liveStep.ifBlank { op.text }, style = MaterialTheme.typography.bodyMedium, color = TextPrimary,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            } else if (op.summary.isNotBlank()) {
+                Text(op.summary, style = MaterialTheme.typography.bodyMedium, color = WinGreen)
+            }
+        }
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PrimaryButton(
                 text = if (info != null) "Replace file" else "Load from phone",
                 onClick = onLoad,
+                enabled = op?.working != true,
                 icon = Icons.Filled.UploadFile,
                 color = accent,
                 modifier = Modifier.weight(1f)
@@ -569,7 +590,8 @@ private fun DataSourceCard(
                 SecondaryButton(
                     text = resetLabel,
                     onClick = onReset,
-                    icon = Icons.Filled.RestartAlt
+                    icon = Icons.Filled.RestartAlt,
+                    enabled = op?.working != true
                 )
             }
         }

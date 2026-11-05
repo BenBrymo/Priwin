@@ -142,8 +142,18 @@ data class AppUiState(
     val manualError: String? = null,
 
     /** One-shot message for the snackbar. */
-    val message: String? = null
-)
+    val message: String? = null,
+    /** True from the moment a matches file is imported (or cleared) until its results are settled and everything is refreshed. */
+    val importBusy: Boolean = false,
+    /** What the Data tab says about the last matches import: the step it is on, then a summary. */
+    val matchesOp: MatchesOp? = null
+) {
+    /** The full-screen loader shows while a league loads and while an import is still settling. */
+    val showLoader: Boolean get() = isLoading || importBusy
+}
+
+/** The Data tab's note about a matches import: [text] while [working], then the [summary] (kept until the next import or restart). */
+data class MatchesOp(val leagueId: String, val working: Boolean, val text: String = "", val summary: String = "")
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -155,6 +165,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val playersStore = PlayersStore(application)
     @Volatile private var savedPlayers = playersStore.load()
     private val settling = java.util.concurrent.atomic.AtomicBoolean(false)
+    @Volatile private var lastSettledCount = 0
     private val results = ResultsStore(application)
     private val linksStore = NameLinksStore(application)
     private val _state = MutableStateFlow(AppUiState())
@@ -253,7 +264,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         load(league, resetTeams = true)
     }
 
-    private fun load(league: League, resetTeams: Boolean, fresh: Boolean = false): Job {
+    private fun load(league: League, resetTeams: Boolean, fresh: Boolean = false, awaitSettle: Boolean = false): Job {
         loadJob?.cancel()
         if (fresh) invalidateCache()
         val job = viewModelScope.launch {
@@ -297,7 +308,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             refreshReds()
             refreshMissing(league)
             refreshTopPicks()
-            autoSettleLoaded(league)
+            val settle = autoSettleLoaded(league)
+            if (awaitSettle) settle?.join()
         }
         loadJob = job
         return job
@@ -335,7 +347,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         topJob?.cancel()
         topJob = viewModelScope.launch {
-            _state.update { it.copy(topPicksLoading = true, loadStep = "") }
+            _state.update { it.copy(topPicksLoading = true, loadStep = if (it.importBusy) it.loadStep else "") }
             val leagues = _state.value.leagues
             val gen = cacheGen.get()
             var held = Triple<List<TopPick>, List<TopPick>, List<TopPick>>(emptyList(), emptyList(), emptyList())
@@ -348,7 +360,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val missing = HashMap<String, Int>()
                 for ((li, league) in leagues.withIndex()) {
                     try {
-                        step("Top picks · league ${li + 1} of ${leagues.size}")
+                        if (!_state.value.importBusy) step("Top picks · league ${li + 1} of ${leagues.size}")
                         // Uses (and fills) the same per-league cache, so the other leagues are ready before you open them.
                         val data = cache[league.id] ?: computeLeague(league)
                         if (data.fixtures.isEmpty()) continue
@@ -363,7 +375,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 missingCache = missing
-                step("Top picks · ranking and checking Kryptonites")
+                if (!_state.value.importBusy) step("Top picks · ranking and checking Kryptonites")
                 val modes = repo.kryptoModes()
                 val shown = Triple(TopPicksEngine.rank(all, modes = modes), TopPicksEngine.rank(hcp, modes = modes), TopPicksEngine.rank(o15, modes = modes))
                 held = Triple(
@@ -550,23 +562,66 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // ---- importing -------------------------------------------------------------------------
 
+    private fun scoreMap(ms: List<Match>) = ms.associate { "${it.date}|${it.homeTeam}|${it.awayTeam}" to (it.homeGoals to it.awayGoals) }
+
+    /** New, changed and removed games between two sets of results (keyed by date and teams). */
+    private fun compareResults(before: List<Match>, after: List<Match>): Triple<Int, Int, Int> {
+        val b = scoreMap(before); val a = scoreMap(after)
+        val added = a.keys.count { it !in b }
+        val changed = a.count { (k, v) -> b[k] != null && b[k] != v }
+        val removed = b.keys.count { it !in a }
+        return Triple(added, changed, removed)
+    }
+
+    private fun setOp(league: League, text: String) {
+        _state.update { it.copy(importBusy = true, loadStep = text, matchesOp = MatchesOp(league.id, true, text)) }
+    }
+
+    private fun plural(n: Int, one: String, many: String) = if (n == 1) one else many
+
     fun importFile(kind: DataKind, uri: Uri) {
         val league = _state.value.selected ?: return
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { repo.importFile(league, kind, uri) }
-            when (result) {
-                is ImportResult.Success -> {
-                    val what = when (kind) {
-                        DataKind.MATCHES -> "matches"
-                        DataKind.FIXTURES -> "fixtures"
-                        DataKind.STATS -> "stat rows (merged)"
+            val isMatches = kind == DataKind.MATCHES
+            if (isMatches) setOp(league, "${league.name} \u00b7 reading the matches file")
+            try {
+                val before = if (isMatches) withContext(Dispatchers.IO) { runCatching { repo.loadMatches(league) }.getOrDefault(emptyList()) } else emptyList()
+                val result = withContext(Dispatchers.IO) { repo.importFile(league, kind, uri) }
+                when (result) {
+                    is ImportResult.Success -> {
+                        val what = when (kind) {
+                            DataKind.MATCHES -> "matches"
+                            DataKind.FIXTURES -> "fixtures"
+                            DataKind.STATS -> "stat rows (merged)"
+                        }
+                        val skippedN = result.info.skipped
+                        val skipped = if (skippedN > 0) " ($skippedN rows skipped)" else ""
+                        val columns = result.note?.let { " \u00b7 $it" }.orEmpty()
+                        if (!isMatches) {
+                            postMessage("Loaded ${result.info.rows} $what from ${result.info.fileName}$skipped$columns")
+                            load(league, resetTeams = false, fresh = true)
+                            return@launch
+                        }
+                        val after = withContext(Dispatchers.IO) { runCatching { repo.loadMatches(league) }.getOrDefault(emptyList()) }
+                        val (added, changed, _) = compareResults(before, after)
+                        val known = (result.info.rows - added - changed).coerceAtLeast(0)
+                        setOp(league, "${league.name} \u00b7 importing ${result.info.rows} matches from ${result.info.fileName}")
+                        postMessage("Loaded ${result.info.rows} $what from ${result.info.fileName}: $added new$skipped$columns")
+                        lastSettledCount = 0
+                        load(league, resetTeams = true, fresh = true, awaitSettle = true).join()
+                        val settled = lastSettledCount
+                        val summary = "${league.name}: ${result.info.rows} matches in the file \u00b7 $added new \u00b7 $changed ${plural(changed, "score", "scores")} changed" +
+                            " \u00b7 $known already known" + (if (skippedN > 0) " \u00b7 $skippedN rows skipped" else "") +
+                            (if (settled > 0) " \u00b7 $settled played ${plural(settled, "game", "games")} settled" else "")
+                        _state.update { it.copy(matchesOp = MatchesOp(league.id, false, summary = summary)) }
                     }
-                    val skipped = if (result.info.skipped > 0) " (${result.info.skipped} rows skipped)" else ""
-                    val columns = result.note?.let { " · $it" }.orEmpty()
-                    postMessage("Loaded ${result.info.rows} $what from ${result.info.fileName}$skipped$columns")
-                    load(league, resetTeams = kind == DataKind.MATCHES, fresh = true)
+                    is ImportResult.Failure -> {
+                        postMessage(result.message)
+                        _state.update { it.copy(matchesOp = null) }
+                    }
                 }
-                is ImportResult.Failure -> postMessage(result.message)
+            } finally {
+                _state.update { it.copy(importBusy = false) }
             }
         }
     }
@@ -574,19 +629,38 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun clearImport(kind: DataKind) {
         val league = _state.value.selected ?: return
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                if (kind == DataKind.STATS) repo.clearStats() else repo.clearImport(league, kind)
-            }
-            postMessage(
-                when (kind) {
-                    DataKind.MATCHES ->
-                        if (league.assetFile != null) "Restored the built-in match results" else "Match results removed"
-                    DataKind.FIXTURES ->
-                        if (_state.value.builtInFixtures) "Restored the built-in fixtures" else "Fixtures removed"
-                    DataKind.STATS -> "Back to the built-in stats"
+            val isMatches = kind == DataKind.MATCHES
+            if (isMatches) setOp(league, "${league.name} \u00b7 restoring the results")
+            try {
+                val before = if (isMatches) withContext(Dispatchers.IO) { runCatching { repo.loadMatches(league) }.getOrDefault(emptyList()) } else emptyList()
+                withContext(Dispatchers.IO) {
+                    if (kind == DataKind.STATS) repo.clearStats() else repo.clearImport(league, kind)
                 }
-            )
-            load(league, resetTeams = kind == DataKind.MATCHES, fresh = true)
+                postMessage(
+                    when (kind) {
+                        DataKind.MATCHES ->
+                            if (league.assetFile != null) "Restored the built-in match results" else "Match results removed"
+                        DataKind.FIXTURES ->
+                            if (_state.value.builtInFixtures) "Restored the built-in fixtures" else "Fixtures removed"
+                        DataKind.STATS -> "Back to the built-in stats"
+                    }
+                )
+                if (!isMatches) {
+                    load(league, resetTeams = false, fresh = true)
+                    return@launch
+                }
+                val after = withContext(Dispatchers.IO) { runCatching { repo.loadMatches(league) }.getOrDefault(emptyList()) }
+                val (added, changed, removed) = compareResults(before, after)
+                lastSettledCount = 0
+                load(league, resetTeams = true, fresh = true, awaitSettle = true).join()
+                val settled = lastSettledCount
+                val summary = "${league.name}: " + (if (league.assetFile != null) "back to the built-in file" else "results removed") +
+                    " \u00b7 ${after.size} matches \u00b7 $added new \u00b7 $changed ${plural(changed, "score", "scores")} changed \u00b7 $removed no longer there" +
+                    (if (settled > 0) " \u00b7 $settled played ${plural(settled, "game", "games")} settled" else "")
+                _state.update { it.copy(matchesOp = MatchesOp(league.id, false, summary = summary)) }
+            } finally {
+                _state.update { it.copy(importBusy = false) }
+            }
         }
     }
 
@@ -731,10 +805,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Reloads the data, then re-opens the fixture / matchup the user was looking at. */
-    private fun reloadKeepingView(league: League) {
+    private fun reloadKeepingView(league: League): Job {
         val reopen = _state.value.openFixtureId
         val hadManual = _state.value.manualAnalysis != null
-        viewModelScope.launch {
+        return viewModelScope.launch {
             load(league, resetTeams = false, fresh = true).join()
             if (reopen != null) openFixture(reopen)
             if (hadManual) runManual()
@@ -1127,9 +1201,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * Scores that arrived through a matches file are settled like typed ones: stats updated, picks ticked.
      * Only games on or after [AppUiState.autoSettleFrom], once each, and only when the score changes.
      */
-    private fun autoSettleLoaded(league: League) {
-        if (!settling.compareAndSet(false, true)) return
-        viewModelScope.launch {
+    private fun autoSettleLoaded(league: League): Job? {
+        if (!settling.compareAndSet(false, true)) return null
+        return viewModelScope.launch {
             try {
                 val st = _state.value
                 val since = st.autoSettleFrom.ifBlank { repo.autoSettleFrom() }
@@ -1141,6 +1215,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         st.scores.containsKey(scoreKey(fx.fixture.date, h, a))
                 }
                 if (todo.isEmpty()) return@launch
+                step("${league.name} · settling ${todo.size} played ${if (todo.size == 1) "game" else "games"}")
                 val changed = withContext(Dispatchers.IO) {
                     val settled = extrasStore.loadSettled().toMutableMap()
                     val marks = _state.value.marks.toMutableMap()
@@ -1164,9 +1239,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     did to marks.toMap()
                 }
                 if (changed.first > 0) {
+                    lastSettledCount = changed.first
                     _state.update { it.copy(marks = changed.second) }
                     postMessage("Settled ${changed.first} played ${if (changed.first == 1) "game" else "games"} from your matches file")
-                    reloadKeepingView(league)
+                    step("${league.name} · ticking results and updating predictions")
+                    reloadKeepingView(league).join()
                 }
             } finally {
                 settling.set(false)

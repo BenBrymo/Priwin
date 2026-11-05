@@ -392,7 +392,7 @@ private fun ResultsEntry(
     var scoring by remember { mutableStateOf<FixtureItem?>(null) }
     val fmt = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
 
-    if (state.isLoading) {
+    if (state.showLoader) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { com.predictengines.app.ui.components.ThinkingLoader(step = state.loadStep) }
         return
     }
@@ -474,7 +474,7 @@ private fun LeagueFixtures(
     scoreHints: (home: String, away: String) -> List<ScoreCell>
 ) {
     val leagueName = state.selected?.name.orEmpty()
-    if (state.isLoading) {
+    if (state.showLoader) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             com.predictengines.app.ui.components.ThinkingLoader(step = state.loadStep)
         }

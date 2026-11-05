@@ -48,7 +48,7 @@ fun MatchupScreen(
     onRun: () -> Unit,
     onLink: (name: String, target: String) -> Unit
 ) {
-    if (state.isLoading) {
+    if (state.showLoader) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             com.predictengines.app.ui.components.ThinkingLoader(step = state.loadStep)
         }
