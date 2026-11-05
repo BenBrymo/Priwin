@@ -26,3 +26,12 @@ jobs:
         with:
           name: Priwin-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+
+      # Release build: optimised and much smoother than debug. Signed with the same key, so it installs over the debug app.
+      - name: Build release APK
+        run: gradle assembleRelease --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Priwin-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
