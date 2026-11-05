@@ -792,7 +792,7 @@ class LeagueRepository(context: Context) {
         const val KEY_AUTO_SETTLE = "auto_settle_from"
         const val KEY_STATS_INFO = "info_stats"
         const val BUILT_IN_STATS = "stats/statschecker_2026_2027.csv"
-        const val CACHE_VERSION = 20
+        const val CACHE_VERSION = 21
         const val MAX_FILE_BYTES = 20 * 1024 * 1024
     }
 }

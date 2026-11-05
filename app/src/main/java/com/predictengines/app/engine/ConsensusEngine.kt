@@ -41,7 +41,11 @@ object ConsensusEngine {
     private val ALL_KEYS = listOf(
         "1", "X", "2", "1X", "X2", "12",
         "O1.5", "O2.5", "O3.5", "U1.5", "U2.5", "U3.5", "BTTS_Y", "BTTS_N"
-    )
+    ) + listOf("C_O", "C_U", "TC_H_O", "TC_H_U", "TC_A_O", "TC_A_U").flatMap { p ->
+        // corner lines (match total 8.5-11.5, each team 5.5/6.5): they compete on the same strength as everything else
+        (if (p.startsWith("C_")) PoissonEngine.TOTAL_CORNER_LINES else PoissonEngine.TEAM_CORNER_LINES)
+            .map { p + String.format(java.util.Locale.US, "%.1f", it) }
+    }
     private val OUTCOME_KEYS = setOf("1", "X", "2")
 
     private class Opinion(val label: String, val confidence: Double)
@@ -78,6 +82,12 @@ object ConsensusEngine {
                 )
             }
             picks.sortByDescending { it.strength }
+            // Corner lines of one market and direction say nearly the same thing (Under 9.5 / 10.5 / 11.5): keep the strongest.
+            val seenCorner = HashSet<String>()
+            picks.removeAll { pk ->
+                val m = CORNER_KEY.matchEntire(pk.key)
+                m != null && !seenCorner.add(m.groupValues[1] + m.groupValues[2])
+            }
         }
         if (picks.isNotEmpty()) return ConsensusResult(models, picks.take(maxPicks))
 
@@ -340,7 +350,16 @@ object ConsensusEngine {
         "12" -> "Either team wins (12)"
         "BTTS_Y" -> "BTTS Yes"
         "BTTS_N" -> "BTTS No"
-        else -> if (key.length > 1 && key[0] == 'O') "Over ${key.drop(1)} goals"
+        else -> CORNER_KEY.matchEntire(key)?.let { m ->
+            val dir = if (m.groupValues[2] == "O") "over" else "under"
+            val line = m.groupValues[3]
+            when (m.groupValues[1]) {
+                "C_" -> "Corners ${dir.replaceFirstChar { it.uppercase() }} $line"
+                "TC_H_" -> "$home corners $dir $line"
+                "TC_A_" -> "$away corners $dir $line"
+                else -> key
+            }
+        } ?: if (key.length > 1 && key[0] == 'O') "Over ${key.drop(1)} goals"
         else if (key.length > 1 && key[0] == 'U') "Under ${key.drop(1)} goals" else key
     }
 }
