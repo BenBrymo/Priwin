@@ -147,7 +147,10 @@ data class AppUiState(
     /** True from the moment a matches file is imported (or cleared) until its results are settled and everything is refreshed. */
     val importBusy: Boolean = false,
     /** What the Data tab says about the last matches import: the step it is on, then a summary. */
-    val matchesOp: MatchesOp? = null
+    val matchesOp: MatchesOp? = null,
+    /** The last "Check flags" result on the Data tab, and whether one is running. */
+    val kryptoAudit: com.predictengines.app.data.KryptoAudit.Report? = null,
+    val kryptoAuditBusy: Boolean = false
 ) {
     /** The full-screen loader shows while a league loads and while an import is still settling. */
     val showLoader: Boolean get() = isLoading || importBusy
@@ -588,6 +591,42 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun setOp(league: League, text: String) {
         _state.update { it.copy(importBusy = true, loadStep = text, matchesOp = MatchesOp(league.id, true, text)) }
+    }
+
+    /** Recounts the selected league's Kryptonite flags from the matches file as it is now, and compares them with what is shown. */
+    fun checkKryptonites() {
+        val league = _state.value.selected ?: return
+        viewModelScope.launch {
+            _state.update { it.copy(kryptoAuditBusy = true) }
+            val report = withContext(Dispatchers.IO) {
+                runCatching {
+                    val all = repo.loadMatches(league)
+                    val teams = all.flatMap { listOf(it.homeTeam, it.awayTeam) }.distinct().sorted()
+                    val shown = _state.value.fixtures
+                    val now = java.time.LocalDateTime.now()
+                    val refs = repo.loadFixtures(league).filter { !DateUtils.isPlayed(it.date, it.time, now) }.map { f ->
+                        val h = TeamMatcher.resolve(f.homeTeam, teams)
+                        val a = TeamMatcher.resolve(f.awayTeam, teams)
+                        val ok = h != null && a != null && h != a
+                        val stored = shown.firstOrNull {
+                            it.fixture.date == f.date && it.fixture.homeTeam == f.homeTeam && it.fixture.awayTeam == f.awayTeam
+                        }?.summary?.flags
+                        com.predictengines.app.data.KryptoAudit.FixtureRef(f.date, f.homeTeam, f.awayTeam, if (ok) h else null, if (ok) a else null, stored)
+                    }
+                    com.predictengines.app.data.KryptoAudit.check(
+                        league.id, league.name, refs, all,
+                        savedPlayers.players.filter { it.leagueId == league.id },
+                        savedPlayers.news.filter { it.leagueId == league.id }
+                    )
+                }.getOrNull()
+            }
+            _state.update {
+                it.copy(
+                    kryptoAudit = report, kryptoAuditBusy = false,
+                    message = if (report == null) "Could not check the flags (no matches file for ${league.name}?)." else it.message
+                )
+            }
+        }
     }
 
     private fun plural(n: Int, one: String, many: String) = if (n == 1) one else many

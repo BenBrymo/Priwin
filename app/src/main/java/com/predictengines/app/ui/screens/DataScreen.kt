@@ -91,6 +91,7 @@ fun DataScreen(
     onRestoreDismissed: () -> Unit,
     onSetLokiOn: (String, Boolean) -> Unit,
     onSetLokiParam: (String, Int) -> Unit,
+    onCheckKrypto: () -> Unit,
     onShowLeague: (League) -> Unit,
     onUnlink: (NameLink) -> Unit,
     onExportMatches: (Uri) -> Unit,
@@ -281,6 +282,14 @@ fun DataScreen(
             accentColor = LossRed
         ) {
             KryptoSettings(state, onSetKryptoMode, onSetKryptoParam, onSetKryptoMarkets, onResetKryptoRule, onRestoreDismissed)
+        }
+
+        AppCard(
+            title = "Check Kryptonite flags",
+            subtitle = "Recounts the selected league's flags from its matches file and shows the games behind each one, so a wrong flag can be traced to a missing or wrong game.",
+            accentColor = LossRed
+        ) {
+            KryptoCheck(state, onCheckKrypto)
         }
 
         AppCard(

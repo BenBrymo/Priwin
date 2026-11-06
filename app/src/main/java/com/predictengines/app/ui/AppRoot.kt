@@ -386,6 +386,7 @@ fun AppRoot(vm: AppViewModel) {
                         onRestoreDismissed = vm::restoreDismissedFlags,
                         onSetLokiOn = vm::setLokiOn,
                         onSetLokiParam = vm::setLokiParam,
+                        onCheckKrypto = vm::checkKryptonites,
                         onShowLeague = vm::showLeague,
                         onUnlink = vm::unlinkNames,
                         onExportMatches = vm::exportMatches,
