@@ -43,6 +43,22 @@ object PerformanceReport {
         operator fun plus(o: Tally) = Tally(correct + o.correct, wrong + o.wrong)
     }
 
+    /**
+     * How far apart two hit rates are, in standard errors (two-proportion z): 0 means identical, and about 1.65 or more
+     * means the gap is unlikely to be luck. A 95% against 82% gap on 20 against 66 picks is only about 1.4.
+     */
+    fun gapZ(a: Tally, b: Tally): Double {
+        if (a.total == 0 || b.total == 0) return 0.0
+        val pooled = (a.correct + b.correct).toDouble() / (a.total + b.total)
+        val se = sqrt(pooled * (1 - pooled) * (1.0 / a.total + 1.0 / b.total))
+        return if (se == 0.0) 0.0 else (a.correct.toDouble() / a.total - b.correct.toDouble() / b.total) / se
+    }
+
+    const val CLEAR_GAP_Z = 1.65
+    const val MIN_GAP_POINTS = 8.0
+    /** Fewest flagged picks of one kind to show in a Kryptonite's by-pick-type split. */
+    const val MIN_TYPE = 3
+
     enum class Verdict(val label: String) { STRONG("Strong"), OK("OK"), AVOID("Avoid"), FEW("Not enough picks") }
 
     const val MIN_LEAGUE = 8
@@ -91,8 +107,27 @@ object PerformanceReport {
 
     /** One Kryptonite rule: picks that carried its flag against picks that did not (among picks whose flags were recorded). */
     data class RuleRow(
-        val ruleId: String, val name: String, val flagged: Tally, val clean: Tally, val hidden: Tally, val advice: String
+        val ruleId: String, val name: String, val flagged: Tally, val clean: Tally, val hidden: Tally, val advice: String,
+        /** The same flagged-against-clean comparison inside each kind of pick (Over goals, Under goals, BTTS Yes...). */
+        val byType: List<TypeSplit> = emptyList()
     )
+
+    data class TypeSplit(val type: String, val flagged: Tally, val clean: Tally)
+
+    /** The kind of pick, fine enough to tell overs from unders: "Over goals", "Under goals", "BTTS Yes", "Corners over"... */
+    fun pickType(r: PredictionRecord): String {
+        val k = r.key
+        return when {
+            k.length > 1 && k[0] == 'O' && k[1].isDigit() -> "Over goals"
+            k.length > 1 && k[0] == 'U' && k[1].isDigit() -> "Under goals"
+            k == "BTTS_Y" -> "BTTS Yes"
+            k == "BTTS_N" -> "BTTS No"
+            k.startsWith("C_O") -> "Corners over"
+            k.startsWith("C_U") -> "Corners under"
+            k.startsWith("TC_") -> if (k.getOrNull(5) == 'O') "Team corners over" else "Team corners under"
+            else -> r.group
+        }
+    }
 
     data class SourceReport(
         val source: String,
@@ -197,8 +232,13 @@ object PerformanceReport {
                 val with = known.filter { rule.id in flagsOf(it) }
                 val hid = hiddenRecs.filter { rule.id in meta[it.id]?.krypto.orEmpty() }
                 if (with.isEmpty() && hid.isEmpty()) return@mapNotNull null
-                val f = tally(with); val c = tally(known.filter { rule.id !in flagsOf(it) }); val h = tally(hid)
-                RuleRow(rule.id, rule.name, f, c, h, advice(f, c, h))
+                val cleanRecs = known.filter { rule.id !in flagsOf(it) }
+                val f = tally(with); val c = tally(cleanRecs); val h = tally(hid)
+                val byType = with.groupBy { pickType(it) }
+                    .filter { (_, x) -> x.size >= MIN_TYPE }
+                    .map { (t, x) -> TypeSplit(t, tally(x), tally(cleanRecs.filter { pickType(it) == t })) }
+                    .sortedByDescending { it.flagged.total }
+                RuleRow(rule.id, rule.name, f, c, h, advice(f, c, h), byType)
             }.sortedByDescending { it.flagged.total + it.hidden.total }
             SourceReport(
                 src, tally(recs), leagues, markets, confidence, agreement,
@@ -219,8 +259,11 @@ object PerformanceReport {
         val main = when {
             f.total < MIN_RULE -> "Too few flagged picks to judge yet."
             c.total < MIN_RULE -> "Too few clean picks to compare."
-            c.rate - f.rate >= 10 -> "Flagged picks do worse. Push to bottom or Hide fits."
-            f.rate - c.rate >= 10 -> "Flagged picks do better. The warning is not hurting."
+            // a gap only counts when it is big enough AND unlikely to be luck for this many picks
+            c.rate - f.rate >= MIN_GAP_POINTS && gapZ(c, f) >= CLEAR_GAP_Z -> "Flagged picks do worse. Push to bottom or Hide fits."
+            f.rate - c.rate >= MIN_GAP_POINTS && gapZ(f, c) >= CLEAR_GAP_Z -> "Flagged picks do better. The warning is not hurting."
+            Math.abs(f.rate - c.rate) >= MIN_GAP_POINTS ->
+                "The gap (${Math.round(f.rate)}% flagged, ${Math.round(c.rate)}% clean) could still be luck with ${f.total} flagged picks. Warn only is enough until there are more."
             else -> "No clear difference. Warn only is enough."
         }
         return main + hid

@@ -305,6 +305,16 @@ fun PerformanceCards(state: AppUiState, shownMarks: Map<String, PredictionRecord
                     Text("Flagged: ${tallyText(r.flagged)}", style = MaterialTheme.typography.labelSmall, color = LossRed)
                     Text("Without it: ${tallyText(r.clean)}", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
                     if (r.hidden.total > 0) Text("Held back: ${tallyText(r.hidden)}", style = MaterialTheme.typography.labelSmall, color = DrawAmber)
+                    if (r.byType.isNotEmpty()) {
+                        Spacer(Modifier.height(2.dp))
+                        Text("By pick type (flagged against clean, same type)", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+                        r.byType.take(6).forEach { t ->
+                            Text(
+                                "${t.type}: ${tallyText(t.flagged)}  vs  ${tallyText(t.clean)}",
+                                style = MaterialTheme.typography.labelSmall, color = TextSecondary
+                            )
+                        }
+                    }
                     Text(r.advice, style = MaterialTheme.typography.labelSmall, color = DrawAmber)
                 }
             }
