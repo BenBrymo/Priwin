@@ -206,8 +206,8 @@ fun FixturesScreen(
             else if (section == 7) TopPicksList(
                 state, onOpenTopPick, picks = state.trendPicks, prefix = "tr", source = "Trends", showBest = false,
                 title = "Trend picks of each week",
-                subtitle = "the models' own picks, kept where your settled picks say the league and market is strong (${state.trendConfig.minPicks}+ picks, score ${state.trendConfig.minScore}+) · best 20 per week · tap a card to open the analysis",
-                emptyText = "No upcoming picks fall in a strong spot yet. A spot needs ${state.trendConfig.minPicks} settled picks and a score of ${state.trendConfig.minScore}, and the Data tab's other Trend settings decide the rest.",
+                subtitle = "the models' own picks in leagues and markets the Report calls Strong, strongest first · best 20 per week · tap a card to open the analysis",
+                emptyText = "Nothing the models picked for upcoming games is in a Strong league or market yet. Strong needs 65%+ right over enough settled picks in the Report.",
                 header = { TrendSpots(state) }
             )
         }
@@ -232,8 +232,8 @@ private fun TopPicksList(
     val spotTags = remember(state.trendStrong, state.trendCold, source) {
         if (source == "Trends") emptyMap() else {
             val m = HashMap<String, Pair<String, Boolean>>()
-            state.trendCold.forEach { m["${it.leagueId}|${it.key}"] = "Cold spot ${it.tally.correct}/${it.tally.total}" to false }
-            state.trendStrong.forEach { m["${it.leagueId}|${it.key}"] = "Trend spot ${it.tally.correct}/${it.tally.total}" to true }
+            state.trendCold.forEach { m["${it.leagueId}|${it.key}"] = "Cold spot ${it.shortText}" to false }
+            state.trendStrong.filter { !it.isList }.forEach { m["${it.leagueId}|${it.key}"] = "Trend spot ${it.shortText}" to true }
             m
         }
     }

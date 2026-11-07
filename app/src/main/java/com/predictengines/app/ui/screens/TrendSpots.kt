@@ -30,31 +30,33 @@ import com.predictengines.app.ui.theme.TextSecondary
 import com.predictengines.app.ui.theme.WinGreen
 import com.predictengines.app.viewmodel.AppUiState
 
-/** The strong spots (league and market pairs the data backs) and the cold ones to avoid, shown above the Trend picks. */
+/** The leagues and markets the Report calls Strong (and the cold ones to avoid), with this week's trend picks per league. */
 @Composable
 fun TrendSpots(state: AppUiState) {
     var showCold by rememberSaveable { mutableStateOf(false) }
     val strong = state.trendStrong
     val cold = state.trendCold
+    val upcoming = state.trendPicks.groupingBy { it.leagueId }.eachCount()
     AppCard(
         title = "Where your data is strong",
         subtitle = if (strong.isEmpty())
-            "No league and market has ${state.trendConfig.minPicks}+ settled picks with a score of ${state.trendConfig.minScore}+ yet. Lower the score or switch off 'Must beat the other leagues' on the Data tab to see more."
-        else "${strong.size} spots · settled picks from your weekly lists, each game's selection counted once · score allows for how few picks there are",
+            "No league or market is Strong in the Report yet (65%+ right, enough settled picks). Settle more picks, or change the Trend settings on the Data tab."
+        else "${strong.size} strong places, as the Report judges them \u00b7 the picks below come from these",
         accentColor = WinGreen
     ) {
         state.trendBacktest?.let { Text(Trends.verdict(it), style = MaterialTheme.typography.labelMedium, color = TextMuted) }
-        strong.groupBy { it.leagueName }.forEach { (league, spots) ->
+        strong.groupBy { it.leagueId }.forEach { (id, spots) ->
             Spacer(Modifier.height(6.dp))
-            Text(league, style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+            val n = upcoming[id] ?: 0
+            Text(
+                spots.first().leagueName + if (n > 0) " \u00b7 $n pick${if (n == 1) "" else "s"} coming" else "",
+                style = MaterialTheme.typography.titleSmall, color = TextPrimary
+            )
             spots.forEach { s ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text(s.name, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-                    Text(
-                        "${s.tally.correct}/${s.tally.total} · ${Math.round(s.tally.rate)}% · score ${Math.round(s.score)}",
-                        style = MaterialTheme.typography.labelSmall, color = WinGreen
-                    )
-                }
+                Text(
+                    (if (s.isList) "Strong on the ${s.list} list" else "Strong market: ${s.name}") + " \u00b7 ${s.line}",
+                    style = MaterialTheme.typography.labelMedium, color = WinGreen
+                )
             }
         }
         if (cold.isNotEmpty()) {
@@ -64,10 +66,7 @@ fun TrendSpots(state: AppUiState) {
             if (showCold) cold.groupBy { it.leagueName }.forEach { (league, spots) ->
                 Text(league, style = MaterialTheme.typography.titleSmall, color = TextPrimary, modifier = Modifier.padding(top = 6.dp))
                 spots.forEach { s ->
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(s.name, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-                        Text("${s.tally.correct}/${s.tally.total} · ${Math.round(s.tally.rate)}%", style = MaterialTheme.typography.labelSmall, color = LossRed)
-                    }
+                    Text("${s.name} \u00b7 ${s.line}", style = MaterialTheme.typography.labelMedium, color = LossRed)
                 }
             }
         }
@@ -92,27 +91,25 @@ fun TrendSettings(state: AppUiState, onSet: (Trends.Config) -> Unit) {
         }
     }
     Column(Modifier.fillMaxWidth()) {
-        Stepper("Fewest settled picks", c.minPicks, 1, 5, 100) { onSet(c.copy(minPicks = it)) }
-        Stepper("Lowest score", c.minScore, 5, 40, 95) { onSet(c.copy(minScore = it)) }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Must beat the other leagues", style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                Text("Strong leagues count too", style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
                 Text(
-                    "A spot must hit clearly better than the same market everywhere else, so easy markets don't pass just for being easy.",
+                    "Keep every pick a list makes in a league the Report calls Strong on that list (Over 1.5 in the Bundesliga), not only single strong markets.",
                     style = MaterialTheme.typography.bodySmall, color = TextMuted
                 )
             }
-            Switch(checked = c.beatAverage, onCheckedChange = { onSet(c.copy(beatAverage = it)) })
+            Switch(checked = c.leagueSpots, onCheckedChange = { onSet(c.copy(leagueSpots = it)) })
         }
         val windows = PerformanceReport.Window.entries
         TextButton(onClick = { onSet(c.copy(window = windows[(windows.indexOf(c.window) + 1) % windows.size])) }) {
-            Text("Picks counted: ${c.window.label} (tap to change)", color = IndigoPrimary)
+            Text("Results counted: ${c.window.label} (tap to change)", color = IndigoPrimary)
         }
         Stepper("Fewest models behind a pick", c.minBackers, 1, 1, 3) { onSet(c.copy(minBackers = it)) }
         Stepper("Lowest average confidence %", c.minConfidence, 5, 50, 90) { onSet(c.copy(minConfidence = it)) }
         Text(
-            "A league and market (for example Over 1.5 in the Bundesliga) is strong with this many settled picks, this score (the hit rate corrected for how few picks there are) " +
-                "and, if on, a clear lead over the other leagues. Trend picks also need the model support set here.",
+            "Strong is the Report's own verdict: 65%+ right, a score of 50+ after allowing for few picks, with 8+ settled picks for a league or 5+ for a market. " +
+                "Trend picks also need the model support set here.",
             style = MaterialTheme.typography.bodySmall, color = TextMuted
         )
         state.trendBacktest?.let { b ->

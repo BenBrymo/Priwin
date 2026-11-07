@@ -145,21 +145,19 @@ class LeagueRepository(context: Context) {
 
     // ---- Loki switches ---------------------------------------------------------------------
 
-    /** Trends: the fewest settled picks and the lowest score a league-and-market spot needs to count as strong. */
+    /** Trends: which results count, how much model support a Trend pick needs, and whether strong leagues count too. */
     fun loadTrendConfig(): Trends.Config = Trends.Config(
-        minPicks = prefs.getString("trend_min", null)?.toIntOrNull()?.coerceIn(5, 100) ?: Trends.DEFAULT_MIN,
-        minScore = prefs.getString("trend_score", null)?.toIntOrNull()?.coerceIn(40, 95) ?: Trends.DEFAULT_SCORE,
-        beatAverage = prefs.getString("trend_beat", "1") != "0",
         window = PerformanceReport.Window.entries.firstOrNull { it.name == prefs.getString("trend_window", "") } ?: PerformanceReport.Window.ALL,
         minBackers = prefs.getString("trend_backers", null)?.toIntOrNull()?.coerceIn(1, 3) ?: 1,
-        minConfidence = prefs.getString("trend_conf", null)?.toIntOrNull()?.coerceIn(50, 90) ?: 60
+        minConfidence = prefs.getString("trend_conf", null)?.toIntOrNull()?.coerceIn(50, 90) ?: 60,
+        leagueSpots = prefs.getString("trend_leagues", "1") != "0"
     )
 
     fun saveTrendConfig(c: Trends.Config) {
         prefs.edit()
-            .putString("trend_min", c.minPicks.toString()).putString("trend_score", c.minScore.toString())
-            .putString("trend_beat", if (c.beatAverage) "1" else "0").putString("trend_window", c.window.name)
+            .putString("trend_window", c.window.name)
             .putString("trend_backers", c.minBackers.toString()).putString("trend_conf", c.minConfidence.toString())
+            .putString("trend_leagues", if (c.leagueSpots) "1" else "0")
             .apply()
     }
 

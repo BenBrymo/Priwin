@@ -199,7 +199,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var over15Cache: List<TopPick> = emptyList()
     private var lokiCache: List<TopPick> = emptyList()
     private var cornerCache: List<TopPick> = emptyList()
-    private var trendCands: List<TopPick> = emptyList()
+    private var trendCands: List<Pair<String?, List<TopPick>>> = emptyList()
     private var missingCache: Map<String, Int> = emptyMap()
 
     private fun invalidateCache() {
@@ -370,7 +370,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             var held = Triple<List<TopPick>, List<TopPick>, List<TopPick>>(emptyList(), emptyList(), emptyList())
             var loki = emptyList<TopPick>()
             var corners = emptyList<TopPick>()
-            var trendAll = emptyList<TopPick>()
+            var trendAll = emptyList<Pair<String?, List<TopPick>>>()
             val top = withContext(Dispatchers.Default) {
                 val all = ArrayList<TopPick>()
                 val hcp = ArrayList<TopPick>()
@@ -407,7 +407,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 // Loki ignores the Kryptonite Hide / Push-down switches: it needs the flagged fixtures
                 loki = TopPicksEngine.rank(lk)
                 corners = TopPicksEngine.rank(cr, modes = modes)
-                trendAll = tr
+                trendAll = listOf("Top 20" to all, "Handicap" to hcp, "Over 1.5" to o15, "Loki" to lk, "Corners" to cr, null to tr)
                 shown
             }
             withContext(Dispatchers.IO) { trendCands = trendAll
@@ -454,12 +454,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val backtest: com.predictengines.app.data.Trends.Backtest
     )
 
-    private fun buildTrends(cands: List<TopPick>): TrendBundle {
+    private fun buildTrends(cands: List<Pair<String?, List<TopPick>>>): TrendBundle {
         val visible = _state.value.leagues.map { it.id }.toSet()
         val cfg = repo.loadTrendConfig()
         val marks = _state.value.marks.values
-        val found = com.predictengines.app.data.Trends.spots(marks, visible, cfg)
-        val ranked = TopPicksEngine.rank(com.predictengines.app.data.Trends.pick(cands, found.strong, cfg), modes = repo.kryptoModes())
+        val found = com.predictengines.app.data.Trends.spots(marks, visible, cfg, java.time.LocalDate.now())
+        val ranked = TopPicksEngine.rank(com.predictengines.app.data.Trends.pick(cands, found, cfg), modes = repo.kryptoModes())
         return TrendBundle(
             found, ranked, mergePlayed(ListPicksStore.TRENDS, ranked, perGame = false),
             com.predictengines.app.data.Trends.backtest(marks, visible, cfg)
@@ -1060,7 +1060,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         refreshTopPicks()
     }
 
-    /** Trends: how many settled picks and what score a league-and-market spot needs to count as strong. */
+    /** Trends: which results count and how much model support a Trend pick needs. */
     fun setTrend(config: com.predictengines.app.data.Trends.Config) {
         repo.saveTrendConfig(config)
         _state.update { it.copy(trendConfig = repo.loadTrendConfig()) }

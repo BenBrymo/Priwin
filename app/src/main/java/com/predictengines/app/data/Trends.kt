@@ -4,43 +4,45 @@ import com.predictengines.app.data.PerformanceReport.Tally
 import java.time.LocalDate
 
 /**
- * Data-trend picks. The Data tab already knows how every market has done in every league; this turns that into a filter
- * over the models' own picks. A "spot" is one market in one league (Over 1.5 in the Bundesliga). A spot is strong when it
- * has enough settled picks, a high enough score (the hit rate corrected for sample size) and, unless switched off, it
- * beats the same market in the other leagues by a margin that is unlikely to be luck. A spot is cold when it has enough
- * picks and hits under 50% or clearly worse than the other leagues. Trends never makes a prediction: upcoming picks that
- * the models already made and that fall in a strong spot are the Trend picks.
+ * Trend picks. Trends never makes a prediction and has no rules of its own: it reads the same results the report shows
+ * (the verdicts of [PerformanceReport]) and keeps the models' upcoming picks that sit in a place the data calls Strong.
+ * Two kinds of strong place count:
+ *  - a strong league on a list: the league's verdict on that list is Strong (Over 1.5 in the Bundesliga), so that list's
+ *    picks in that league are kept;
+ *  - a strong market in a league: one market (Over 1.5, Home win...) in that league is Strong across all the lists.
+ * A cold place is an Avoid verdict; it is only used to tag cards on the other lists.
  */
 object Trends {
     const val SOURCE = "Trends"
-    const val DEFAULT_MIN = 15
-    const val DEFAULT_SCORE = 65
 
     /** The weekly lists whose settled picks feed the trends (Trend picks themselves never feed back in). */
     val BASE_SOURCES = setOf("Top 20", "Handicap", "Over 1.5", "Loki", "Corners")
 
-    /** Fewest settled picks the other leagues need before a spot is compared with them. */
-    private const val MIN_REST = 10
-    /** How far (in standard errors) a spot must sit from the other leagues' rate: about a 90% one-sided confidence. */
+    /** How far (in standard errors) strong picks must sit above the rest before the backtest calls the filter helpful. */
     private const val BEAT_Z = 1.28
 
     data class Config(
-        val minPicks: Int = DEFAULT_MIN,
-        val minScore: Int = DEFAULT_SCORE,
-        /** The spot must also beat the same market in the other leagues. */
-        val beatAverage: Boolean = true,
-        /** Which settled picks count: all time, this season, the last 12 or 4 weeks. */
+        /** Which results count: all time, this season, the last 12 or 4 weeks. */
         val window: PerformanceReport.Window = PerformanceReport.Window.ALL,
         /** A Trend pick needs at least this many models behind it, and this average confidence (%). */
         val minBackers: Int = 1,
-        val minConfidence: Int = 60
+        val minConfidence: Int = 60,
+        /** Also keep a strong league's picks on a list, not only strong single markets. */
+        val leagueSpots: Boolean = true
     )
 
+    /** One place the data is strong (or cold): a market in a league ([list] null), or a league on one list. */
     data class Spot(
-        val leagueId: String, val leagueName: String, val key: String, val name: String,
-        val tally: Tally, val rest: Tally
+        val leagueId: String, val leagueName: String,
+        /** The market key for a market spot; blank for a league-on-a-list spot. */
+        val key: String, val name: String, val tally: Tally, val list: String? = null
     ) {
+        val isList: Boolean get() = list != null
         val score: Double get() = tally.adjusted
+        val rate: Double get() = tally.rate
+        val shortText: String get() = "${tally.correct}/${tally.total}"
+        val line: String
+            get() = "${tally.correct}/${tally.total} right (${Math.round(tally.rate)}%) · score ${Math.round(tally.adjusted)}"
     }
 
     data class Found(val strong: List<Spot>, val cold: List<Spot>)
@@ -48,84 +50,85 @@ object Trends {
     /** How the filter would have done: each past pick judged by what was known before its game, never by its own result. */
     data class Backtest(val strong: Tally, val cold: Tally, val other: Tally)
 
-    private fun dedupe(records: Collection<PredictionRecord>, visible: Set<String>): List<PredictionRecord> {
-        // one pick can sit on several lists (Top 20 and Over 1.5): count each game's selection once
-        val seen = HashSet<String>()
-        return records.filter { r ->
-            r.source in BASE_SOURCES && r.leagueId in visible &&
-                seen.add("${r.leagueId}|${r.date}|${r.home}|${r.away}|${r.key}")
-        }
-    }
-
     private fun tally(rs: Collection<PredictionRecord>) = Tally(rs.count { it.correct }, rs.count { !it.correct })
-
-    private fun beats(own: Tally, rest: Tally, cfg: Config): Boolean =
-        !cfg.beatAverage || rest.total < MIN_REST || (own.rate > rest.rate && PerformanceReport.gapZ(own, rest) >= BEAT_Z)
-
-    fun isStrong(own: Tally, rest: Tally, cfg: Config): Boolean =
-        own.total >= cfg.minPicks && own.adjusted >= cfg.minScore && beats(own, rest, cfg)
-
-    fun isCold(own: Tally, rest: Tally, cfg: Config): Boolean =
-        own.total >= cfg.minPicks && (
-            own.rate < PerformanceReport.AVOID_RATE ||
-                (cfg.beatAverage && rest.total >= MIN_REST && own.rate < rest.rate && PerformanceReport.gapZ(rest, own) >= BEAT_Z)
-            )
 
     private fun inWindow(r: PredictionRecord, from: LocalDate?) =
         from == null || DateUtils.parse(r.date)?.let { !it.isBefore(from) } == true
 
-    fun spots(
-        records: Collection<PredictionRecord>, visible: Set<String>, cfg: Config, today: LocalDate = LocalDate.now()
-    ): Found {
+    private fun base(records: Collection<PredictionRecord>, visible: Set<String>) =
+        records.filter { it.source in BASE_SOURCES && it.leagueId in visible }
+
+    /** One pick can sit on several lists (Top 20 and Over 1.5): count each game's selection once for market spots. */
+    private fun dedupe(rs: List<PredictionRecord>): List<PredictionRecord> {
+        val seen = HashSet<String>()
+        return rs.filter { seen.add("${it.leagueId}|${it.date}|${it.home}|${it.away}|${it.key}") }
+    }
+
+    fun spots(records: Collection<PredictionRecord>, visible: Set<String>, cfg: Config, today: LocalDate = LocalDate.now()): Found {
         val from = PerformanceReport.cutoff(cfg.window, today)
-        val rs = dedupe(records, visible).filter { inWindow(it, from) }
-        val strong = ArrayList<Spot>()
-        val cold = ArrayList<Spot>()
-        for ((_, group) in rs.groupBy { it.key }) {
-            val all = tally(group)
-            for ((_, x) in group.groupBy { it.leagueId }) {
-                val own = tally(x)
-                if (own.total < cfg.minPicks) continue
-                val rest = Tally(all.correct - own.correct, all.wrong - own.wrong)
-                val spot = Spot(x.first().leagueId, x.first().leagueName, x.first().key, PerformanceReport.keyName(x.first().key), own, rest)
-                if (isStrong(own, rest, cfg)) strong.add(spot) else if (isCold(own, rest, cfg)) cold.add(spot)
+        val rs = base(records, visible).filter { inWindow(it, from) }
+        val strong = ArrayList<Spot>(); val cold = ArrayList<Spot>()
+        for ((id, x) in dedupe(rs).groupBy { it.leagueId to it.key }) {
+            val t = tally(x)
+            val spot = Spot(id.first, x.first().leagueName, id.second, PerformanceReport.keyName(id.second), t)
+            when (PerformanceReport.verdict(t, PerformanceReport.MIN_MARKET)) {
+                PerformanceReport.Verdict.STRONG -> strong.add(spot)
+                PerformanceReport.Verdict.AVOID -> cold.add(spot)
+                else -> {}
+            }
+        }
+        if (cfg.leagueSpots) for ((id, x) in rs.groupBy { it.source to it.leagueId }) {
+            val t = tally(x)
+            // a list that only ever picks one market (Over 1.5) would repeat that market's spot: show it once
+            val repeats = strong.any { !it.isList && it.leagueId == id.second && it.tally == t }
+            if (!repeats && PerformanceReport.verdict(t, PerformanceReport.MIN_LEAGUE) == PerformanceReport.Verdict.STRONG) {
+                strong.add(Spot(id.second, x.first().leagueName, "", "${id.first} list", t, list = id.first))
             }
         }
         return Found(
-            strong.sortedWith(compareBy<Spot> { it.leagueName }.thenByDescending { it.score }),
-            cold.sortedBy { it.tally.rate }
+            strong.sortedWith(compareBy<Spot> { it.leagueName }.thenBy { !it.isList }.thenByDescending { it.score }),
+            cold.sortedBy { it.rate }
         )
     }
 
-    /** The candidates that fall in a strong spot and have enough model support, strongest data first. */
-    fun pick(candidates: List<TopPick>, strong: List<Spot>, cfg: Config): List<TopPick> {
-        val byKey = strong.associateBy { it.leagueId to it.key }
-        return candidates.mapNotNull { tp ->
-            val s = byKey[tp.leagueId to tp.pick.key] ?: return@mapNotNull null
-            if (tp.pick.backers.size < cfg.minBackers || tp.pick.averageConfidence < cfg.minConfidence) return@mapNotNull null
-            tp.copy(
-                pick = tp.pick.copy(
-                    label = "${tp.pick.label} · ${s.leagueName} ${s.tally.correct}/${s.tally.total}",
-                    strength = s.score + 0.1 * tp.pick.strength
-                )
-            )
+    /**
+     * Keeps the upcoming picks that sit in a strong spot and have enough model support. [lists] are the candidates of each
+     * weekly list (name first; null for the pool of every consensus pick). A pick in several spots keeps its best one.
+     */
+    fun pick(lists: List<Pair<String?, List<TopPick>>>, found: Found, cfg: Config): List<TopPick> {
+        val market = found.strong.filter { !it.isList }.associateBy { it.leagueId to it.key }
+        val leagueList = found.strong.filter { it.isList }.associateBy { it.list.orEmpty() to it.leagueId }
+        val out = LinkedHashMap<String, TopPick>()
+        for ((src, cands) in lists) for (tp in cands) {
+            if (tp.pick.backers.size < cfg.minBackers || tp.pick.averageConfidence < cfg.minConfidence) continue
+            val s = market[tp.leagueId to tp.pick.key] ?: src?.let { leagueList[it to tp.leagueId] } ?: continue
+            val why = if (s.isList) "${s.leagueName} is strong on ${s.list} ${s.shortText}" else "${s.leagueName} ${s.name} ${s.shortText}"
+            val made = tp.copy(pick = tp.pick.copy(label = "${tp.pick.label} · $why", strength = s.score + 0.1 * tp.pick.strength))
+            val id = "${tp.leagueId}|${tp.date}|${tp.home}|${tp.away}|${tp.pick.key}"
+            val old = out[id]
+            if (old == null || made.pick.strength > old.pick.strength) out[id] = made
         }
+        return out.values.toList()
     }
 
     fun backtest(records: Collection<PredictionRecord>, visible: Set<String>, cfg: Config): Backtest {
-        val rs = dedupe(records, visible).mapNotNull { r -> DateUtils.parse(r.date)?.let { r to it } }
-        val byKey = rs.groupBy { it.first.key }.mapValues { (_, l) -> l.sortedBy { it.second } }
+        val all = base(records, visible)
+        val dated = dedupe(all).mapNotNull { r -> DateUtils.parse(r.date)?.let { r to it } }
+        val byMarket = dated.groupBy { it.first.leagueId to it.first.key }.mapValues { (_, l) -> l.sortedBy { it.second } }
+        val byList = all.mapNotNull { r -> DateUtils.parse(r.date)?.let { r to it } }
+            .groupBy { it.first.source to it.first.leagueId }.mapValues { (_, l) -> l.sortedBy { it.second } }
         var s = Tally(); var c = Tally(); var o = Tally()
-        for ((r, d) in rs) {
+        for ((r, d) in dated) {
             val from = PerformanceReport.cutoff(cfg.window, d)
-            val prior = byKey.getValue(r.key).takeWhile { it.second.isBefore(d) }
-                .filter { from == null || !it.second.isBefore(from) }.map { it.first }
-            val own = tally(prior.filter { it.leagueId == r.leagueId })
-            val rest = tally(prior.filter { it.leagueId != r.leagueId })
+            fun prior(l: List<Pair<PredictionRecord, LocalDate>>?) =
+                tally(l.orEmpty().takeWhile { it.second.isBefore(d) }.filter { from == null || !it.second.isBefore(from) }.map { it.first })
+            val mv = PerformanceReport.verdict(prior(byMarket[r.leagueId to r.key]), PerformanceReport.MIN_MARKET)
+            val lv = if (cfg.leagueSpots) PerformanceReport.verdict(prior(byList[r.source to r.leagueId]), PerformanceReport.MIN_LEAGUE)
+            else PerformanceReport.Verdict.OK
             val t = if (r.correct) Tally(1, 0) else Tally(0, 1)
             when {
-                isStrong(own, rest, cfg) -> s += t
-                isCold(own, rest, cfg) -> c += t
+                mv == PerformanceReport.Verdict.STRONG || lv == PerformanceReport.Verdict.STRONG -> s += t
+                mv == PerformanceReport.Verdict.AVOID -> c += t
                 else -> o += t
             }
         }

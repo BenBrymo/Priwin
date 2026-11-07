@@ -303,7 +303,7 @@ fun DataScreen(
 
         AppCard(
             title = "Trend picks",
-            subtitle = "The Trends tab turns your settled picks into picks: a league and market the data backs. Choose how strong a spot must be.",
+            subtitle = "The Trends tab gathers each week's picks from the leagues and markets the Report calls Strong. It makes no predictions of its own.",
             accentColor = WinGreen
         ) {
             TrendSettings(state, onSetTrend)
