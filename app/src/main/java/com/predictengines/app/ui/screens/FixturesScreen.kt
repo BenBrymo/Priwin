@@ -120,14 +120,15 @@ fun FixturesScreen(
     val leagueListState = androidx.compose.runtime.saveable.rememberSaveable(state.selected?.id, saver = androidx.compose.foundation.lazy.LazyListState.Saver) {
         androidx.compose.foundation.lazy.LazyListState()
     }
-    val tabToday = remember(state.fixtures, state.topPicks, state.handicapPicks, state.over15Picks, state.lokiPicks, state.cornerPicks, now) {
+    val tabToday = remember(state.fixtures, state.topPicks, state.handicapPicks, state.over15Picks, state.lokiPicks, state.cornerPicks, state.trendPicks, now) {
         listOf(
             Countdown.anyToday(state.fixtures.map { it.fixture.date to it.fixture.time }, now),
             Countdown.anyToday(state.topPicks.map { it.date to it.time }, now),
             Countdown.anyToday(state.handicapPicks.map { it.date to it.time }, now),
             Countdown.anyToday(state.over15Picks.map { it.date to it.time }, now),
             Countdown.anyToday(state.lokiPicks.map { it.date to it.time }, now),
-            Countdown.anyToday(state.cornerPicks.map { it.date to it.time }, now)
+            Countdown.anyToday(state.cornerPicks.map { it.date to it.time }, now),
+            Countdown.anyToday(state.trendPicks.map { it.date to it.time }, now)
         )
     }
     val waitingResults = remember(state.fixtures, state.scores, now) { missingResults(state).size }
@@ -170,6 +171,9 @@ fun FixturesScreen(
             Tab(selected = section == 6, onClick = { section = 6 }, text = {
                 TabLabel("Corners", tabToday[5])
             })
+            Tab(selected = section == 7, onClick = { section = 7 }, text = {
+                TabLabel("Trends", tabToday[6])
+            })
         }
         Box(Modifier.weight(1f)) {
             if (section == 0) LeagueFixtures(state, parts, leagueListState, onOpen, onGoToData, onMark, onLink, onSaveScore, onRemoveScore, scoreHints)
@@ -199,6 +203,13 @@ fun FixturesScreen(
                 subtitle = "best 20 per week across all leagues · each game's best corner line, backed by Poisson and/or Stats, both backing it first · tap a card to open the analysis",
                 emptyText = "No upcoming games have Poisson or Stats backing a corner line yet (needs corner counts in the matches file)."
             )
+            else if (section == 7) TopPicksList(
+                state, onOpenTopPick, picks = state.trendPicks, prefix = "tr", source = "Trends", showBest = false,
+                title = "Trend picks of each week",
+                subtitle = "picks in a league and market your own settled picks say is strong (${state.trendMin}+ picks, score ${state.trendScore}+) · best 20 per week · tap a card to open the analysis",
+                emptyText = "No upcoming picks fall in a strong spot yet. A spot needs ${state.trendMin} settled picks and a score of ${state.trendScore}; you can change both on the Data tab.",
+                header = { TrendSpots(state) }
+            )
         }
     }
 }
@@ -213,7 +224,8 @@ private fun TopPicksList(
     showBest: Boolean = true,
     title: String = "Top 20 picks of each week",
     subtitle: String? = null,
-    emptyText: String = "No upcoming predictable fixtures in any league yet. Add fixtures files (built in or loaded on the Data tab) and the strongest picks will be ranked here."
+    emptyText: String = "No upcoming predictable fixtures in any league yet. Add fixtures files (built in or loaded on the Data tab) and the strongest picks will be ranked here.",
+    header: (@Composable () -> Unit)? = null
 ) {
     var folded by rememberSaveable { mutableStateOf(emptySet<String>()) }
     if (state.topPicksLoading && picks.isEmpty()) {
@@ -223,12 +235,22 @@ private fun TopPicksList(
         return
     }
     if (picks.isEmpty()) {
-        Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-            Text(
-                emptyText,
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextMuted
-            )
+        if (header != null) {
+            Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                header()
+                Text(emptyText, style = MaterialTheme.typography.bodyMedium, color = TextMuted)
+            }
+        } else {
+            Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                Text(
+                    emptyText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextMuted
+                )
+            }
         }
         return
     }
@@ -248,6 +270,7 @@ private fun TopPicksList(
                 accentColor = WinGreen
             ) {}
         }
+        if (header != null) item { header() }
         // Same week groups as the league list: Monday-Sunday, foldable, games side by side.
         val thisWeek = ReportBuilder.weekStartOf(LocalDate.now().toString())
         // The list arrives week by week, strongest first inside each week: rank = position within the week.

@@ -100,6 +100,27 @@ object TopPicksEngine {
             )
         }
 
+    /**
+     * Everything a game could be picked for, for the Trends list: its consensus picks, Over 1.5 where backed, and its best
+     * corner line. The Trends list keeps the ones that fall in a league-and-market spot the data backs.
+     */
+    fun trendCandidates(league: League, items: List<FixtureItem>, now: LocalDateTime = LocalDateTime.now()): List<TopPick> {
+        val out = ArrayList<TopPick>()
+        val seen = HashSet<String>()
+        fun add(tp: TopPick) { if (seen.add("${tp.date}|${tp.home}|${tp.away}|${tp.pick.key}")) out.add(tp) }
+        items.forEach { fx ->
+            val home = fx.home ?: return@forEach
+            val away = fx.away ?: return@forEach
+            if (DateUtils.isPlayed(fx.fixture.date, fx.fixture.time, now)) return@forEach
+            fx.summary?.consensus?.picks?.forEach { p ->
+                add(TopPick(league.id, league.name, fx.fixture.date, fx.fixture.time, fx.fixture.homeTeam, fx.fixture.awayTeam, home, away, p, fx.summary?.flags.orEmpty()))
+            }
+        }
+        over15Candidates(league, items, now).forEach { add(it) }
+        cornerCandidates(league, items, now).forEach { add(it) }
+        return out
+    }
+
     /** The best corner line (Poisson and/or Stats) of each upcoming game. Two backers rank above one; then average confidence. */
     fun cornerCandidates(league: League, items: List<FixtureItem>, now: LocalDateTime = LocalDateTime.now()): List<TopPick> =
         upcoming(league, items, now) { fx ->

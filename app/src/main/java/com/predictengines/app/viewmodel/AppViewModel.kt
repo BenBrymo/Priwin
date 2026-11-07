@@ -120,6 +120,12 @@ data class AppUiState(
     val over15Picks: List<TopPick> = emptyList(),
     val lokiPicks: List<TopPick> = emptyList(),
     val cornerPicks: List<TopPick> = emptyList(),
+    /** Trend picks (picks in league-and-market spots the data backs), the spots themselves, and the two limits that define "strong". */
+    val trendPicks: List<TopPick> = emptyList(),
+    val trendStrong: List<com.predictengines.app.data.Trends.Spot> = emptyList(),
+    val trendCold: List<com.predictengines.app.data.Trends.Spot> = emptyList(),
+    val trendMin: Int = com.predictengines.app.data.Trends.DEFAULT_MIN,
+    val trendScore: Int = com.predictengines.app.data.Trends.DEFAULT_SCORE,
     val lokiConfig: com.predictengines.app.data.LokiConfig = com.predictengines.app.data.LokiConfig(),
 
     /** Corners / cards / first scorer the user typed in for played games, keyed by fixture. */
@@ -192,6 +198,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var over15Cache: List<TopPick> = emptyList()
     private var lokiCache: List<TopPick> = emptyList()
     private var cornerCache: List<TopPick> = emptyList()
+    private var trendCands: List<TopPick> = emptyList()
     private var missingCache: Map<String, Int> = emptyMap()
 
     private fun invalidateCache() {
@@ -340,12 +347,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         topCache?.let { cached ->
             // games that kicked off since the list was built drop out
             val lists = composeLists(cached, handicapCache, over15Cache)
+            val trends = buildTrends(trendCands)
             _state.update {
                 it.copy(
                     topPicks = lists.first, topPicksLoading = false,
                     handicapPicks = lists.second, over15Picks = lists.third,
                     lokiPicks = composeLoki(lokiCache),
                     cornerPicks = composeCorners(cornerCache),
+                    trendPicks = trends.third, trendStrong = trends.first.strong, trendCold = trends.first.cold,
+                    trendMin = repo.trendMin(), trendScore = repo.trendScore(),
                     missingByLeague = missingCache
                 )
             }
@@ -359,12 +369,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             var held = Triple<List<TopPick>, List<TopPick>, List<TopPick>>(emptyList(), emptyList(), emptyList())
             var loki = emptyList<TopPick>()
             var corners = emptyList<TopPick>()
+            var trendAll = emptyList<TopPick>()
             val top = withContext(Dispatchers.Default) {
                 val all = ArrayList<TopPick>()
                 val hcp = ArrayList<TopPick>()
                 val o15 = ArrayList<TopPick>()
                 val lk = ArrayList<TopPick>()
                 val cr = ArrayList<TopPick>()
+                val tr = ArrayList<TopPick>()
                 val missing = HashMap<String, Int>()
                 for ((li, league) in leagues.withIndex()) {
                     try {
@@ -379,6 +391,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         o15 += TopPicksEngine.over15Candidates(league, data.fixtures)
                         lk += TopPicksEngine.lokiCandidates(league, data.fixtures, data.matches)
                         cr += TopPicksEngine.cornerCandidates(league, data.fixtures)
+                        tr += TopPicksEngine.trendCandidates(league, data.fixtures)
                     } catch (e: Exception) {
                         // one unreadable league must not hide the others
                     }
@@ -393,18 +406,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 // Loki ignores the Kryptonite Hide / Push-down switches: it needs the flagged fixtures
                 loki = TopPicksEngine.rank(lk)
                 corners = TopPicksEngine.rank(cr, modes = modes)
+                trendAll = tr
                 shown
             }
-            withContext(Dispatchers.IO) { recordListPicks(top.first, top.second, top.third, held, loki, corners) }
+            withContext(Dispatchers.IO) { trendCands = trendAll
+                recordListPicks(top.first, top.second, top.third, held, loki, corners, buildTrends(trendAll).second) }
             if (gen == cacheGen.get()) {
                 topCache = top.first; handicapCache = top.second; over15Cache = top.third; lokiCache = loki; cornerCache = corners
             }
             val lists = withContext(Dispatchers.IO) { composeLists(top.first, top.second, top.third) }
             val lokiShown = withContext(Dispatchers.IO) { composeLoki(loki) }
             val cornersShown = withContext(Dispatchers.IO) { composeCorners(corners) }
+            val trends = withContext(Dispatchers.IO) { buildTrends(trendAll) }
             _state.update {
                 it.copy(
                     topPicks = lists.first, handicapPicks = lists.second, over15Picks = lists.third, lokiPicks = lokiShown, cornerPicks = cornersShown,
+                    trendPicks = trends.third, trendStrong = trends.first.strong, trendCold = trends.first.cold,
+                    trendMin = repo.trendMin(), trendScore = repo.trendScore(),
                     missingByLeague = missingCache, topPicksLoading = false
                 )
             }
@@ -425,6 +443,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The Loki list as shown: a game can have several Loki picks, so played ones are kept per pick, not per game. */
     private fun composeLoki(loki: List<TopPick>): List<TopPick> = mergePlayed(ListPicksStore.LOKI, loki, perGame = false)
+
+    /**
+     * Trend picks: the strong league-and-market spots in your settled picks (from the weekly lists), and the upcoming picks
+     * that fall in one. Returns the spots, the ranked upcoming picks (what gets written down) and the list as shown.
+     */
+    private fun buildTrends(cands: List<TopPick>): Triple<com.predictengines.app.data.Trends.Found, List<TopPick>, List<TopPick>> {
+        val visible = _state.value.leagues.map { it.id }.toSet()
+        val found = com.predictengines.app.data.Trends.spots(_state.value.marks.values, visible, repo.trendMin(), repo.trendScore())
+        val ranked = TopPicksEngine.rank(com.predictengines.app.data.Trends.pick(cands, found.strong), modes = repo.kryptoModes())
+        return Triple(found, ranked, mergePlayed(ListPicksStore.TRENDS, ranked, perGame = false))
+    }
 
     /** The Corners list as shown: one pick per game, played ones kept in their week. */
     private fun composeCorners(corners: List<TopPick>): List<TopPick> = mergePlayed(ListPicksStore.CORNERS, corners, perGame = true)
@@ -500,7 +529,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         top: List<TopPick>, hcp: List<TopPick>, o15: List<TopPick>,
         held: Triple<List<TopPick>, List<TopPick>, List<TopPick>> = Triple(emptyList(), emptyList(), emptyList()),
         loki: List<TopPick> = emptyList(),
-        corners: List<TopPick> = emptyList()
+        corners: List<TopPick> = emptyList(),
+        trends: List<TopPick> = emptyList()
     ) {
         fun entries(source: String, list: List<TopPick>) = list.map { tp ->
             ListPicksStore.Entry(
@@ -515,7 +545,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         listPicks.add(
             entries(ListPicksStore.TOP, top) + entries(ListPicksStore.HANDICAP, hcp) + entries(ListPicksStore.OVER15, o15) +
                 entries(ListPicksStore.TOP + hide, held.first) + entries(ListPicksStore.HANDICAP + hide, held.second) +
-                entries(ListPicksStore.OVER15 + hide, held.third) + entries(ListPicksStore.LOKI, loki) + entries(ListPicksStore.CORNERS, corners)
+                entries(ListPicksStore.OVER15 + hide, held.third) + entries(ListPicksStore.LOKI, loki) + entries(ListPicksStore.CORNERS, corners) + entries(ListPicksStore.TRENDS, trends)
         )
         _state.update { it.copy(listEntries = listPicks.load().values.toList()) }
     }
@@ -1016,6 +1046,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         repo.setLokiOn(id, on)
         _state.update { it.copy(lokiConfig = repo.loadLokiConfig()) }
         topCache = null
+        refreshTopPicks()
+    }
+
+    /** Trends: how many settled picks and what score a league-and-market spot needs to count as strong. */
+    fun setTrend(min: Int, score: Int) {
+        repo.setTrend(min.coerceIn(5, 100), score.coerceIn(40, 95))
+        _state.update { it.copy(trendMin = repo.trendMin(), trendScore = repo.trendScore()) }
         refreshTopPicks()
     }
 

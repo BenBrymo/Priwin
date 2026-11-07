@@ -92,6 +92,7 @@ fun DataScreen(
     onSetLokiOn: (String, Boolean) -> Unit,
     onSetLokiParam: (String, Int) -> Unit,
     onCheckKrypto: () -> Unit,
+    onSetTrend: (Int, Int) -> Unit,
     onShowLeague: (League) -> Unit,
     onUnlink: (NameLink) -> Unit,
     onExportMatches: (Uri) -> Unit,
@@ -298,6 +299,14 @@ fun DataScreen(
             accentColor = IndigoPrimary
         ) {
             LokiSettings(state, onSetLokiOn, onSetLokiParam)
+        }
+
+        AppCard(
+            title = "Trend picks",
+            subtitle = "The Trends tab turns your settled picks into picks: a league and market the data backs. Choose how strong a spot must be.",
+            accentColor = WinGreen
+        ) {
+            TrendSettings(state, onSetTrend)
         }
 
         ReminderCard()

@@ -145,6 +145,11 @@ class LeagueRepository(context: Context) {
 
     // ---- Loki switches ---------------------------------------------------------------------
 
+    /** Trends: the fewest settled picks and the lowest score a league-and-market spot needs to count as strong. */
+    fun trendMin(): Int = prefs.getString("trend_min", null)?.toIntOrNull()?.coerceIn(5, 100) ?: Trends.DEFAULT_MIN
+    fun trendScore(): Int = prefs.getString("trend_score", null)?.toIntOrNull()?.coerceIn(40, 95) ?: Trends.DEFAULT_SCORE
+    fun setTrend(min: Int, score: Int) { prefs.edit().putString("trend_min", min.toString()).putString("trend_score", score.toString()).apply() }
+
     fun loadLokiConfig(): LokiConfig {
         val off = prefs.getString("loki_off", "").orEmpty().split(',').filter { it.isNotBlank() }.toSet()
         val params = HashMap<String, Int>()

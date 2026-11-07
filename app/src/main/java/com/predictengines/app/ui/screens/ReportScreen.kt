@@ -205,6 +205,7 @@ private fun ListReportCard(source: String, weeks: List<ReportBuilder.ListWeek>) 
         "Handicap" -> "Handicap picks"
         "Loki" -> "Loki picks"
         "Corners" -> "Corner picks"
+        "Trends" -> "Trend picks"
         else -> "Over 1.5 goals"
     }
 

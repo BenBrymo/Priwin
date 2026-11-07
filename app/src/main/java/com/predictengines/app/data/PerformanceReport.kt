@@ -12,7 +12,7 @@ import kotlin.math.sqrt
 object PerformanceReport {
 
     const val ALL_LISTS = "All lists"
-    val LISTS = listOf("Top 20", "Handicap", "Over 1.5", "Loki", "Corners")
+    val LISTS = listOf("Top 20", "Handicap", "Over 1.5", "Loki", "Corners", "Trends")
 
     enum class Window(val label: String) {
         ALL("All time"), SEASON("This season"), WEEKS12("Last 12 weeks"), WEEKS4("Last 4 weeks")
@@ -151,7 +151,7 @@ object PerformanceReport {
     private fun inWindow(r: PredictionRecord, from: LocalDate?) =
         from == null || DateUtils.parse(r.date)?.let { !it.isBefore(from) } == true
 
-    private fun inSource(src: String, r: PredictionRecord) = if (src == ALL_LISTS) r.source in LISTS else r.source == src
+    private fun inSource(src: String, r: PredictionRecord) = if (src == ALL_LISTS) r.source in LISTS && r.source != Trends.SOURCE else r.source == src
 
     fun confidenceBand(c: Double?): String = when {
         c == null -> "Unknown"

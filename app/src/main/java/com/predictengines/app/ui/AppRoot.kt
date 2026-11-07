@@ -387,6 +387,7 @@ fun AppRoot(vm: AppViewModel) {
                         onSetLokiOn = vm::setLokiOn,
                         onSetLokiParam = vm::setLokiParam,
                         onCheckKrypto = vm::checkKryptonites,
+                        onSetTrend = vm::setTrend,
                         onShowLeague = vm::showLeague,
                         onUnlink = vm::unlinkNames,
                         onExportMatches = vm::exportMatches,
