@@ -206,8 +206,8 @@ fun FixturesScreen(
             else if (section == 7) TopPicksList(
                 state, onOpenTopPick, picks = state.trendPicks, prefix = "tr", source = "Trends", showBest = false,
                 title = "Trend picks of each week",
-                subtitle = "picks in a league and market your own settled picks say is strong (${state.trendMin}+ picks, score ${state.trendScore}+) · best 20 per week · tap a card to open the analysis",
-                emptyText = "No upcoming picks fall in a strong spot yet. A spot needs ${state.trendMin} settled picks and a score of ${state.trendScore}; you can change both on the Data tab.",
+                subtitle = "the models' own picks, kept where your settled picks say the league and market is strong (${state.trendConfig.minPicks}+ picks, score ${state.trendConfig.minScore}+) · best 20 per week · tap a card to open the analysis",
+                emptyText = "No upcoming picks fall in a strong spot yet. A spot needs ${state.trendConfig.minPicks} settled picks and a score of ${state.trendConfig.minScore}, and the Data tab's other Trend settings decide the rest.",
                 header = { TrendSpots(state) }
             )
         }
@@ -228,6 +228,15 @@ private fun TopPicksList(
     header: (@Composable () -> Unit)? = null
 ) {
     var folded by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    // Cards on the other lists say when their league and market is a strong or cold spot in your data.
+    val spotTags = remember(state.trendStrong, state.trendCold, source) {
+        if (source == "Trends") emptyMap() else {
+            val m = HashMap<String, Pair<String, Boolean>>()
+            state.trendCold.forEach { m["${it.leagueId}|${it.key}"] = "Cold spot ${it.tally.correct}/${it.tally.total}" to false }
+            state.trendStrong.forEach { m["${it.leagueId}|${it.key}"] = "Trend spot ${it.tally.correct}/${it.tally.total}" to true }
+            m
+        }
+    }
     if (state.topPicksLoading && picks.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             com.predictengines.app.ui.components.ThinkingLoader(step = state.loadStep)
@@ -321,6 +330,7 @@ private fun TopPicksList(
                         ) { (rank, tp) ->
                             TopPickCard(
                                 rank, tp, onClick = { onOpenTopPick(tp) }, modifier = Modifier.width(300.dp), showBest = showBest,
+                                spotTag = spotTags["${tp.leagueId}|${tp.pick.key}"],
                                 result = ListResult(
                                     played = DateUtils.isPlayed(tp.date, tp.time),
                                     correct = state.marks[PredictionRecord.idOf(tp.leagueId, tp.date, tp.home, tp.away, source, tp.pick.key)]?.correct,
@@ -340,7 +350,8 @@ private class ListResult(val played: Boolean, val correct: Boolean?, val score: 
 @Composable
 private fun TopPickCard(
     rank: Int, tp: TopPick, onClick: () -> Unit, modifier: Modifier = Modifier, showBest: Boolean = true,
-    result: ListResult? = null
+    result: ListResult? = null,
+    spotTag: Pair<String, Boolean>? = null
 ) {
     val pick = tp.pick
     AppCard(modifier = modifier, onClick = onClick) {
@@ -402,6 +413,10 @@ private fun TopPickCard(
             style = MaterialTheme.typography.labelMedium,
             color = TextSecondary
         )
+        if (spotTag != null) {
+            Spacer(Modifier.height(6.dp))
+            TagChip(spotTag.first, if (spotTag.second) WinGreen else LossRed)
+        }
     }
 }
 

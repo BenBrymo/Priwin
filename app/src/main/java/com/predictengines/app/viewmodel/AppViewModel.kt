@@ -124,8 +124,9 @@ data class AppUiState(
     val trendPicks: List<TopPick> = emptyList(),
     val trendStrong: List<com.predictengines.app.data.Trends.Spot> = emptyList(),
     val trendCold: List<com.predictengines.app.data.Trends.Spot> = emptyList(),
-    val trendMin: Int = com.predictengines.app.data.Trends.DEFAULT_MIN,
-    val trendScore: Int = com.predictengines.app.data.Trends.DEFAULT_SCORE,
+    val trendConfig: com.predictengines.app.data.Trends.Config = com.predictengines.app.data.Trends.Config(),
+    /** How the Trends filter would have done on past picks (each judged only by what was known before its game). */
+    val trendBacktest: com.predictengines.app.data.Trends.Backtest? = null,
     val lokiConfig: com.predictengines.app.data.LokiConfig = com.predictengines.app.data.LokiConfig(),
 
     /** Corners / cards / first scorer the user typed in for played games, keyed by fixture. */
@@ -354,8 +355,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     handicapPicks = lists.second, over15Picks = lists.third,
                     lokiPicks = composeLoki(lokiCache),
                     cornerPicks = composeCorners(cornerCache),
-                    trendPicks = trends.third, trendStrong = trends.first.strong, trendCold = trends.first.cold,
-                    trendMin = repo.trendMin(), trendScore = repo.trendScore(),
+                    trendPicks = trends.shown, trendStrong = trends.found.strong, trendCold = trends.found.cold,
+                    trendConfig = repo.loadTrendConfig(), trendBacktest = trends.backtest,
                     missingByLeague = missingCache
                 )
             }
@@ -410,7 +411,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 shown
             }
             withContext(Dispatchers.IO) { trendCands = trendAll
-                recordListPicks(top.first, top.second, top.third, held, loki, corners, buildTrends(trendAll).second) }
+                recordListPicks(top.first, top.second, top.third, held, loki, corners, buildTrends(trendAll).ranked) }
             if (gen == cacheGen.get()) {
                 topCache = top.first; handicapCache = top.second; over15Cache = top.third; lokiCache = loki; cornerCache = corners
             }
@@ -421,8 +422,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _state.update {
                 it.copy(
                     topPicks = lists.first, handicapPicks = lists.second, over15Picks = lists.third, lokiPicks = lokiShown, cornerPicks = cornersShown,
-                    trendPicks = trends.third, trendStrong = trends.first.strong, trendCold = trends.first.cold,
-                    trendMin = repo.trendMin(), trendScore = repo.trendScore(),
+                    trendPicks = trends.shown, trendStrong = trends.found.strong, trendCold = trends.found.cold,
+                    trendConfig = repo.loadTrendConfig(), trendBacktest = trends.backtest,
                     missingByLeague = missingCache, topPicksLoading = false
                 )
             }
@@ -448,11 +449,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * Trend picks: the strong league-and-market spots in your settled picks (from the weekly lists), and the upcoming picks
      * that fall in one. Returns the spots, the ranked upcoming picks (what gets written down) and the list as shown.
      */
-    private fun buildTrends(cands: List<TopPick>): Triple<com.predictengines.app.data.Trends.Found, List<TopPick>, List<TopPick>> {
+    private class TrendBundle(
+        val found: com.predictengines.app.data.Trends.Found, val ranked: List<TopPick>, val shown: List<TopPick>,
+        val backtest: com.predictengines.app.data.Trends.Backtest
+    )
+
+    private fun buildTrends(cands: List<TopPick>): TrendBundle {
         val visible = _state.value.leagues.map { it.id }.toSet()
-        val found = com.predictengines.app.data.Trends.spots(_state.value.marks.values, visible, repo.trendMin(), repo.trendScore())
-        val ranked = TopPicksEngine.rank(com.predictengines.app.data.Trends.pick(cands, found.strong), modes = repo.kryptoModes())
-        return Triple(found, ranked, mergePlayed(ListPicksStore.TRENDS, ranked, perGame = false))
+        val cfg = repo.loadTrendConfig()
+        val marks = _state.value.marks.values
+        val found = com.predictengines.app.data.Trends.spots(marks, visible, cfg)
+        val ranked = TopPicksEngine.rank(com.predictengines.app.data.Trends.pick(cands, found.strong, cfg), modes = repo.kryptoModes())
+        return TrendBundle(
+            found, ranked, mergePlayed(ListPicksStore.TRENDS, ranked, perGame = false),
+            com.predictengines.app.data.Trends.backtest(marks, visible, cfg)
+        )
     }
 
     /** The Corners list as shown: one pick per game, played ones kept in their week. */
@@ -1050,9 +1061,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Trends: how many settled picks and what score a league-and-market spot needs to count as strong. */
-    fun setTrend(min: Int, score: Int) {
-        repo.setTrend(min.coerceIn(5, 100), score.coerceIn(40, 95))
-        _state.update { it.copy(trendMin = repo.trendMin(), trendScore = repo.trendScore()) }
+    fun setTrend(config: com.predictengines.app.data.Trends.Config) {
+        repo.saveTrendConfig(config)
+        _state.update { it.copy(trendConfig = repo.loadTrendConfig()) }
         refreshTopPicks()
     }
 

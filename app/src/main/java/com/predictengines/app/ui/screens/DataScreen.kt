@@ -92,7 +92,7 @@ fun DataScreen(
     onSetLokiOn: (String, Boolean) -> Unit,
     onSetLokiParam: (String, Int) -> Unit,
     onCheckKrypto: () -> Unit,
-    onSetTrend: (Int, Int) -> Unit,
+    onSetTrend: (com.predictengines.app.data.Trends.Config) -> Unit,
     onShowLeague: (League) -> Unit,
     onUnlink: (NameLink) -> Unit,
     onExportMatches: (Uri) -> Unit,
