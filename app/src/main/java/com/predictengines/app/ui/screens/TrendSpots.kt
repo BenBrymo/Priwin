@@ -39,7 +39,7 @@ fun TrendSpots(state: AppUiState) {
     AppCard(
         title = "Where your data is strong",
         subtitle = if (strong.isEmpty())
-            "No league and market has ${state.trendConfig.minPicks}+ settled picks with a score of ${state.trendConfig.minScore}+ yet. Lower the score or switch off "Must beat the other leagues" on the Data tab to see more."
+            "No league and market has ${state.trendConfig.minPicks}+ settled picks with a score of ${state.trendConfig.minScore}+ yet. Lower the score or switch off 'Must beat the other leagues' on the Data tab to see more."
         else "${strong.size} spots · settled picks from your weekly lists, each game's selection counted once · score allows for how few picks there are",
         accentColor = WinGreen
     ) {
