@@ -249,10 +249,10 @@ private fun ConsensusCard(analysis: Analysis) {
         Text("Best picks across models", style = MaterialTheme.typography.labelLarge, color = TextSecondary)
         Spacer(Modifier.height(8.dp))
         val bans = LocalCaptainBans.current
-        val shownPicks = consensus.picks.filter { it.key !in bans }
+        val shownPicks = consensus.picks.filter { !com.predictengines.app.data.CaptainPlanet.isBanned(it.key, it.group, bans) }
         if (shownPicks.size < consensus.picks.size) {
             Text(
-                "Captain Planet held back: " + consensus.picks.filter { it.key in bans }.joinToString { it.label },
+                "Captain Planet held back: " + consensus.picks.filter { com.predictengines.app.data.CaptainPlanet.isBanned(it.key, it.group, bans) }.joinToString { it.label },
                 style = MaterialTheme.typography.labelSmall, color = DrawAmber
             )
             Spacer(Modifier.height(4.dp))

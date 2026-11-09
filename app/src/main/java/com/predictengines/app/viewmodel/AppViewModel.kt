@@ -61,6 +61,9 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -252,6 +255,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
+        // Captain Planet re-reads the results whenever a pick is settled or ticked (after a short pause, so a burst counts once)
+        viewModelScope.launch {
+            _state.map { it.marks }.distinctUntilChanged().collectLatest {
+                kotlinx.coroutines.delay(800)
+                withContext(Dispatchers.Default) { checkCaptain() }
+            }
+        }
         val leagues = repo.leagues()
         // The user's name links must be in place before any file is read, so every file sees the same names.
         val links = linksStore.load()
@@ -388,8 +398,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val dropped = ArrayList<TopPick>()
                 // picks of a market Captain Planet dropped are set aside (and still tracked), not listed
                 fun keep(src: List<TopPick>): List<TopPick> {
-                    dropped += src.filter { it.pick.key in banned }
-                    return src.filter { it.pick.key !in banned }
+                    dropped += src.filter { com.predictengines.app.data.CaptainPlanet.isBanned(it.pick.key, it.pick.group, banned) }
+                    return src.filter { !com.predictengines.app.data.CaptainPlanet.isBanned(it.pick.key, it.pick.group, banned) }
                 }
                 val missing = HashMap<String, Int>()
                 for ((li, league) in leagues.withIndex()) {
@@ -400,13 +410,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         if (data.fixtures.isEmpty()) continue
                         missing[league.id] = countMissing(data)
                         if (data.matches.isEmpty()) continue
-                        if (banned.isNotEmpty()) dropped += TopPicksEngine.candidates(league, data.fixtures).filter { it.pick.key in banned }
+                        if (banned.isNotEmpty()) dropped += TopPicksEngine.candidates(league, data.fixtures).filter { com.predictengines.app.data.CaptainPlanet.isBanned(it.pick.key, it.pick.group, banned) }
                         all += TopPicksEngine.candidates(league, data.fixtures, banned = banned)
                         hcp += keep(TopPicksEngine.handicapCandidates(league, data.fixtures))
                         o15 += keep(TopPicksEngine.over15Candidates(league, data.fixtures))
                         lk += keep(TopPicksEngine.lokiCandidates(league, data.fixtures, data.matches))
                         cr += keep(TopPicksEngine.cornerCandidates(league, data.fixtures))
-                        tr += TopPicksEngine.trendCandidates(league, data.fixtures).filter { it.pick.key !in banned }
+                        tr += TopPicksEngine.trendCandidates(league, data.fixtures).filter { !com.predictengines.app.data.CaptainPlanet.isBanned(it.pick.key, it.pick.group, banned) }
                     } catch (e: Exception) {
                         // one unreadable league must not hide the others
                     }

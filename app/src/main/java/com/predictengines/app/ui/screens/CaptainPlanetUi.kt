@@ -56,9 +56,9 @@ fun CaptainPlanetCard(
         if (state.cpBans.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
             Text("Dropped markets", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
-            state.cpBans.sorted().forEach { k ->
+            state.cpBans.sortedBy { CaptainPlanet.nameOf(it) }.forEach { k ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(PerformanceReport.keyName(k), style = MaterialTheme.typography.bodyMedium, color = TextPrimary, modifier = Modifier.weight(1f))
+                    Text(CaptainPlanet.nameOf(k), style = MaterialTheme.typography.bodyMedium, color = TextPrimary, modifier = Modifier.weight(1f))
                     TextButton(onClick = { onLift(k) }) { Text("Lift", color = IndigoPrimary) }
                 }
             }
@@ -69,7 +69,7 @@ fun CaptainPlanetCard(
         }
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Fewest settled picks before judging a market", style = MaterialTheme.typography.bodyMedium, color = TextPrimary, modifier = Modifier.weight(1f))
+            Text("Fewest settled picks of one selection (a market type needs twice as many)", style = MaterialTheme.typography.bodyMedium, color = TextPrimary, modifier = Modifier.weight(1f))
             TextButton(onClick = { onSet(c.copy(minPicks = (c.minPicks - 1).coerceAtLeast(5))) }, enabled = c.minPicks > 5) {
                 Text("−", color = IndigoPrimary, style = MaterialTheme.typography.titleLarge)
             }
@@ -87,7 +87,7 @@ fun CaptainPlanetCard(
             Switch(checked = c.notify, onCheckedChange = { onSet(c.copy(notify = it)) })
         }
         Text(
-            "A market is bad when it is under 50% right over enough settled picks and clearly not just bad luck. Nothing is dropped until you approve. " +
+            "A market is bad when the Report marks it Avoid: under 50% right over enough settled picks, for a market type (BTTS) or one selection (BTTS Yes). Nothing is dropped until you approve. " +
                 "An approved market is dropped from every list and from the consensus picks on fixture cards, in all leagues. Each model's own card is unchanged.",
             style = MaterialTheme.typography.bodySmall, color = TextMuted
         )

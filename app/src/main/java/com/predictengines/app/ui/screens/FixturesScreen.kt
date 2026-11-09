@@ -904,8 +904,8 @@ private fun FixtureCard(
         }
 
         val bans = LocalCaptainBans.current
-        val picks = summary.consensus.picks.filter { it.key !in bans }
-        val droppedNames = summary.consensus.picks.filter { it.key in bans }.map { it.label }
+        val picks = summary.consensus.picks.filter { !com.predictengines.app.data.CaptainPlanet.isBanned(it.key, it.group, bans) }
+        val droppedNames = summary.consensus.picks.filter { com.predictengines.app.data.CaptainPlanet.isBanned(it.key, it.group, bans) }.map { it.label }
         Spacer(Modifier.height(12.dp))
         if (droppedNames.isNotEmpty()) {
             Text(

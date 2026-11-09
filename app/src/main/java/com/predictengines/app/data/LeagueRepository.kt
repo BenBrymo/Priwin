@@ -100,7 +100,7 @@ class LeagueRepository(context: Context) {
     fun saveCaptainSeen(s: Set<String>) { prefs.edit().putString("cp_seen", s.joinToString("\n")).apply() }
 
     fun loadCaptainConfig(): CaptainPlanet.Config = CaptainPlanet.Config(
-        minPicks = prefs.getString("cp_min", null)?.toIntOrNull()?.coerceIn(5, 60) ?: 10,
+        minPicks = prefs.getString("cp_min", null)?.toIntOrNull()?.coerceIn(5, 60) ?: PerformanceReport.MIN_MARKET,
         window = PerformanceReport.Window.entries.firstOrNull { it.name == prefs.getString("cp_window", "") } ?: PerformanceReport.Window.ALL,
         notify = prefs.getString("cp_notify", "1") != "0"
     )
