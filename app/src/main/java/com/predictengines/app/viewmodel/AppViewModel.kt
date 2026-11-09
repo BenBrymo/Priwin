@@ -484,7 +484,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val visible = _state.value.leagues.map { it.id }.toSet()
         val cfg = repo.loadTrendConfig()
         val marks = _state.value.marks.values
-        val found = com.predictengines.app.data.Trends.spots(marks, visible, cfg, java.time.LocalDate.now())
+        // the Report's own all-leagues rows (strong markets, strong confidence bands), built the way the Data screen builds them
+        val hide = com.predictengines.app.data.PerformanceReport.HIDDEN_SUFFIX
+        val meta = HashMap<String, com.predictengines.app.data.PerformanceReport.PickMeta>()
+        _state.value.listEntries.forEach { e ->
+            val conf = if (e.backers.isEmpty()) null else e.backers.map { b -> b.second }.average()
+            meta[e.id] = com.predictengines.app.data.PerformanceReport.PickMeta(
+                e.krypto, conf, e.backers.size, e.modelCount, e.source.endsWith(hide),
+                if (e.source == "Loki") e.backers.map { b -> b.first } else emptyList()
+            )
+        }
+        val records = marks.map { if (it.source.endsWith(hide)) it.copy(source = it.source.removeSuffix(hide)) else it }
+        val report = com.predictengines.app.data.PerformanceReport.build(
+            records, meta, visible, cfg.window, java.time.LocalDate.now(), listOf(com.predictengines.app.data.PerformanceReport.ALL_LISTS)
+        ).firstOrNull()
+        val found = com.predictengines.app.data.Trends.spots(marks, visible, cfg, java.time.LocalDate.now(), report)
         val ranked = TopPicksEngine.rank(com.predictengines.app.data.Trends.pick(cands, found, cfg), modes = repo.kryptoModes())
         return TrendBundle(
             found, ranked, mergePlayed(ListPicksStore.TRENDS, ranked, perGame = false),

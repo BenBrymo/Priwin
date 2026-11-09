@@ -54,7 +54,12 @@ fun TrendSpots(state: AppUiState) {
             )
             spots.forEach { s ->
                 Text(
-                    (if (s.isList) "Strong on the ${s.list} list" else "Strong market: ${s.name}") + " \u00b7 ${s.line}",
+                    (when {
+                        s.scope == "market" -> "Strong market in every league: ${s.name}"
+                        s.scope == "band" -> "Strong confidence band: ${s.name}"
+                        s.isList -> "Strong on the ${s.list} list"
+                        else -> "Strong market: ${s.name}"
+                    }) + " \u00b7 ${s.line}",
                     style = MaterialTheme.typography.labelMedium, color = WinGreen
                 )
             }

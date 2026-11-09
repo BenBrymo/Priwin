@@ -233,7 +233,7 @@ private fun TopPicksList(
         if (source == "Trends") emptyMap() else {
             val m = HashMap<String, Pair<String, Boolean>>()
             state.trendCold.forEach { m["${it.leagueId}|${it.key}"] = "Cold spot ${it.shortText}" to false }
-            state.trendStrong.filter { !it.isList }.forEach { m["${it.leagueId}|${it.key}"] = "Trend spot ${it.shortText}" to true }
+            state.trendStrong.filter { !it.isList && !it.isGlobal }.forEach { m["${it.leagueId}|${it.key}"] = "Trend spot ${it.shortText}" to true }
             m
         }
     }

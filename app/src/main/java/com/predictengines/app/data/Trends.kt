@@ -6,11 +6,13 @@ import java.time.LocalDate
 /**
  * Trend picks. Trends never makes a prediction and has no rules of its own: it reads the same results the report shows
  * (the verdicts of [PerformanceReport]) and keeps the models' upcoming picks that sit in a place the data calls Strong.
- * Two kinds of strong place count:
+ * Four kinds of strong place count:
  *  - a strong league on a list: the league's verdict on that list is Strong (Over 1.5 in the Bundesliga), so that list's
  *    picks in that league are kept;
  *  - a strong market in a league: one market (Over 1.5, Home win...) in that league is Strong across all the lists.
- * A cold place is an Avoid verdict; it is only used to tag cards on the other lists.
+ *  - a strong market everywhere: one market (Home win, Over 2.5) is Strong across all leagues in the Report's "Markets across all leagues";
+ *  - a strong confidence band: the Report's "Confidence and agreement" marks a band (60-69%) Strong, so picks made at that confidence count.
+ * A cold place is an Avoid verdict; it keeps picks out, and tags cards on the other lists.
  */
 object Trends {
     const val SOURCE = "Trends"
@@ -35,9 +37,12 @@ object Trends {
     data class Spot(
         val leagueId: String, val leagueName: String,
         /** The market key for a market spot; blank for a league-on-a-list spot. */
-        val key: String, val name: String, val tally: Tally, val list: String? = null
+        val key: String, val name: String, val tally: Tally, val list: String? = null,
+        /** "market" (strong in all leagues) or "band" (strong confidence band) for a place that is not tied to one league. */
+        val scope: String = ""
     ) {
         val isList: Boolean get() = list != null
+        val isGlobal: Boolean get() = scope.isNotEmpty()
         val score: Double get() = tally.adjusted
         val rate: Double get() = tally.rate
         val shortText: String get() = "${tally.correct}/${tally.total}"
@@ -45,7 +50,10 @@ object Trends {
             get() = "${tally.correct}/${tally.total} right (${Math.round(tally.rate)}%) · score ${Math.round(tally.adjusted)}"
     }
 
-    data class Found(val strong: List<Spot>, val cold: List<Spot>)
+    /** [avoid] are the markets (by name) the Report marks Avoid across all leagues; their picks are kept out. */
+    data class Found(val strong: List<Spot>, val cold: List<Spot>, val avoid: Set<String> = emptySet())
+
+    const val ALL_LEAGUES = "All leagues"
 
     /** How the filter would have done: each past pick judged by what was known before its game, never by its own result. */
     data class Backtest(val strong: Tally, val cold: Tally, val other: Tally)
@@ -64,7 +72,10 @@ object Trends {
         return rs.filter { seen.add("${it.leagueId}|${it.date}|${it.home}|${it.away}|${it.key}") }
     }
 
-    fun spots(records: Collection<PredictionRecord>, visible: Set<String>, cfg: Config, today: LocalDate = LocalDate.now()): Found {
+    fun spots(
+        records: Collection<PredictionRecord>, visible: Set<String>, cfg: Config, today: LocalDate = LocalDate.now(),
+        report: PerformanceReport.SourceReport? = null
+    ): Found {
         val from = PerformanceReport.cutoff(cfg.window, today)
         val rs = base(records, visible).filter { inWindow(it, from) }
         val strong = ArrayList<Spot>(); val cold = ArrayList<Spot>()
@@ -85,9 +96,25 @@ object Trends {
                 strong.add(Spot(id.second, x.first().leagueName, "", "${id.first} list", t, list = id.first))
             }
         }
+        // the Report's own rows for all leagues together: strong markets and strong confidence bands
+        val avoid = HashSet<String>()
+        val everywhere = ArrayList<Spot>()
+        for (m in report?.markets.orEmpty()) for (row in m.keys) {
+            when (row.verdict) {
+                PerformanceReport.Verdict.STRONG -> everywhere.add(Spot("*", ALL_LEAGUES, "", row.name, row.tally, scope = "market"))
+                PerformanceReport.Verdict.AVOID -> avoid.add(row.name)
+                else -> {}
+            }
+        }
+        for (row in report?.confidence.orEmpty()) {
+            if (row.verdict == PerformanceReport.Verdict.STRONG && row.name != "Unknown") {
+                everywhere.add(Spot("*", ALL_LEAGUES, "", row.name, row.tally, scope = "band"))
+            }
+        }
         return Found(
-            strong.sortedWith(compareBy<Spot> { it.leagueName }.thenBy { !it.isList }.thenByDescending { it.score }),
-            cold.sortedBy { it.rate }
+            everywhere.sortedWith(compareBy<Spot> { it.scope }.thenByDescending { it.score }) +
+                strong.sortedWith(compareBy<Spot> { it.leagueName }.thenBy { !it.isList }.thenByDescending { it.score }),
+            cold.sortedBy { it.rate }, avoid
         )
     }
 
@@ -96,14 +123,32 @@ object Trends {
      * weekly list (name first; null for the pool of every consensus pick). A pick in several spots keeps its best one.
      */
     fun pick(lists: List<Pair<String?, List<TopPick>>>, found: Found, cfg: Config): List<TopPick> {
-        val market = found.strong.filter { !it.isList }.associateBy { it.leagueId to it.key }
+        val market = found.strong.filter { !it.isList && !it.isGlobal }.associateBy { it.leagueId to it.key }
         val leagueList = found.strong.filter { it.isList }.associateBy { it.list.orEmpty() to it.leagueId }
+        val everywhere = found.strong.filter { it.scope == "market" }.associateBy { it.name }
+        val bands = found.strong.filter { it.scope == "band" }.associateBy { it.name }
+        val cold = found.cold.map { it.leagueId to it.key }.toSet()
         val out = LinkedHashMap<String, TopPick>()
         for ((src, cands) in lists) for (tp in cands) {
             if (tp.pick.backers.size < cfg.minBackers || tp.pick.averageConfidence < cfg.minConfidence) continue
-            val s = market[tp.leagueId to tp.pick.key] ?: src?.let { leagueList[it to tp.leagueId] } ?: continue
-            val why = if (s.isList) "${s.leagueName} is strong on ${s.list} ${s.shortText}" else "${s.leagueName} ${s.name} ${s.shortText}"
-            val made = tp.copy(pick = tp.pick.copy(label = "${tp.pick.label} · $why", strength = s.score + 0.1 * tp.pick.strength))
+            val marketName = PerformanceReport.keyName(tp.pick.key)
+            if (marketName in found.avoid || (tp.leagueId to tp.pick.key) in cold) continue
+            // every strong place the pick sits in; the more it stacks, the higher it ranks
+            val spots = listOfNotNull(
+                market[tp.leagueId to tp.pick.key] ?: src?.let { leagueList[it to tp.leagueId] },
+                everywhere[marketName],
+                bands[PerformanceReport.confidenceBand(tp.pick.averageConfidence)]
+            )
+            if (spots.isEmpty()) continue
+            val why = spots.joinToString(" \u00b7 ") { s ->
+                when {
+                    s.scope == "market" -> "${s.name} strong in all leagues ${s.shortText}"
+                    s.scope == "band" -> "${s.name} confidence strong ${s.shortText}"
+                    s.isList -> "${s.leagueName} is strong on ${s.list} ${s.shortText}"
+                    else -> "${s.leagueName} ${s.name} ${s.shortText}"
+                }
+            }
+            val made = tp.copy(pick = tp.pick.copy(label = "${tp.pick.label} \u00b7 $why", strength = spots.maxOf { it.score } + 3.0 * (spots.size - 1) + 0.1 * tp.pick.strength))
             val id = "${tp.leagueId}|${tp.date}|${tp.home}|${tp.away}|${tp.pick.key}"
             val old = out[id]
             if (old == null || made.pick.strength > old.pick.strength) out[id] = made
