@@ -80,6 +80,36 @@ class LeagueRepository(context: Context) {
     private fun hiddenIds(): Set<String> =
         prefs.getString(KEY_HIDDEN, "").orEmpty().split('\n').filter { it.isNotBlank() }.toSet()
 
+    // ---- Captain Planet ----------------------------------------------------------------------
+
+    /** Markets (pick keys) dropped from every list after you approved. */
+    fun captainBans(): Set<String> = prefs.getString("cp_bans", "").orEmpty().split('\n').filter { it.isNotBlank() }.toSet()
+
+    fun saveCaptainBans(b: Set<String>) { prefs.edit().putString("cp_bans", b.joinToString("\n")).apply() }
+
+    /** Proposal id -> how many picks the market had when you said "Not now". */
+    fun captainDeclined(): Map<String, Int> = prefs.getString("cp_declined", "").orEmpty().split('\n').mapNotNull { l ->
+        val i = l.lastIndexOf('='); if (i <= 0) null else l.substring(0, i) to (l.substring(i + 1).toIntOrNull() ?: return@mapNotNull null)
+    }.toMap()
+
+    fun saveCaptainDeclined(m: Map<String, Int>) { prefs.edit().putString("cp_declined", m.entries.joinToString("\n") { "${it.key}=${it.value}" }).apply() }
+
+    /** Proposal ids already announced by a phone notification, so each is announced once. */
+    fun captainSeen(): Set<String> = prefs.getString("cp_seen", "").orEmpty().split('\n').filter { it.isNotBlank() }.toSet()
+
+    fun saveCaptainSeen(s: Set<String>) { prefs.edit().putString("cp_seen", s.joinToString("\n")).apply() }
+
+    fun loadCaptainConfig(): CaptainPlanet.Config = CaptainPlanet.Config(
+        minPicks = prefs.getString("cp_min", null)?.toIntOrNull()?.coerceIn(5, 60) ?: 10,
+        window = PerformanceReport.Window.entries.firstOrNull { it.name == prefs.getString("cp_window", "") } ?: PerformanceReport.Window.ALL,
+        notify = prefs.getString("cp_notify", "1") != "0"
+    )
+
+    fun saveCaptainConfig(c: CaptainPlanet.Config) {
+        prefs.edit().putString("cp_min", c.minPicks.toString()).putString("cp_window", c.window.name)
+            .putString("cp_notify", if (c.notify) "1" else "0").apply()
+    }
+
     // ---- Kryptonite switches ---------------------------------------------------------------
 
     fun kryptoModes(): Map<String, KryptoMode> =

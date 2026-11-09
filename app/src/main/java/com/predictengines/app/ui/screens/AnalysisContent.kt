@@ -248,7 +248,16 @@ private fun ConsensusCard(analysis: Analysis) {
         Spacer(Modifier.height(16.dp))
         Text("Best picks across models", style = MaterialTheme.typography.labelLarge, color = TextSecondary)
         Spacer(Modifier.height(8.dp))
-        if (consensus.picks.isEmpty()) {
+        val bans = LocalCaptainBans.current
+        val shownPicks = consensus.picks.filter { it.key !in bans }
+        if (shownPicks.size < consensus.picks.size) {
+            Text(
+                "Captain Planet held back: " + consensus.picks.filter { it.key in bans }.joinToString { it.label },
+                style = MaterialTheme.typography.labelSmall, color = DrawAmber
+            )
+            Spacer(Modifier.height(4.dp))
+        }
+        if (shownPicks.isEmpty()) {
             Text(
                 if (consensus.models.size < 2) "Needs at least two models with data to compare."
                 else "No pick is available for this matchup.",
@@ -256,7 +265,7 @@ private fun ConsensusCard(analysis: Analysis) {
                 color = TextMuted
             )
         } else {
-            if (consensus.picks.all { it.isSingleModel }) {
+            if (shownPicks.all { it.isSingleModel }) {
                 Text(
                     "No bet is backed by two models, so this is the strongest single-model pick.",
                     style = MaterialTheme.typography.labelSmall,
@@ -264,7 +273,7 @@ private fun ConsensusCard(analysis: Analysis) {
                 )
                 Spacer(Modifier.height(4.dp))
             }
-            consensus.picks.forEachIndexed { i, pick -> ConsensusPickRow(pick, best = i == 0) }
+            shownPicks.forEachIndexed { i, pick -> ConsensusPickRow(pick, best = i == 0) }
             Spacer(Modifier.height(4.dp))
             Text(
                 "Ranked by agreement and average confidence. A model that backs something that rules a pick out counts against it.",

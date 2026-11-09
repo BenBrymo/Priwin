@@ -241,6 +241,7 @@ fun AppRoot(vm: AppViewModel) {
     com.predictengines.app.ui.components.ProvideClock {
     CompositionLocalProvider(
         LocalKeyPlayers provides state.players,
+        com.predictengines.app.ui.screens.LocalCaptainBans provides state.cpBans,
         com.predictengines.app.ui.components.LocalKryptoDismiss provides { f: com.predictengines.app.data.KryptoFlag -> vm.dismissKryptoFlag(f) }
     ) {
     Scaffold(
@@ -259,7 +260,13 @@ fun AppRoot(vm: AppViewModel) {
                                     onClick = { tabIndex = index },
                                     onLongClick = { navScope.launch { snackbar.currentSnackbarData?.dismiss(); snackbar.showSnackbar(t.label) } }
                                 )
-                            ) { Icon(t.icon, contentDescription = t.label) }
+                            ) {
+                                if (t == Tab.DATA && state.cpProposals.isNotEmpty()) {
+                                    androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge { Text(state.cpProposals.size.toString()) } }) {
+                                        Icon(t.icon, contentDescription = t.label)
+                                    }
+                                } else Icon(t.icon, contentDescription = t.label)
+                            }
                         },
                         alwaysShowLabel = false,
                         colors = NavigationBarItemDefaults.colors(
@@ -388,6 +395,9 @@ fun AppRoot(vm: AppViewModel) {
                         onSetLokiParam = vm::setLokiParam,
                         onCheckKrypto = vm::checkKryptonites,
                         onSetTrend = vm::setTrend,
+                        onCaptainDecide = vm::captainDecide,
+                        onCaptainLift = vm::captainLift,
+                        onSetCaptain = vm::setCaptainConfig,
                         onShowLeague = vm::showLeague,
                         onUnlink = vm::unlinkNames,
                         onExportMatches = vm::exportMatches,

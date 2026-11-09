@@ -127,6 +127,10 @@ data class AppUiState(
     val trendConfig: com.predictengines.app.data.Trends.Config = com.predictengines.app.data.Trends.Config(),
     /** How the Trends filter would have done on past picks (each judged only by what was known before its game). */
     val trendBacktest: com.predictengines.app.data.Trends.Backtest? = null,
+    /** Captain Planet: markets dropped (approved), proposals waiting for approval, and its settings. */
+    val cpBans: Set<String> = emptySet(),
+    val cpProposals: List<com.predictengines.app.data.CaptainPlanet.Proposal> = emptyList(),
+    val cpConfig: com.predictengines.app.data.CaptainPlanet.Config = com.predictengines.app.data.CaptainPlanet.Config(),
     val lokiConfig: com.predictengines.app.data.LokiConfig = com.predictengines.app.data.LokiConfig(),
 
     /** Corners / cards / first scorer the user typed in for played games, keyed by fixture. */
@@ -252,7 +256,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // The user's name links must be in place before any file is read, so every file sees the same names.
         val links = linksStore.load()
         TeamMatcher.setUserLinks(links.map { it.a to it.b })
-        _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, news = savedPlayers.news, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), lokiConfig = repo.loadLokiConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
+        _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, news = savedPlayers.news, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), lokiConfig = repo.loadLokiConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList(), cpBans = repo.captainBans(), cpConfig = repo.loadCaptainConfig()) }
         // the last known counts show at once; they are refreshed straight away, without scoring anything
         _state.update { it.copy(missingByLeague = repo.loadMissingCounts().filterKeys { id -> leagues.any { l -> l.id == id } }) }
         val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
@@ -356,10 +360,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     lokiPicks = composeLoki(lokiCache),
                     cornerPicks = composeCorners(cornerCache),
                     trendPicks = trends.shown, trendStrong = trends.found.strong, trendCold = trends.found.cold,
-                    trendConfig = repo.loadTrendConfig(), trendBacktest = trends.backtest,
+                    trendConfig = repo.loadTrendConfig(), trendBacktest = trends.backtest, cpBans = repo.captainBans(), cpConfig = repo.loadCaptainConfig(),
                     missingByLeague = missingCache
                 )
             }
+            checkCaptain()
             return
         }
         topJob?.cancel()
@@ -371,6 +376,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             var loki = emptyList<TopPick>()
             var corners = emptyList<TopPick>()
             var trendAll = emptyList<Pair<String?, List<TopPick>>>()
+            var capHeld = emptyList<TopPick>()
+            val banned = repo.captainBans()
             val top = withContext(Dispatchers.Default) {
                 val all = ArrayList<TopPick>()
                 val hcp = ArrayList<TopPick>()
@@ -378,6 +385,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val lk = ArrayList<TopPick>()
                 val cr = ArrayList<TopPick>()
                 val tr = ArrayList<TopPick>()
+                val dropped = ArrayList<TopPick>()
+                // picks of a market Captain Planet dropped are set aside (and still tracked), not listed
+                fun keep(src: List<TopPick>): List<TopPick> {
+                    dropped += src.filter { it.pick.key in banned }
+                    return src.filter { it.pick.key !in banned }
+                }
                 val missing = HashMap<String, Int>()
                 for ((li, league) in leagues.withIndex()) {
                     try {
@@ -387,12 +400,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         if (data.fixtures.isEmpty()) continue
                         missing[league.id] = countMissing(data)
                         if (data.matches.isEmpty()) continue
-                        all += TopPicksEngine.candidates(league, data.fixtures)
-                        hcp += TopPicksEngine.handicapCandidates(league, data.fixtures)
-                        o15 += TopPicksEngine.over15Candidates(league, data.fixtures)
-                        lk += TopPicksEngine.lokiCandidates(league, data.fixtures, data.matches)
-                        cr += TopPicksEngine.cornerCandidates(league, data.fixtures)
-                        tr += TopPicksEngine.trendCandidates(league, data.fixtures)
+                        if (banned.isNotEmpty()) dropped += TopPicksEngine.candidates(league, data.fixtures).filter { it.pick.key in banned }
+                        all += TopPicksEngine.candidates(league, data.fixtures, banned = banned)
+                        hcp += keep(TopPicksEngine.handicapCandidates(league, data.fixtures))
+                        o15 += keep(TopPicksEngine.over15Candidates(league, data.fixtures))
+                        lk += keep(TopPicksEngine.lokiCandidates(league, data.fixtures, data.matches))
+                        cr += keep(TopPicksEngine.cornerCandidates(league, data.fixtures))
+                        tr += TopPicksEngine.trendCandidates(league, data.fixtures).filter { it.pick.key !in banned }
                     } catch (e: Exception) {
                         // one unreadable league must not hide the others
                     }
@@ -407,11 +421,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 // Loki ignores the Kryptonite Hide / Push-down switches: it needs the flagged fixtures
                 loki = TopPicksEngine.rank(lk)
                 corners = TopPicksEngine.rank(cr, modes = modes)
+                capHeld = dropped.distinctBy { "${it.leagueId}|${it.date}|${it.home}|${it.away}|${it.pick.key}" }
                 trendAll = listOf("Top 20" to all, "Handicap" to hcp, "Over 1.5" to o15, "Loki" to lk, "Corners" to cr, null to tr)
                 shown
             }
             withContext(Dispatchers.IO) { trendCands = trendAll
-                recordListPicks(top.first, top.second, top.third, held, loki, corners, buildTrends(trendAll).ranked) }
+                recordListPicks(top.first, top.second, top.third, held, loki, corners, buildTrends(trendAll).ranked, capHeld) }
             if (gen == cacheGen.get()) {
                 topCache = top.first; handicapCache = top.second; over15Cache = top.third; lokiCache = loki; cornerCache = corners
             }
@@ -423,10 +438,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 it.copy(
                     topPicks = lists.first, handicapPicks = lists.second, over15Picks = lists.third, lokiPicks = lokiShown, cornerPicks = cornersShown,
                     trendPicks = trends.shown, trendStrong = trends.found.strong, trendCold = trends.found.cold,
-                    trendConfig = repo.loadTrendConfig(), trendBacktest = trends.backtest,
+                    trendConfig = repo.loadTrendConfig(), trendBacktest = trends.backtest, cpBans = repo.captainBans(), cpConfig = repo.loadCaptainConfig(),
                     missingByLeague = missingCache, topPicksLoading = false
                 )
             }
+            checkCaptain()
         }
     }
 
@@ -541,7 +557,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         held: Triple<List<TopPick>, List<TopPick>, List<TopPick>> = Triple(emptyList(), emptyList(), emptyList()),
         loki: List<TopPick> = emptyList(),
         corners: List<TopPick> = emptyList(),
-        trends: List<TopPick> = emptyList()
+        trends: List<TopPick> = emptyList(),
+        captain: List<TopPick> = emptyList()
     ) {
         fun entries(source: String, list: List<TopPick>) = list.map { tp ->
             ListPicksStore.Entry(
@@ -556,9 +573,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         listPicks.add(
             entries(ListPicksStore.TOP, top) + entries(ListPicksStore.HANDICAP, hcp) + entries(ListPicksStore.OVER15, o15) +
                 entries(ListPicksStore.TOP + hide, held.first) + entries(ListPicksStore.HANDICAP + hide, held.second) +
-                entries(ListPicksStore.OVER15 + hide, held.third) + entries(ListPicksStore.LOKI, loki) + entries(ListPicksStore.CORNERS, corners) + entries(ListPicksStore.TRENDS, trends)
+                entries(ListPicksStore.OVER15 + hide, held.third) + entries(ListPicksStore.LOKI, loki) + entries(ListPicksStore.CORNERS, corners) + entries(ListPicksStore.TRENDS, trends) +
+                entries(com.predictengines.app.data.CaptainPlanet.HIDDEN_SOURCE, captain)
         )
-        _state.update { it.copy(listEntries = listPicks.load().values.toList()) }
+        _state.update { it.copy(listEntries = listPicks.load().values.toList(), cpBans = repo.captainBans(), cpConfig = repo.loadCaptainConfig()) }
     }
 
     /** Opens a Top-picks entry: switches to its league if needed, then opens that fixture's analysis. */
@@ -1060,6 +1078,52 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         refreshTopPicks()
     }
 
+    // ---- Captain Planet ------------------------------------------------------------------------
+
+    /** Looks for markets to drop (or bring back), shows the proposals, and tells you once by phone notification. */
+    private fun checkCaptain() {
+        val cfg = repo.loadCaptainConfig()
+        val visible = _state.value.leagues.map { it.id }.toSet()
+        val props = com.predictengines.app.data.CaptainPlanet.proposals(_state.value.marks.values, visible, cfg, repo.captainBans(), repo.captainDeclined())
+        _state.update { it.copy(cpProposals = props, cpBans = repo.captainBans(), cpConfig = cfg) }
+        if (!cfg.notify) return
+        val seen = repo.captainSeen()
+        val fresh = props.filter { it.id !in seen }
+        if (fresh.isEmpty()) return
+        val text = fresh.joinToString("\n") { it.text } + "\nOpen Data > Captain Planet to approve or say not now."
+        if (com.predictengines.app.reminders.CaptainNotice.notify(getApplication<Application>(), text)) repo.saveCaptainSeen(seen + fresh.map { it.id })
+    }
+
+    /** Approve: drop the market (or bring it back). Not now: ask again only after 10 more settled picks. */
+    fun captainDecide(p: com.predictengines.app.data.CaptainPlanet.Proposal, approve: Boolean) {
+        if (approve) {
+            val bans = repo.captainBans()
+            repo.saveCaptainBans(if (p.lift) bans - p.key else bans + p.key)
+            repo.saveCaptainDeclined(repo.captainDeclined() - ("ban:" + p.key) - ("lift:" + p.key))
+            _state.update { it.copy(cpBans = repo.captainBans(), cpProposals = it.cpProposals.filter { x -> x.key != p.key }) }
+            topCache = null
+            refreshTopPicks()
+            postMessage(if (p.lift) "${p.name} is back on the lists." else "${p.name} picks are now dropped from every list.")
+        } else {
+            repo.saveCaptainDeclined(repo.captainDeclined() + (p.id to p.count))
+            _state.update { it.copy(cpProposals = it.cpProposals.filter { x -> x.id != p.id }) }
+        }
+    }
+
+    /** Lifts a ban you approved earlier, without waiting for a recovery proposal. */
+    fun captainLift(key: String) {
+        repo.saveCaptainBans(repo.captainBans() - key)
+        _state.update { it.copy(cpBans = repo.captainBans()) }
+        topCache = null
+        refreshTopPicks()
+    }
+
+    fun setCaptainConfig(c: com.predictengines.app.data.CaptainPlanet.Config) {
+        repo.saveCaptainConfig(c)
+        _state.update { it.copy(cpConfig = repo.loadCaptainConfig()) }
+        checkCaptain()
+    }
+
     /** Trends: which results count and how much model support a Trend pick needs. */
     fun setTrend(config: com.predictengines.app.data.Trends.Config) {
         repo.saveTrendConfig(config)
@@ -1396,7 +1460,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val extras = withContext(Dispatchers.IO) { extrasStore.loadExtras() }
                     savedPlayers = withContext(Dispatchers.IO) { playersStore.load() }
                     invalidateCache()
-                    _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, news = savedPlayers.news, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), lokiConfig = repo.loadLokiConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = marks, nameLinks = links, extras = extras, autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList()) }
+                    _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, news = savedPlayers.news, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), lokiConfig = repo.loadLokiConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = marks, nameLinks = links, extras = extras, autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList(), cpBans = repo.captainBans(), cpConfig = repo.loadCaptainConfig()) }
                     val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
                     selectLeague(start.id)
                     postMessage("Backup restored (${result.files} files)")

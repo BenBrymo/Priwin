@@ -21,12 +21,12 @@ object TopPicksEngine {
     const val DEFAULT_LIMIT = 20
 
     /** The best pick of each upcoming, predictable fixture of one league. */
-    fun candidates(league: League, items: List<FixtureItem>, now: LocalDateTime = LocalDateTime.now()): List<TopPick> =
+    fun candidates(league: League, items: List<FixtureItem>, now: LocalDateTime = LocalDateTime.now(), banned: Set<String> = emptySet()): List<TopPick> =
         items.mapNotNull { fx ->
             val home = fx.home ?: return@mapNotNull null
             val away = fx.away ?: return@mapNotNull null
             if (DateUtils.isPlayed(fx.fixture.date, fx.fixture.time, now)) return@mapNotNull null
-            val best = fx.summary?.consensus?.picks?.maxByOrNull { it.strength } ?: return@mapNotNull null
+            val best = fx.summary?.consensus?.picks?.filter { it.key !in banned }?.maxByOrNull { it.strength } ?: return@mapNotNull null
             TopPick(
                 leagueId = league.id, leagueName = league.name,
                 date = fx.fixture.date, time = fx.fixture.time,

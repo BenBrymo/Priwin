@@ -93,6 +93,9 @@ fun DataScreen(
     onSetLokiParam: (String, Int) -> Unit,
     onCheckKrypto: () -> Unit,
     onSetTrend: (com.predictengines.app.data.Trends.Config) -> Unit,
+    onCaptainDecide: (com.predictengines.app.data.CaptainPlanet.Proposal, Boolean) -> Unit,
+    onCaptainLift: (String) -> Unit,
+    onSetCaptain: (com.predictengines.app.data.CaptainPlanet.Config) -> Unit,
     onShowLeague: (League) -> Unit,
     onUnlink: (NameLink) -> Unit,
     onExportMatches: (Uri) -> Unit,
@@ -307,6 +310,14 @@ fun DataScreen(
             accentColor = WinGreen
         ) {
             TrendSettings(state, onSetTrend)
+        }
+
+        AppCard(
+            title = "Captain Planet",
+            subtitle = "Finds markets that are clearly bad in your results and proposes dropping them from every list. Nothing changes until you approve.",
+            accentColor = DrawAmber
+        ) {
+            CaptainPlanetCard(state, onCaptainDecide, onCaptainLift, onSetCaptain)
         }
 
         ReminderCard()

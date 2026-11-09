@@ -139,3 +139,34 @@ class BootReceiver : BroadcastReceiver() {
         ReminderScheduler.sync(context)
     }
 }
+
+/** Phone notification telling you Captain Planet has a proposal waiting for your approval. */
+object CaptainNotice {
+    private const val CHANNEL = "captain_planet"
+
+    fun notify(c: Context, text: String): Boolean {
+        if (!ReminderScheduler.canNotify(c)) return false
+        val nm = c.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= 26) {
+            nm.createNotificationChannel(NotificationChannel(CHANNEL, "Captain Planet", NotificationManager.IMPORTANCE_DEFAULT))
+        }
+        val open = PendingIntent.getActivity(
+            c, 1, Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val n = NotificationCompat.Builder(c, CHANNEL)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("Captain Planet needs your approval")
+            .setContentText(text.lineSequence().first())
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build()
+        return try {
+            NotificationManagerCompat.from(c).notify(1002, n)
+            true
+        } catch (e: SecurityException) {
+            false
+        }
+    }
+}

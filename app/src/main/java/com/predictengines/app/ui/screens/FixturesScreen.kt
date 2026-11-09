@@ -903,10 +903,18 @@ private fun FixtureCard(
             return@AppCard
         }
 
-        val picks = summary.consensus.picks
+        val bans = LocalCaptainBans.current
+        val picks = summary.consensus.picks.filter { it.key !in bans }
+        val droppedNames = summary.consensus.picks.filter { it.key in bans }.map { it.label }
         Spacer(Modifier.height(12.dp))
-        if (picks.isEmpty()) {
+        if (droppedNames.isNotEmpty()) {
             Text(
+                "Captain Planet held back: " + droppedNames.joinToString(),
+                style = MaterialTheme.typography.labelSmall, color = DrawAmber
+            )
+        }
+        if (picks.isEmpty()) {
+            if (droppedNames.isEmpty()) Text(
                 "No pick available: the models have no usable data for this game.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextMuted
