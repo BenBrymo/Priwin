@@ -43,6 +43,14 @@ object Lokis {
 
     private fun n(id: String) = config.param(id)
 
+    private fun ordinal(i: Int) = when {
+        i % 100 in 11..13 -> "${i}th"
+        i % 10 == 1 -> "${i}st"
+        i % 10 == 2 -> "${i}nd"
+        i % 10 == 3 -> "${i}rd"
+        else -> "${i}th"
+    }
+
     val RULES = listOf(
         LokiRule(WIN_STREAK, "Winning streak broken", 62.0) {
             "A team lost after a winning streak (the Winning streak broken Kryptonite). Picks its opponent to win or draw: the loss may have shaken the team."
@@ -65,8 +73,8 @@ object Lokis {
         LokiRule(BOUNCE, "Bounce back", 62.0, LokiParam("Wins in a row after the losing streak", 2, 1, 4)) {
             "A team on a losing streak (the Losing streak broken length) won ${n(BOUNCE)} in a row. Picks the team to win or draw in its next game: the recovery looks real."
         },
-        LokiRule(FADE, "Fade the recovery", 58.0, LokiParam("Wins in a row after the losing streak", 5, 3, 10)) {
-            "A team on a losing streak then won ${n(FADE)} in a row. Picks its opponent to win or draw in the next game: the run may be over."
+        LokiRule(FADE, "Fade the recovery", 58.0, LokiParam("Games without a loss after the losing streak", 4, 2, 10)) {
+            "A team on a losing streak then went ${n(FADE)} games unbeaten (wins or draws). In its ${ordinal(n(FADE) + 1)} and ${ordinal(n(FADE) + 2)} game after the losing streak, its opponent is picked to win or draw, because the recovery may be over. If the team loses the ${ordinal(n(FADE) + 1)} game, the ${ordinal(n(FADE) + 2)} is not a Loki."
         }
     )
 
@@ -81,17 +89,24 @@ object Lokis {
                 if (mine > theirs) 'W' else if (mine < theirs) 'L' else 'D'
             }
 
-    /** True when the team's last [wins] games are wins, straight after a run of losing-streak length or more losses. */
-    private fun recoveryAfter(team: String, matches: List<Match>, date: String, wins: Int): Boolean {
+    /**
+     * True when the team's last [games] games are wins (or, with [drawsCount], wins or draws), straight after a run of
+     * losing-streak length or more losses.
+     */
+    private fun recoveryAfter(team: String, matches: List<Match>, date: String, games: Int, drawsCount: Boolean = false): Boolean {
         val r = results(team, matches, date)
         val need = Kryptonites.config.param(Kryptonites.LOSING_BROKEN, "trigger")
-        if (r.size < wins + need) return false
-        if (r.takeLast(wins).any { it != 'W' }) return false
+        if (r.size < games + need) return false
+        if (r.takeLast(games).any { it == 'L' || (it == 'D' && !drawsCount) }) return false
         var losses = 0
-        var i = r.size - wins - 1
+        var i = r.size - games - 1
         while (i >= 0 && r[i] == 'L') { losses++; i-- }
         return losses >= need
     }
+
+    /** Fade the recovery: N games unbeaten after the losing streak makes the next game a Loki, and so does the one after it unless the team lost the first. */
+    private fun fadeWindow(team: String, matches: List<Match>, date: String): Boolean =
+        recoveryAfter(team, matches, date, n(FADE), drawsCount = true) || recoveryAfter(team, matches, date, n(FADE) + 1, drawsCount = true)
 
     private fun flagCount(flags: List<KryptoFlag>, team: String) = flags.filter { it.team == team }.map { it.ruleId }.distinct().size
 
@@ -129,7 +144,7 @@ object Lokis {
             if (t == home) raw.add(Raw("1X", "$home win or draw", "Double chance", rule(BOUNCE)))
             else raw.add(Raw("X2", "$away win or draw", "Double chance", rule(BOUNCE)))
         }
-        if (config.on(FADE)) for ((t, o) in sides) if (recoveryAfter(t, matches, date, n(FADE))) doubleChance(o, rule(FADE))
+        if (config.on(FADE)) for ((t, o) in sides) if (fadeWindow(t, matches, date)) doubleChance(o, rule(FADE))
 
         // The same pick from several Lokis is one pick, a little stronger for each extra Loki.
         return raw.groupBy { it.key }.map { (key, rs) ->
