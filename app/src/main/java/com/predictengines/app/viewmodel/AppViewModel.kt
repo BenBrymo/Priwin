@@ -125,6 +125,8 @@ data class AppUiState(
     val cornerPicks: List<TopPick> = emptyList(),
     /** Trend picks (picks in league-and-market spots the data backs), the spots themselves, and the two limits that define "strong". */
     val trendPicks: List<TopPick> = emptyList(),
+    /** Trend picks grouped by the list whose Report rows back them (Top 20, Handicap, Over 1.5, Loki, Corners). */
+    val trendByList: Map<String, List<TopPick>> = emptyMap(),
     val trendStrong: List<com.predictengines.app.data.Trends.Spot> = emptyList(),
     val trendCold: List<com.predictengines.app.data.Trends.Spot> = emptyList(),
     val trendConfig: com.predictengines.app.data.Trends.Config = com.predictengines.app.data.Trends.Config(),
@@ -369,7 +371,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     handicapPicks = lists.second, over15Picks = lists.third,
                     lokiPicks = composeLoki(lokiCache),
                     cornerPicks = composeCorners(cornerCache),
-                    trendPicks = trends.shown, trendStrong = trends.found.strong, trendCold = trends.found.cold,
+                    trendPicks = trends.shown, trendByList = trends.byList, trendStrong = trends.found.strong, trendCold = trends.found.cold,
                     trendConfig = repo.loadTrendConfig(), trendBacktest = trends.backtest, cpBans = repo.captainBans(), cpConfig = repo.loadCaptainConfig(),
                     missingByLeague = missingCache
                 )
@@ -447,7 +449,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _state.update {
                 it.copy(
                     topPicks = lists.first, handicapPicks = lists.second, over15Picks = lists.third, lokiPicks = lokiShown, cornerPicks = cornersShown,
-                    trendPicks = trends.shown, trendStrong = trends.found.strong, trendCold = trends.found.cold,
+                    trendPicks = trends.shown, trendByList = trends.byList, trendStrong = trends.found.strong, trendCold = trends.found.cold,
                     trendConfig = repo.loadTrendConfig(), trendBacktest = trends.backtest, cpBans = repo.captainBans(), cpConfig = repo.loadCaptainConfig(),
                     missingByLeague = missingCache, topPicksLoading = false
                 )
@@ -477,7 +479,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     private class TrendBundle(
         val found: com.predictengines.app.data.Trends.Found, val ranked: List<TopPick>, val shown: List<TopPick>,
-        val backtest: com.predictengines.app.data.Trends.Backtest
+        val backtest: com.predictengines.app.data.Trends.Backtest,
+        val byList: Map<String, List<TopPick>> = emptyMap()
     )
 
     private fun buildTrends(cands: List<Pair<String?, List<TopPick>>>): TrendBundle {
@@ -509,7 +512,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         return TrendBundle(
             found, ranked, shown,
-            com.predictengines.app.data.Trends.backtest(marks, visible, cfg)
+            com.predictengines.app.data.Trends.backtest(marks, visible, cfg),
+            // one group per list: each judged only against that list's own Report rows (the consensus pool counts as Top 20)
+            ListPicksStore.GROUPS.associateWith { name ->
+                val own = cands.filter { it.first == name || (name == "Top 20" && it.first == null) }
+                TopPicksEngine.rank(com.predictengines.app.data.Trends.pick(own, found, cfg), modes = repo.kryptoModes())
+            }.filterValues { it.isNotEmpty() }
         )
     }
 

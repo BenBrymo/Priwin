@@ -108,5 +108,7 @@ class ListPicksStore(context: Context) {
         const val CORNERS = "Corners"
         const val TRENDS = "Trends"
         val SOURCES = listOf(TOP, HANDICAP, OVER15, LOKI, CORNERS, TRENDS)
+        /** The lists the Trends tab groups its picks under, in the order they are shown. */
+        val GROUPS = listOf(TOP, HANDICAP, OVER15, LOKI, CORNERS)
     }
 }

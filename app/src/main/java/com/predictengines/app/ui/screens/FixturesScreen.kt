@@ -66,6 +66,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.predictengines.app.data.DateUtils
+import com.predictengines.app.data.ListPicksStore
 import com.predictengines.app.data.FixtureItem
 import com.predictengines.app.data.MatchExtras
 import com.predictengines.app.data.ScoreCell
@@ -206,9 +207,17 @@ fun FixturesScreen(
             else if (section == 7) TopPicksList(
                 state, onOpenTopPick, picks = state.trendPicks, prefix = "tr", source = "Trends", showBest = false,
                 title = "Trend picks of each week",
-                subtitle = "the models' own picks in leagues and markets the Report calls Strong, strongest first · best 20 per week · tap a card to open the analysis",
+                subtitle = "each week split by list (Top 20, Handicap, Over 1.5, Loki, Corners): the models' own picks in the markets, confidence bands and leagues that list's Report calls Strong · best 20 per list per week · tap a card to open the analysis",
                 emptyText = "Nothing the models picked for upcoming games is in a Strong league or market yet. Strong needs 65%+ right over enough settled picks in the Report.",
-                header = { TrendSpots(state) }
+                header = { TrendSpots(state) },
+                bySection = state.trendByList,
+                sectionNote = { name ->
+                    val rows = state.trendStrong.filter { it.isGlobal && it.leagueName.substringBefore(',') == name }
+                    val parts = rows.filter { it.scope == "band" }.map { "${it.name} confidence ${it.shortText}" } +
+                        rows.filter { it.scope == "market" }.map { "${it.name} ${it.shortText}" } +
+                        state.trendStrong.filter { it.isList && it.list == name }.map { "${it.leagueName} ${it.shortText}" }
+                    if (parts.isEmpty()) null else "Strong on this list: " + parts.joinToString(" \u00b7 ")
+                }
             )
         }
     }
@@ -225,7 +234,10 @@ private fun TopPicksList(
     title: String = "Top 20 picks of each week",
     subtitle: String? = null,
     emptyText: String = "No upcoming predictable fixtures in any league yet. Add fixtures files (built in or loaded on the Data tab) and the strongest picks will be ranked here.",
-    header: (@Composable () -> Unit)? = null
+    header: (@Composable () -> Unit)? = null,
+    /** When set, each week is split into one row per list (name to its picks) instead of one row. */
+    bySection: Map<String, List<TopPick>>? = null,
+    sectionNote: (String) -> String? = { null }
 ) {
     var folded by rememberSaveable { mutableStateOf(emptySet<String>()) }
     // Cards on the other lists say when their league and market is a strong or cold spot in your data.
@@ -318,7 +330,45 @@ private fun TopPicksList(
                     }
                 }
             }
-            if (open) {
+            if (open && bySection != null) {
+                // one section per list that has picks this week, then the played ones with their results
+                val parts = ArrayList<Pair<String, List<TopPick>>>()
+                for (name in ListPicksStore.GROUPS) {
+                    val sub = bySection[name].orEmpty().filter { ReportBuilder.weekStartOf(it.date) == week }
+                    if (sub.isNotEmpty()) parts += name to sub
+                }
+                val playedNow = list.map { it.second }.filter { DateUtils.isPlayed(it.date, it.time) }
+                if (playedNow.isNotEmpty()) parts += "Played" to playedNow
+                for ((name, sub) in parts) {
+                    item(key = "sec_${key}_$name") {
+                        Column {
+                            Text(
+                                "$name \u00b7 ${sub.size} ${if (sub.size == 1) "pick" else "picks"}",
+                                style = MaterialTheme.typography.titleSmall, color = TextPrimary
+                            )
+                            sectionNote(name)?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = TextMuted) }
+                        }
+                    }
+                    item(key = "secrow_${key}_$name") {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 16.dp)) {
+                            items(
+                                sub.mapIndexed { i, p -> (i + 1) to p },
+                                key = { (_, p) -> "${p.leagueId}|${p.date}|${p.home}|${p.away}|${p.pick.key}" }
+                            ) { (rank, tp) ->
+                                TopPickCard(
+                                    rank, tp, onClick = { onOpenTopPick(tp) }, modifier = Modifier.width(300.dp), showBest = showBest,
+                                    spotTag = null,
+                                    result = ListResult(
+                                        played = DateUtils.isPlayed(tp.date, tp.time),
+                                        correct = state.marks[PredictionRecord.idOf(tp.leagueId, tp.date, tp.home, tp.away, source, tp.pick.key)]?.correct,
+                                        score = if (tp.leagueId == state.selected?.id) state.scores[scoreKey(tp.date, tp.home, tp.away)] else null
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            } else if (open) {
                 item(key = "row_$key") {
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
