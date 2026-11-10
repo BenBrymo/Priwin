@@ -106,6 +106,16 @@ fun TrendSettings(state: AppUiState, onSet: (Trends.Config) -> Unit) {
             }
             Switch(checked = c.leagueSpots, onCheckedChange = { onSet(c.copy(leagueSpots = it)) })
         }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Only strong confidence bands", style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                Text(
+                    "When the Report marks a confidence band Strong (for example 60-69%), keep only picks inside it. Picks at other confidence levels are left out. With no strong band, this does nothing.",
+                    style = MaterialTheme.typography.bodySmall, color = TextMuted
+                )
+            }
+            Switch(checked = c.bandGate, onCheckedChange = { onSet(c.copy(bandGate = it)) })
+        }
         val windows = PerformanceReport.Window.entries
         TextButton(onClick = { onSet(c.copy(window = windows[(windows.indexOf(c.window) + 1) % windows.size])) }) {
             Text("Results counted: ${c.window.label} (tap to change)", color = IndigoPrimary)

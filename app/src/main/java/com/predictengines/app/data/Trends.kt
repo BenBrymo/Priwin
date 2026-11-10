@@ -30,7 +30,9 @@ object Trends {
         val minBackers: Int = 1,
         val minConfidence: Int = 60,
         /** Also keep a strong league's picks on a list, not only strong single markets. */
-        val leagueSpots: Boolean = true
+        val leagueSpots: Boolean = true,
+        /** When the Report marks a confidence band Strong (60-69%), only picks inside a strong band are kept. */
+        val bandGate: Boolean = true
     )
 
     /** One place the data is strong (or cold): a market in a league ([list] null), or a league on one list. */
@@ -140,6 +142,8 @@ object Trends {
                 bands[PerformanceReport.confidenceBand(tp.pick.averageConfidence)]
             )
             if (spots.isEmpty()) continue
+            // picks outside the bands the Report calls Strong (80-89%, 90%+...) are left out, whatever else is strong about them
+            if (cfg.bandGate && bands.isNotEmpty() && bands[PerformanceReport.confidenceBand(tp.pick.averageConfidence)] == null) continue
             val why = spots.joinToString(" \u00b7 ") { s ->
                 when {
                     s.scope == "market" -> "${s.name} strong in all leagues ${s.shortText}"

@@ -180,7 +180,8 @@ class LeagueRepository(context: Context) {
         window = PerformanceReport.Window.entries.firstOrNull { it.name == prefs.getString("trend_window", "") } ?: PerformanceReport.Window.ALL,
         minBackers = prefs.getString("trend_backers", null)?.toIntOrNull()?.coerceIn(1, 3) ?: 1,
         minConfidence = prefs.getString("trend_conf", null)?.toIntOrNull()?.coerceIn(50, 90) ?: 60,
-        leagueSpots = prefs.getString("trend_leagues", "1") != "0"
+        leagueSpots = prefs.getString("trend_leagues", "1") != "0",
+        bandGate = prefs.getString("trend_band", "1") != "0"
     )
 
     fun saveTrendConfig(c: Trends.Config) {
@@ -188,6 +189,7 @@ class LeagueRepository(context: Context) {
             .putString("trend_window", c.window.name)
             .putString("trend_backers", c.minBackers.toString()).putString("trend_conf", c.minConfidence.toString())
             .putString("trend_leagues", if (c.leagueSpots) "1" else "0")
+            .putString("trend_band", if (c.bandGate) "1" else "0")
             .apply()
     }
 
