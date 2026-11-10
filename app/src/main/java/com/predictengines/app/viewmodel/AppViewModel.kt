@@ -495,10 +495,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         val records = marks.map { if (it.source.endsWith(hide)) it.copy(source = it.source.removeSuffix(hide)) else it }
-        val report = com.predictengines.app.data.PerformanceReport.build(
-            records, meta, visible, cfg.window, java.time.LocalDate.now(), listOf(com.predictengines.app.data.PerformanceReport.ALL_LISTS)
-        ).firstOrNull()
-        val found = com.predictengines.app.data.Trends.spots(marks, visible, cfg, java.time.LocalDate.now(), report)
+        val reports = com.predictengines.app.data.PerformanceReport.build(
+            records, meta, visible, cfg.window, java.time.LocalDate.now(),
+            com.predictengines.app.data.PerformanceReport.LISTS.filter { it != com.predictengines.app.data.Trends.SOURCE } + com.predictengines.app.data.PerformanceReport.ALL_LISTS
+        )
+        val found = com.predictengines.app.data.Trends.spots(marks, visible, cfg, java.time.LocalDate.now(), reports)
         val ranked = TopPicksEngine.rank(com.predictengines.app.data.Trends.pick(cands, found, cfg), modes = repo.kryptoModes())
         // the list shows played Trend picks too (kept in their week); they follow the same confidence gate as the new picks
         val bandNames = found.strong.filter { it.scope == "band" }.map { it.name }.toSet()

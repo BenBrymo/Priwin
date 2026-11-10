@@ -52,8 +52,11 @@ object Trends {
             get() = "${tally.correct}/${tally.total} right (${Math.round(tally.rate)}%) · score ${Math.round(tally.adjusted)}"
     }
 
-    /** [avoid] are the markets (by name) the Report marks Avoid across all leagues; their picks are kept out. */
-    data class Found(val strong: List<Spot>, val cold: List<Spot>, val avoid: Set<String> = emptySet())
+    /** What the Report says about one list (or all lists) over all leagues: strong markets and bands by name, and Avoid markets. */
+    data class ListStrength(val markets: Map<String, Spot>, val bands: Map<String, Spot>, val avoid: Set<String>)
+
+    /** [lists] is keyed by list name ("Top 20"...) and by [PerformanceReport.ALL_LISTS]. */
+    data class Found(val strong: List<Spot>, val cold: List<Spot>, val lists: Map<String, ListStrength> = emptyMap())
 
     const val ALL_LEAGUES = "All leagues"
 
@@ -76,7 +79,7 @@ object Trends {
 
     fun spots(
         records: Collection<PredictionRecord>, visible: Set<String>, cfg: Config, today: LocalDate = LocalDate.now(),
-        report: PerformanceReport.SourceReport? = null
+        reports: List<PerformanceReport.SourceReport> = emptyList()
     ): Found {
         val from = PerformanceReport.cutoff(cfg.window, today)
         val rs = base(records, visible).filter { inWindow(it, from) }
@@ -98,25 +101,30 @@ object Trends {
                 strong.add(Spot(id.second, x.first().leagueName, "", "${id.first} list", t, list = id.first))
             }
         }
-        // the Report's own rows for all leagues together: strong markets and strong confidence bands
-        val avoid = HashSet<String>()
+        // the Report's own rows for all leagues together, for each list the way the Report screen shows them
         val everywhere = ArrayList<Spot>()
-        for (m in report?.markets.orEmpty()) for (row in m.keys) {
-            when (row.verdict) {
-                PerformanceReport.Verdict.STRONG -> everywhere.add(Spot("*", ALL_LEAGUES, "", row.name, row.tally, scope = "market"))
-                PerformanceReport.Verdict.AVOID -> avoid.add(row.name)
-                else -> {}
+        val lists = HashMap<String, ListStrength>()
+        for (rep in reports) {
+            val where = if (rep.source == PerformanceReport.ALL_LISTS) "All lists, all leagues" else "${rep.source}, all leagues"
+            val markets = LinkedHashMap<String, Spot>(); val bands = LinkedHashMap<String, Spot>(); val avoid = HashSet<String>()
+            for (m in rep.markets) for (row in m.keys) {
+                when (row.verdict) {
+                    PerformanceReport.Verdict.STRONG -> Spot("*" + rep.source, where, "", row.name, row.tally, scope = "market").also { markets[row.name] = it; everywhere.add(it) }
+                    PerformanceReport.Verdict.AVOID -> avoid.add(row.name)
+                    else -> {}
+                }
             }
-        }
-        for (row in report?.confidence.orEmpty()) {
-            if (row.verdict == PerformanceReport.Verdict.STRONG && row.name != "Unknown") {
-                everywhere.add(Spot("*", ALL_LEAGUES, "", row.name, row.tally, scope = "band"))
+            for (row in rep.confidence) {
+                if (row.verdict == PerformanceReport.Verdict.STRONG && row.name != "Unknown") {
+                    Spot("*" + rep.source, where, "", row.name, row.tally, scope = "band").also { bands[row.name] = it; everywhere.add(it) }
+                }
             }
+            lists[rep.source] = ListStrength(markets, bands, avoid)
         }
         return Found(
-            everywhere.sortedWith(compareBy<Spot> { it.scope }.thenByDescending { it.score }) +
+            everywhere.sortedWith(compareBy<Spot> { it.leagueId != "*" + PerformanceReport.ALL_LISTS }.thenBy { it.leagueName }.thenBy { it.scope }.thenByDescending { it.score }) +
                 strong.sortedWith(compareBy<Spot> { it.leagueName }.thenBy { !it.isList }.thenByDescending { it.score }),
-            cold.sortedBy { it.rate }, avoid
+            cold.sortedBy { it.rate }, lists
         )
     }
 
@@ -127,18 +135,24 @@ object Trends {
     fun pick(lists: List<Pair<String?, List<TopPick>>>, found: Found, cfg: Config): List<TopPick> {
         val market = found.strong.filter { !it.isList && !it.isGlobal }.associateBy { it.leagueId to it.key }
         val leagueList = found.strong.filter { it.isList }.associateBy { it.list.orEmpty() to it.leagueId }
-        val everywhere = found.strong.filter { it.scope == "market" }.associateBy { it.name }
-        val bands = found.strong.filter { it.scope == "band" }.associateBy { it.name }
         val cold = found.cold.map { it.leagueId to it.key }.toSet()
         val out = LinkedHashMap<String, TopPick>()
         for ((src, cands) in lists) for (tp in cands) {
             if (tp.pick.backers.size < cfg.minBackers || tp.pick.averageConfidence < cfg.minConfidence) continue
             val marketName = PerformanceReport.keyName(tp.pick.key)
-            if (marketName in found.avoid || (tp.leagueId to tp.pick.key) in cold) continue
+            // a pick is judged by the Report's rows for its own list (the consensus pool counts as Top 20), then by all lists together
+            val own = found.lists[src ?: "Top 20"]
+            val total = found.lists[PerformanceReport.ALL_LISTS]
+            val strongMarket = own?.markets?.get(marketName) ?: total?.markets?.get(marketName)
+            if ((tp.leagueId to tp.pick.key) in cold) continue
+            if (strongMarket == null && (marketName in own?.avoid.orEmpty() || marketName in total?.avoid.orEmpty())) continue
+            if (strongMarket != null && marketName in own?.avoid.orEmpty()) continue
+            // the confidence bands that count: the list's own strong bands, or all lists' when that list has none
+            val bands = own?.bands?.takeIf { it.isNotEmpty() } ?: total?.bands.orEmpty()
             // every strong place the pick sits in; the more it stacks, the higher it ranks
             val spots = listOfNotNull(
                 market[tp.leagueId to tp.pick.key] ?: src?.let { leagueList[it to tp.leagueId] },
-                everywhere[marketName],
+                strongMarket,
                 bands[PerformanceReport.confidenceBand(tp.pick.averageConfidence)]
             )
             if (spots.isEmpty()) continue
