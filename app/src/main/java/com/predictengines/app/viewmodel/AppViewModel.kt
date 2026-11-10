@@ -500,8 +500,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         ).firstOrNull()
         val found = com.predictengines.app.data.Trends.spots(marks, visible, cfg, java.time.LocalDate.now(), report)
         val ranked = TopPicksEngine.rank(com.predictengines.app.data.Trends.pick(cands, found, cfg), modes = repo.kryptoModes())
+        // the list shows played Trend picks too (kept in their week); they follow the same confidence gate as the new picks
+        val bandNames = found.strong.filter { it.scope == "band" }.map { it.name }.toSet()
+        val gated = cfg.bandGate && bandNames.isNotEmpty()
+        val shown = mergePlayed(ListPicksStore.TRENDS, ranked, perGame = false).filter { tp ->
+            !gated || tp.pick.averageConfidence.let { c -> !c.isNaN() && com.predictengines.app.data.PerformanceReport.confidenceBand(c) in bandNames }
+        }
         return TrendBundle(
-            found, ranked, mergePlayed(ListPicksStore.TRENDS, ranked, perGame = false),
+            found, ranked, shown,
             com.predictengines.app.data.Trends.backtest(marks, visible, cfg)
         )
     }

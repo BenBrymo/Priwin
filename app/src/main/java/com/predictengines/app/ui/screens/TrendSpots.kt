@@ -44,6 +44,15 @@ fun TrendSpots(state: AppUiState) {
         else "${strong.size} strong places, as the Report judges them \u00b7 the picks below come from these",
         accentColor = WinGreen
     ) {
+        val bandsOn = strong.filter { it.scope == "band" }.map { it.name }
+        Text(
+            when {
+                !state.trendConfig.bandGate -> "Confidence gate is off: picks at any confidence are kept."
+                bandsOn.isEmpty() -> "No confidence band is Strong over ${state.trendConfig.window.label.lowercase()}, so picks at any confidence are kept."
+                else -> "Only picks at ${bandsOn.joinToString(" and ")} confidence are kept: the bands the Report marks Strong over ${state.trendConfig.window.label.lowercase()}."
+            },
+            style = MaterialTheme.typography.labelMedium, color = TextMuted
+        )
         state.trendBacktest?.let { Text(Trends.verdict(it), style = MaterialTheme.typography.labelMedium, color = TextMuted) }
         strong.groupBy { it.leagueId }.forEach { (id, spots) ->
             Spacer(Modifier.height(6.dp))
