@@ -283,6 +283,13 @@ private fun TopPicksList(
         picks.groupBy { ReportBuilder.weekStartOf(it.date) }
             .map { (week, picks) -> week to picks.mapIndexed { i, tp -> (i + 1) to tp } }
     }
+    // Only the last 2 played weeks are listed with this week and the coming ones; older weeks wait behind a button.
+    var showOlder by rememberSaveable(prefix) { mutableStateOf(false) }
+    val thisWeekStart = remember { ReportBuilder.weekStartOf(LocalDate.now().toString()) }
+    val olderWeeks = remember(groups, thisWeekStart) {
+        val past = groups.mapNotNull { it.first }.filter { thisWeekStart != null && it < thisWeekStart }.sorted()
+        past.dropLast(2).toSet()
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
@@ -300,7 +307,17 @@ private fun TopPicksList(
         val thisWeek = ReportBuilder.weekStartOf(LocalDate.now().toString())
         // The list arrives week by week, strongest first inside each week: rank = position within the week.
         val fmt = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
+        if (olderWeeks.isNotEmpty()) item(key = "older_$prefix") {
+            val n = groups.filter { it.first in olderWeeks }.sumOf { it.second.size }
+            AppCard(onClick = { showOlder = !showOlder }) {
+                Text(
+                    if (showOlder) "Hide the ${olderWeeks.size} older weeks" else "Show ${olderWeeks.size} older ${if (olderWeeks.size == 1) "week" else "weeks"} ($n picks)",
+                    style = MaterialTheme.typography.titleSmall, color = IndigoPrimary
+                )
+            }
+        }
         for ((week, list) in groups) {
+            if (week in olderWeeks && !showOlder) continue
             val key = "$prefix|${week ?: "none"}"
             val open = key !in folded
             val title = when {
@@ -958,8 +975,9 @@ private fun FixtureCard(
         }
 
         val bans = LocalCaptainBans.current
-        val picks = summary.consensus.picks.filter { !com.predictengines.app.data.CaptainPlanet.isBanned(it.key, it.group, bans) }
-        val droppedNames = summary.consensus.picks.filter { com.predictengines.app.data.CaptainPlanet.isBanned(it.key, it.group, bans) }.map { it.label }
+        val bansLeague = LocalCaptainLeague.current
+        val picks = summary.consensus.picks.filter { !com.predictengines.app.data.CaptainPlanet.isBanned(it.key, it.group, bans, bansLeague) }
+        val droppedNames = summary.consensus.picks.filter { com.predictengines.app.data.CaptainPlanet.isBanned(it.key, it.group, bans, bansLeague) }.map { it.label }
         Spacer(Modifier.height(12.dp))
         if (droppedNames.isNotEmpty()) {
             Text(

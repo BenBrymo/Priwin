@@ -305,13 +305,41 @@ class LeagueRepository(context: Context) {
     /** The league's matches file as parsed (imported file, else the built-in asset). Names are not unified yet. */
     private fun baseMatches(league: League): List<Match> {
         val imported = fileFor(league, DataKind.MATCHES)
-        val asset = league.assetFile
-        val text = when {
-            imported.exists() -> imported.readText(Charsets.UTF_8)
-            asset != null -> appContext.assets.open(asset).use { it.readBytes().toString(Charsets.UTF_8) }
-            else -> return emptyList()
+        val importedRows = if (imported.exists()) CsvParser.parseMatches(imported.readText(Charsets.UTF_8)).rows else null
+        val builtIn = league.assetFile?.let { builtInMatches(it) }
+        return when {
+            importedRows == null -> builtIn.orEmpty()
+            builtIn == null -> importedRows
+            // the file whose last game is later wins: a newer built-in file is not hidden by an older import (a tie keeps the import)
+            else -> if (newerThan(builtIn, importedRows)) builtIn else importedRows
         }
-        return CsvParser.parseMatches(text).rows
+    }
+
+    /** The built-in files never change while the app runs, so each is parsed once. */
+    private val builtInRows = HashMap<String, List<Match>>()
+
+    private fun builtInMatches(asset: String): List<Match> = synchronized(builtInRows) {
+        builtInRows.getOrPut(asset) {
+            runCatching { CsvParser.parseMatches(appContext.assets.open(asset).use { it.readBytes().toString(Charsets.UTF_8) }).rows }.getOrDefault(emptyList())
+        }
+    }
+
+    private fun lastGame(rows: List<Match>): java.time.LocalDate? = rows.mapNotNull { DateUtils.parse(it.date) }.maxOrNull()
+
+    /** True when [a] ends on a later date than [b] (a file with no readable dates never wins). */
+    private fun newerThan(a: List<Match>, b: List<Match>): Boolean {
+        val x = lastGame(a) ?: return false
+        val y = lastGame(b) ?: return true
+        return x.isAfter(y)
+    }
+
+    /** The date of the built-in matches file's last game when it is newer than the imported one that is on disk, else null. */
+    fun builtInNewerThanImport(league: League): java.time.LocalDate? {
+        val imported = fileFor(league, DataKind.MATCHES)
+        if (!imported.exists()) return null
+        val builtIn = league.assetFile?.let { builtInMatches(it) } ?: return null
+        val importedRows = CsvParser.parseMatches(imported.readText(Charsets.UTF_8)).rows
+        return if (newerThan(builtIn, importedRows)) lastGame(builtIn) else null
     }
 
     /**
@@ -526,7 +554,11 @@ class LeagueRepository(context: Context) {
 
         val info = ImportInfo(displayName(uri), rows, skipped, System.currentTimeMillis())
         prefs.edit().putString(infoKey(league, kind), toJson(info)).apply()
-        return ImportResult.Success(info, note)
+        // the newest file wins: say so when the file just imported ends before the built-in one, which stays in use
+        val older = if (kind == DataKind.MATCHES) builtInNewerThanImport(league) else null
+        val full = listOfNotNull(note, older?.let { "The built-in matches file for this league is newer (its last game is on $it), so it is still the one in use. Import a file that ends later to replace it." })
+            .joinToString(" ").ifBlank { null }
+        return ImportResult.Success(info, full)
     }
 
     fun clearImport(league: League, kind: DataKind) {

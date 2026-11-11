@@ -28,6 +28,9 @@ import com.predictengines.app.viewmodel.AppUiState
 /** Markets Captain Planet dropped (approved by you); fixture cards hide their consensus picks. */
 val LocalCaptainBans = compositionLocalOf<Set<String>> { emptySet() }
 
+/** The league whose fixtures are on screen, so a ban that covers one league only is applied to the right cards. */
+val LocalCaptainLeague = compositionLocalOf { "" }
+
 /** Data tab: proposals waiting for approval, the markets already dropped, and the settings. */
 @Composable
 fun CaptainPlanetCard(
@@ -37,6 +40,7 @@ fun CaptainPlanetCard(
     onSet: (CaptainPlanet.Config) -> Unit
 ) {
     val c = state.cpConfig
+    val leagueName = { id: String -> state.leagues.firstOrNull { it.id == id }?.name ?: id }
     Column(Modifier.fillMaxWidth()) {
         if (state.cpProposals.isEmpty()) {
             Text("Nothing waiting for your approval.", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
@@ -56,9 +60,9 @@ fun CaptainPlanetCard(
         if (state.cpBans.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
             Text("Dropped markets", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
-            state.cpBans.sortedBy { CaptainPlanet.nameOf(it) }.forEach { k ->
+            state.cpBans.sortedBy { CaptainPlanet.nameOf(it, leagueName) }.forEach { k ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(CaptainPlanet.nameOf(k), style = MaterialTheme.typography.bodyMedium, color = TextPrimary, modifier = Modifier.weight(1f))
+                    Text(CaptainPlanet.nameOf(k, leagueName), style = MaterialTheme.typography.bodyMedium, color = TextPrimary, modifier = Modifier.weight(1f))
                     TextButton(onClick = { onLift(k) }) { Text("Lift", color = IndigoPrimary) }
                 }
             }
@@ -88,7 +92,7 @@ fun CaptainPlanetCard(
         }
         Text(
             "A market is bad when the Report marks it Avoid: under 50% right over enough settled picks, for a market type (BTTS) or one selection (BTTS Yes). Nothing is dropped until you approve. " +
-                "An approved market is dropped from every list and from the consensus picks on fixture cards, in all leagues. Each model's own card is unchanged.",
+                "An approved market is dropped from every list and from the consensus picks on fixture cards, in all leagues; a market that is bad in one league only is proposed for that league alone. Each model's own card is unchanged.",
             style = MaterialTheme.typography.bodySmall, color = TextMuted
         )
     }

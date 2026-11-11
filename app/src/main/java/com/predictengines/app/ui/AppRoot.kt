@@ -242,6 +242,7 @@ fun AppRoot(vm: AppViewModel) {
     CompositionLocalProvider(
         LocalKeyPlayers provides state.players,
         com.predictengines.app.ui.screens.LocalCaptainBans provides state.cpBans,
+        com.predictengines.app.ui.screens.LocalCaptainLeague provides state.selected?.id.orEmpty(),
         com.predictengines.app.ui.components.LocalKryptoDismiss provides { f: com.predictengines.app.data.KryptoFlag -> vm.dismissKryptoFlag(f) }
     ) {
     Scaffold(

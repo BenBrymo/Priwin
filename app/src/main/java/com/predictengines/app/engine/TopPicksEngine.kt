@@ -26,7 +26,7 @@ object TopPicksEngine {
             val home = fx.home ?: return@mapNotNull null
             val away = fx.away ?: return@mapNotNull null
             if (DateUtils.isPlayed(fx.fixture.date, fx.fixture.time, now)) return@mapNotNull null
-            val best = fx.summary?.consensus?.picks?.filter { !com.predictengines.app.data.CaptainPlanet.isBanned(it.key, it.group, banned) }?.maxByOrNull { it.strength } ?: return@mapNotNull null
+            val best = fx.summary?.consensus?.picks?.filter { !com.predictengines.app.data.CaptainPlanet.isBanned(it.key, it.group, banned, league.id) }?.maxByOrNull { it.strength } ?: return@mapNotNull null
             TopPick(
                 leagueId = league.id, leagueName = league.name,
                 date = fx.fixture.date, time = fx.fixture.time,

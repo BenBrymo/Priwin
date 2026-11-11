@@ -41,14 +41,29 @@ object CaptainPlanet {
             else "$name: ${tally.correct} of ${tally.total} settled picks right (${Math.round(tally.rate)}%, ${where.ifBlank { "all lists" }}). Drop its picks?"
     }
 
-    /** True when ban entry [entry] covers a pick with this selection [key] and market type [group]. */
-    fun covers(entry: String, key: String, group: String) = entry == key || (entry.startsWith(GROUP) && entry.substring(GROUP.length) == group)
+    /** A ban in one league only is written "<entry>@@<league id>"; without that tail it covers every league. */
+    private const val LEAGUE_TAIL = "@@"
 
-    fun isBanned(key: String, group: String, banned: Set<String>) = banned.isNotEmpty() && banned.any { covers(it, key, group) }
+    fun leagueEntry(entry: String, leagueId: String) = entry + LEAGUE_TAIL + leagueId
 
-    /** A readable name for a ban entry: "BTTS (all picks)" or "BTTS Yes". */
-    fun nameOf(entry: String) =
-        if (entry.startsWith(GROUP)) entry.substring(GROUP.length) + " (every pick of this type)" else PerformanceReport.keyName(entry)
+    /** True when ban entry [entry] covers a pick of this selection [key], market type [group] and [leagueId]. */
+    fun covers(entry: String, key: String, group: String, leagueId: String = ""): Boolean {
+        val at = entry.indexOf(LEAGUE_TAIL)
+        val what = if (at >= 0) entry.substring(0, at) else entry
+        if (at >= 0 && entry.substring(at + LEAGUE_TAIL.length) != leagueId) return false
+        return what == key || (what.startsWith(GROUP) && what.substring(GROUP.length) == group)
+    }
+
+    fun isBanned(key: String, group: String, banned: Set<String>, leagueId: String = "") =
+        banned.isNotEmpty() && banned.any { covers(it, key, group, leagueId) }
+
+    /** A readable name for a ban entry: "BTTS (every pick of this type)", "BTTS Yes" or "BTTS Yes in Ligue 1". */
+    fun nameOf(entry: String, leagueName: (String) -> String = { it }): String {
+        val at = entry.indexOf(LEAGUE_TAIL)
+        val what = if (at >= 0) entry.substring(0, at) else entry
+        val base = if (what.startsWith(GROUP)) what.substring(GROUP.length) + " (every pick of this type)" else PerformanceReport.keyName(what)
+        return if (at >= 0) base + " in " + leagueName(entry.substring(at + LEAGUE_TAIL.length)) else base
+    }
 
     private fun tally(rs: Collection<PredictionRecord>) = Tally(rs.count { it.correct }, rs.count { !it.correct })
 
@@ -68,7 +83,7 @@ object CaptainPlanet {
         val from = PerformanceReport.cutoff(cfg.window, today)
         fun inWindow(r: PredictionRecord) = from == null || DateUtils.parse(r.date)?.let { !it.isBefore(from) } == true
         // picks a ban already covers are not judged again
-        val base = records.filter { it.source in Trends.BASE_SOURCES && it.leagueId in visible && inWindow(it) && !isBanned(it.key, it.group, banned) }
+        val base = records.filter { it.source in Trends.BASE_SOURCES && it.leagueId in visible && inWindow(it) && !isBanned(it.key, it.group, banned, it.leagueId) }
         val keyProps = LinkedHashMap<String, Proposal>(); val keyGroup = HashMap<String, String>()
         val groupProps = LinkedHashMap<String, Proposal>()
         for (src in listOf(PerformanceReport.ALL_LISTS) + Trends.BASE_SOURCES.toList().sorted()) {
@@ -90,16 +105,25 @@ object CaptainPlanet {
         val badKeyGroups = keyProps.keys.mapNotNull { keyGroup[it] }.toSet()
         val out = ArrayList<Proposal>()
         out += keyProps.values
-        out += groupProps.filter { (e, _) -> e.substring(GROUP.length) !in badKeyGroups }.values
+        val wholeGroups = groupProps.filter { (e, _) -> e.substring(GROUP.length) !in badKeyGroups }
+        out += wholeGroups.values
+        // a market that is only bad in one league (and not bad overall) is proposed for that league alone, with twice the picks
+        for ((id, x) in base.groupBy { it.leagueId to it.key }) {
+            val (lg, key) = id
+            if (key in keyProps || GROUP + x.first().group in wholeGroups || GROUP + x.first().group in groupProps) continue
+            val t = tally(x)
+            if (t.total < cfg.minPicks * 2 || PerformanceReport.verdict(t, PerformanceReport.MIN_MARKET) != PerformanceReport.Verdict.AVOID) continue
+            out.add(Proposal(leagueEntry(key, lg), PerformanceReport.keyName(key) + " in " + x.first().leagueName, t, false, where = "that league"))
+        }
         val open = out.filter { p -> p.count >= (declined[p.id]?.plus(RETRY_AFTER) ?: 0) }.toMutableList()
 
         // recovery of dropped markets, judged on the picks that were kept off the lists
         val hidden = records.filter { it.source == HIDDEN_SOURCE && it.leagueId in visible }
         for (entry in banned) {
-            val x = hidden.filter { covers(entry, it.key, it.group) }
+            val x = hidden.filter { covers(entry, it.key, it.group, it.leagueId) }
             val recent = x.sortedByDescending { it.date }.take(RECENT)
             val t = tally(recent)
-            val p = Proposal(entry, nameOf(entry).replace(" (every pick of this type)", ""), t, true, x.size)
+            val p = Proposal(entry, nameOf(entry) { id -> hidden.firstOrNull { it.leagueId == id }?.leagueName ?: id }.replace(" (every pick of this type)", ""), t, true, x.size)
             if (t.total >= RECENT_MIN && t.rate >= RECOVER_RATE && p.count >= (declined[p.id]?.plus(RETRY_AFTER) ?: 0)) open.add(p)
         }
         return open.sortedBy { it.tally.rate }
