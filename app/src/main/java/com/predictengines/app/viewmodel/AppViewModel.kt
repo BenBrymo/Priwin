@@ -56,6 +56,7 @@ import com.predictengines.app.engine.StatsEngine
 import com.predictengines.app.engine.TeamStatsEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
