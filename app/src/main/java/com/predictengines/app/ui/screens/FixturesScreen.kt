@@ -642,6 +642,8 @@ private fun LeagueFixtures(
     val notReady = parts.notReady
     val hiddenByKrypto = parts.hiddenByKrypto
     var showPlayed by rememberSaveable { mutableStateOf(false) }
+    // only the last 2 played weeks are listed first; older played weeks wait behind a button
+    var showOlderPlayed by rememberSaveable { mutableStateOf(false) }
     var showNotReady by rememberSaveable { mutableStateOf(false) }
     // Week groups the user has folded or unfolded (flips the default for that group).
     var flipped by rememberSaveable { mutableStateOf(emptySet<String>()) }
@@ -713,10 +715,20 @@ private fun LeagueFixtures(
         // Played weeks come first (most recent week on top), then upcoming weeks, then not-ready games.
         if (showPlayed) {
             weekGroups(
-                prefix = "p", groups = playedGroups, thisWeek = thisWeek, flipped = flipped,
+                prefix = "p", groups = if (showOlderPlayed) playedGroups else playedGroups.take(2), thisWeek = thisWeek, flipped = flipped,
                 onFlip = { flipped = if (it in flipped) flipped - it else flipped + it },
                 defaultOpen = { index, _ -> index == 0 }, showMarks = true, card = card
             )
+            if (playedGroups.size > 2) item(key = "older_played") {
+                val older = playedGroups.drop(2)
+                AppCard(onClick = { showOlderPlayed = !showOlderPlayed }) {
+                    Text(
+                        if (showOlderPlayed) "Hide the ${older.size} older played weeks"
+                        else "Show ${older.size} older played ${if (older.size == 1) "week" else "weeks"} (${older.sumOf { it.ordered.size }} games)",
+                        style = MaterialTheme.typography.titleSmall, color = IndigoPrimary
+                    )
+                }
+            }
         }
         weekGroups(
             prefix = "u", groups = upcomingGroups, thisWeek = thisWeek, flipped = flipped,

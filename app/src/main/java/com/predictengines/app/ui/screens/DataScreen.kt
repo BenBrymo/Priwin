@@ -129,6 +129,14 @@ fun DataScreen(
         if (uri != null) restoreUri = uri
     }
 
+    // the installed version, so you can tell which build is running
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val versionText = remember {
+        runCatching {
+            val info = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
+            "Priwin v${info.versionName} (build ${androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(info)})"
+        }.getOrDefault("")
+    }
     var showAdd by remember { mutableStateOf(false) }
     var editingSettleDate by remember { mutableStateOf(false) }
     var toDelete by remember { mutableStateOf<League?>(null) }
@@ -142,6 +150,9 @@ fun DataScreen(
             .padding(top = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        if (versionText.isNotBlank()) {
+            Text(versionText, style = MaterialTheme.typography.labelMedium, color = TextMuted)
+        }
         if (league != null) {
             DataSourceCard(
                 title = "Match results",
