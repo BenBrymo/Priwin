@@ -209,6 +209,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var lokiCache: List<TopPick> = emptyList()
     private var cornerCache: List<TopPick> = emptyList()
     private var trendCands: List<Pair<String?, List<TopPick>>> = emptyList()
+    private var cachedJob: Job? = null
     private var missingCache: Map<String, Int> = emptyMap()
 
     private fun invalidateCache() {
@@ -362,21 +363,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Re-scores every league's fixtures in the background and keeps the 20 strongest picks. */
     private fun refreshTopPicks() {
         topCache?.let { cached ->
-            // games that kicked off since the list was built drop out
-            val lists = composeLists(cached, handicapCache, over15Cache)
-            val trends = buildTrends(trendCands)
-            _state.update {
-                it.copy(
-                    topPicks = lists.first, topPicksLoading = false,
-                    handicapPicks = lists.second, over15Picks = lists.third,
-                    lokiPicks = composeLoki(lokiCache),
-                    cornerPicks = composeCorners(cornerCache),
-                    trendPicks = trends.shown, trendByList = trends.byList, trendStrong = trends.found.strong, trendCold = trends.found.cold,
-                    trendConfig = repo.loadTrendConfig(), trendBacktest = trends.backtest, cpBans = repo.captainBans(), cpConfig = repo.loadCaptainConfig(),
-                    missingByLeague = missingCache
-                )
+            // Games that kicked off since the list was built drop out. The work runs off the main thread (the newest request wins),
+            // so the screen never waits for it; the Trends part is reused unless the results, picks or settings changed.
+            cachedJob?.cancel()
+            cachedJob = viewModelScope.launch(Dispatchers.Default) {
+                val lists = composeLists(cached, handicapCache, over15Cache)
+                val loki = composeLoki(lokiCache)
+                val corners = composeCorners(cornerCache)
+                val trends = buildTrends(trendCands)
+                val cfg = repo.loadTrendConfig()
+                val bans = repo.captainBans()
+                val capCfg = repo.loadCaptainConfig()
+                ensureActive()
+                _state.update {
+                    it.copy(
+                        topPicks = lists.first, topPicksLoading = false,
+                        handicapPicks = lists.second, over15Picks = lists.third,
+                        lokiPicks = loki,
+                        cornerPicks = corners,
+                        trendPicks = trends.shown, trendByList = trends.byList, trendStrong = trends.found.strong, trendCold = trends.found.cold,
+                        trendConfig = cfg, trendBacktest = trends.backtest, cpBans = bans, cpConfig = capCfg,
+                        missingByLeague = missingCache
+                    )
+                }
             }
-            checkCaptain()
             return
         }
         topJob?.cancel()
@@ -437,15 +447,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 trendAll = listOf("Top 20" to all, "Handicap" to hcp, "Over 1.5" to o15, "Loki" to lk, "Corners" to cr, null to tr)
                 shown
             }
-            withContext(Dispatchers.IO) { trendCands = trendAll
-                recordListPicks(top.first, top.second, top.third, held, loki, corners, buildTrends(trendAll).ranked, capHeld) }
+            val trends = withContext(Dispatchers.IO) {
+                trendCands = trendAll
+                // built once: the same result is written down and shown below
+                buildTrends(trendAll).also { recordListPicks(top.first, top.second, top.third, held, loki, corners, it.ranked, capHeld) }
+            }
             if (gen == cacheGen.get()) {
                 topCache = top.first; handicapCache = top.second; over15Cache = top.third; lokiCache = loki; cornerCache = corners
             }
             val lists = withContext(Dispatchers.IO) { composeLists(top.first, top.second, top.third) }
             val lokiShown = withContext(Dispatchers.IO) { composeLoki(loki) }
             val cornersShown = withContext(Dispatchers.IO) { composeCorners(corners) }
-            val trends = withContext(Dispatchers.IO) { buildTrends(trendAll) }
             _state.update {
                 it.copy(
                     topPicks = lists.first, handicapPicks = lists.second, over15Picks = lists.third, lokiPicks = lokiShown, cornerPicks = cornersShown,
@@ -454,7 +466,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     missingByLeague = missingCache, topPicksLoading = false
                 )
             }
-            checkCaptain()
+            withContext(Dispatchers.Default) { checkCaptain() }
         }
     }
 
@@ -483,14 +495,50 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val byList: Map<String, List<TopPick>> = emptyMap()
     )
 
+    /** What the Trends tab needs that only changes when the results, the picks, the settings or the candidates change. */
+    private class TrendCore(
+        val found: com.predictengines.app.data.Trends.Found, val ranked: List<TopPick>,
+        val backtest: com.predictengines.app.data.Trends.Backtest, val byList: Map<String, List<TopPick>>
+    )
+
+    private class TrendKey(
+        val marks: Any, val entries: Any, val cands: Any, val cfg: com.predictengines.app.data.Trends.Config,
+        val visible: Set<String>, val modes: Map<String, com.predictengines.app.data.KryptoMode>
+    ) {
+        fun same(o: TrendKey) = marks === o.marks && entries === o.entries && cands === o.cands && cfg == o.cfg && visible == o.visible && modes == o.modes
+    }
+
+    @Volatile private var trendMemo: Pair<TrendKey, TrendCore>? = null
+
     private fun buildTrends(cands: List<Pair<String?, List<TopPick>>>): TrendBundle {
         val visible = _state.value.leagues.map { it.id }.toSet()
         val cfg = repo.loadTrendConfig()
-        val marks = _state.value.marks.values
+        val marksMap = _state.value.marks
+        val entries = _state.value.listEntries
+        val modes = repo.kryptoModes()
+        val key = TrendKey(marksMap, entries, cands, cfg, visible, modes)
+        // the heavy part (Report rows for every list, the picks of every group, the backtest) is kept until something it reads changes
+        val core = trendMemo?.takeIf { it.first.same(key) }?.second
+            ?: computeTrend(cands, cfg, visible, marksMap.values, entries, modes).also { trendMemo = key to it }
+        val found = core.found
+        // the list shows played Trend picks too (kept in their week); they follow the same confidence gate as the new picks
+        val bandNames = found.strong.filter { it.scope == "band" }.map { it.name }.toSet()
+        val gated = cfg.bandGate && bandNames.isNotEmpty()
+        val shown = mergePlayed(ListPicksStore.TRENDS, core.ranked, perGame = false).filter { tp ->
+            !gated || tp.pick.averageConfidence.let { c -> !c.isNaN() && com.predictengines.app.data.PerformanceReport.confidenceBand(c) in bandNames }
+        }
+        return TrendBundle(found, core.ranked, shown, core.backtest, core.byList)
+    }
+
+    private fun computeTrend(
+        cands: List<Pair<String?, List<TopPick>>>, cfg: com.predictengines.app.data.Trends.Config, visible: Set<String>,
+        marks: Collection<com.predictengines.app.data.PredictionRecord>, listEntries: List<ListPicksStore.Entry>,
+        modes: Map<String, com.predictengines.app.data.KryptoMode>
+    ): TrendCore {
         // the Report's own all-leagues rows (strong markets, strong confidence bands), built the way the Data screen builds them
         val hide = com.predictengines.app.data.PerformanceReport.HIDDEN_SUFFIX
         val meta = HashMap<String, com.predictengines.app.data.PerformanceReport.PickMeta>()
-        _state.value.listEntries.forEach { e ->
+        listEntries.forEach { e ->
             val conf = if (e.backers.isEmpty()) null else e.backers.map { b -> b.second }.average()
             meta[e.id] = com.predictengines.app.data.PerformanceReport.PickMeta(
                 e.krypto, conf, e.backers.size, e.modelCount, e.source.endsWith(hide),
@@ -503,22 +551,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             com.predictengines.app.data.PerformanceReport.LISTS.filter { it != com.predictengines.app.data.Trends.SOURCE } + com.predictengines.app.data.PerformanceReport.ALL_LISTS
         )
         val found = com.predictengines.app.data.Trends.spots(marks, visible, cfg, java.time.LocalDate.now(), reports)
-        val ranked = TopPicksEngine.rank(com.predictengines.app.data.Trends.pick(cands, found, cfg), modes = repo.kryptoModes())
-        // the list shows played Trend picks too (kept in their week); they follow the same confidence gate as the new picks
-        val bandNames = found.strong.filter { it.scope == "band" }.map { it.name }.toSet()
-        val gated = cfg.bandGate && bandNames.isNotEmpty()
-        val shown = mergePlayed(ListPicksStore.TRENDS, ranked, perGame = false).filter { tp ->
-            !gated || tp.pick.averageConfidence.let { c -> !c.isNaN() && com.predictengines.app.data.PerformanceReport.confidenceBand(c) in bandNames }
-        }
-        return TrendBundle(
-            found, ranked, shown,
-            com.predictengines.app.data.Trends.backtest(marks, visible, cfg),
-            // one group per list: each judged only against that list's own Report rows (the consensus pool counts as Top 20)
-            ListPicksStore.GROUPS.associateWith { name ->
-                val own = cands.filter { it.first == name || (name == "Top 20" && it.first == null) }
-                TopPicksEngine.rank(com.predictengines.app.data.Trends.pick(own, found, cfg), modes = repo.kryptoModes())
-            }.filterValues { it.isNotEmpty() }
-        )
+        val ranked = TopPicksEngine.rank(com.predictengines.app.data.Trends.pick(cands, found, cfg), modes = modes)
+        // one group per list: each judged only against that list's own Report rows (the consensus pool counts as Top 20)
+        val byList = ListPicksStore.GROUPS.associateWith { name ->
+            val own = cands.filter { it.first == name || (name == "Top 20" && it.first == null) }
+            TopPicksEngine.rank(com.predictengines.app.data.Trends.pick(own, found, cfg), modes = modes)
+        }.filterValues { it.isNotEmpty() }
+        return TrendCore(found, ranked, com.predictengines.app.data.Trends.backtest(marks, visible, cfg), byList)
     }
 
     /** The Corners list as shown: one pick per game, played ones kept in their week. */

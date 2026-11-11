@@ -37,7 +37,19 @@ class ListPicksStore(context: Context) {
 
     private val file = File(context.applicationContext.filesDir, "list_picks.json")
 
-    fun load(): Map<String, Entry> = try {
+    // The file only changes when a pick is added (or a backup is restored), so it is parsed once and kept; its size and
+    // time stamp tell when it changed. It used to be read and parsed again by every list that was composed.
+    @Volatile private var memo: Pair<Pair<Long, Long>, Map<String, Entry>>? = null
+
+    fun load(): Map<String, Entry> {
+        val stamp = if (file.exists()) file.lastModified() to file.length() else -1L to -1L
+        memo?.let { if (it.first == stamp) return it.second }
+        val fresh = readFile()
+        memo = stamp to fresh
+        return fresh
+    }
+
+    private fun readFile(): Map<String, Entry> = try {
         if (!file.exists()) emptyMap() else {
             val arr = JSONArray(file.readText(Charsets.UTF_8))
             val out = LinkedHashMap<String, Entry>()
@@ -91,6 +103,7 @@ class ListPicksStore(context: Context) {
         } catch (e: Exception) {
             return false
         }
+        memo = (file.lastModified() to file.length()) to all
         return true
     }
 

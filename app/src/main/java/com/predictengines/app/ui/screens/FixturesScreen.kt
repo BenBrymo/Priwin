@@ -275,6 +275,10 @@ private fun TopPicksList(
         }
         return
     }
+    // each list's picks split by week once, not on every redraw
+    val sectionWeeks = remember(bySection) {
+        bySection?.mapValues { (_, l) -> l.groupBy { ReportBuilder.weekStartOf(it.date) } }
+    }
     val groups = remember(picks) {
         picks.groupBy { ReportBuilder.weekStartOf(it.date) }
             .map { (week, picks) -> week to picks.mapIndexed { i, tp -> (i + 1) to tp } }
@@ -334,7 +338,7 @@ private fun TopPicksList(
                 // one section per list that has picks this week, then the played ones with their results
                 val parts = ArrayList<Pair<String, List<TopPick>>>()
                 for (name in ListPicksStore.GROUPS) {
-                    val sub = bySection[name].orEmpty().filter { ReportBuilder.weekStartOf(it.date) == week }
+                    val sub = sectionWeeks?.get(name)?.get(week).orEmpty()
                     if (sub.isNotEmpty()) parts += name to sub
                 }
                 val playedNow = list.map { it.second }.filter { DateUtils.isPlayed(it.date, it.time) }
