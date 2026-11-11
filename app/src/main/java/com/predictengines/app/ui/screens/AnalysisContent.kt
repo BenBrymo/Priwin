@@ -91,7 +91,7 @@ fun AnalysisContent(
             }
         }
         StatsCard(analysis.stats, analysis.homeTeam, analysis.awayTeam, statsTeams, onLinkStatsName, analysis.modelBest["Stats"])
-        ConsensusCard(analysis)
+        ConsensusCard(analysis, leagueId)
         if (onMark != null && analysis.trackable.isNotEmpty()) {
             ResultsCard(analysis, marks, leagueId, onMark)
         }
@@ -174,7 +174,7 @@ private fun votes(a: Analysis): List<Pair<String, Outcome>> = listOfNotNull(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ConsensusCard(analysis: Analysis) {
+private fun ConsensusCard(analysis: Analysis, leagueId: String) {
     val home = analysis.homeTeam
     val away = analysis.awayTeam
     val votes = votes(analysis)
