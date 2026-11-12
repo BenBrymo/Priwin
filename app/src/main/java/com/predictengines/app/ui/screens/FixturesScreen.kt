@@ -70,6 +70,7 @@ import com.predictengines.app.data.ListPicksStore
 import com.predictengines.app.data.FixtureItem
 import com.predictengines.app.data.MatchExtras
 import com.predictengines.app.data.ScoreCell
+import com.predictengines.app.data.PerformanceReport
 import com.predictengines.app.data.fixtureKey
 import com.predictengines.app.data.isPostponed
 import com.predictengines.app.viewmodel.AppViewModel
@@ -373,47 +374,13 @@ private fun TopPicksList(
                             sectionNote(name)?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = TextMuted) }
                         }
                     }
-                    item(key = "secrow_${key}_$name") {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 16.dp)) {
-                            items(
-                                sub.mapIndexed { i, p -> (i + 1) to p },
-                                key = { (_, p) -> "${p.leagueId}|${p.date}|${p.home}|${p.away}|${p.pick.key}" }
-                            ) { (rank, tp) ->
-                                TopPickCard(
-                                    rank, tp, onClick = { onOpenTopPick(tp) }, modifier = Modifier.width(300.dp), showBest = showBest,
-                                    spotTag = null,
-                                    result = ListResult(
-                                        played = DateUtils.isPlayed(tp.date, tp.time),
-                                        correct = state.marks[PredictionRecord.idOf(tp.leagueId, tp.date, tp.home, tp.away, source, tp.pick.key)]?.correct,
-                                        score = if (tp.leagueId == state.selected?.id) state.scores[scoreKey(tp.date, tp.home, tp.away)] else null
-                                    )
-                                )
-                            }
-                        }
-                    }
+                    slipItems(
+                        "${key}_$name", sub.mapIndexed { i, p -> (i + 1) to p },
+                        if (name == "Played") PerformanceReport.ALL_LISTS else name, source, state, onOpenTopPick
+                    )
                 }
             } else if (open) {
-                item(key = "row_$key") {
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = PaddingValues(end = 16.dp)
-                    ) {
-                        items(
-                            list,
-                            key = { (_, p) -> "${p.leagueId}|${p.date}|${p.home}|${p.away}|${p.pick.key}" }
-                        ) { (rank, tp) ->
-                            TopPickCard(
-                                rank, tp, onClick = { onOpenTopPick(tp) }, modifier = Modifier.width(300.dp), showBest = showBest,
-                                spotTag = spotTags["${tp.leagueId}|${tp.pick.key}"],
-                                result = ListResult(
-                                    played = DateUtils.isPlayed(tp.date, tp.time),
-                                    correct = state.marks[PredictionRecord.idOf(tp.leagueId, tp.date, tp.home, tp.away, source, tp.pick.key)]?.correct,
-                                    score = if (tp.leagueId == state.selected?.id) state.scores[scoreKey(tp.date, tp.home, tp.away)] else null
-                                )
-                            )
-                        }
-                    }
-                }
+                slipItems("row_$key", list, source, source, state, onOpenTopPick)
             }
         }
     }
