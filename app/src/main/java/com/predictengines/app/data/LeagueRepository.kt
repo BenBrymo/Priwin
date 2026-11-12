@@ -83,6 +83,11 @@ class LeagueRepository(context: Context) {
     // ---- Captain Planet ----------------------------------------------------------------------
 
     /** Markets (pick keys) dropped from every list after you approved. */
+    /** Games the user marked postponed, as fixture keys ("league|date|home|away"). */
+    fun postponed(): Set<String> = prefs.getString("post_keys", "").orEmpty().split('\n').filter { it.isNotBlank() }.toSet()
+
+    fun savePostponed(s: Set<String>) { prefs.edit().putString("post_keys", s.joinToString("\n")).apply() }
+
     fun captainBans(): Set<String> = prefs.getString("cp_bans", "").orEmpty().split('\n').filter { it.isNotBlank() }.toSet()
 
     fun saveCaptainBans(b: Set<String>) { prefs.edit().putString("cp_bans", b.joinToString("\n")).apply() }

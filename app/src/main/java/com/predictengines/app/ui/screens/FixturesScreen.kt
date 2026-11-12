@@ -71,6 +71,7 @@ import com.predictengines.app.data.FixtureItem
 import com.predictengines.app.data.MatchExtras
 import com.predictengines.app.data.ScoreCell
 import com.predictengines.app.data.fixtureKey
+import com.predictengines.app.data.isPostponed
 import com.predictengines.app.viewmodel.AppViewModel
 import com.predictengines.app.data.Match
 import com.predictengines.app.data.scoreKey
@@ -112,7 +113,8 @@ fun FixturesScreen(
     onRemoveScore: (fixtureId: Int) -> Unit,
     onSaveScores: (List<AppViewModel.ScoreEntry>) -> Unit,
     scoreHints: (home: String, away: String) -> List<ScoreCell> = { _, _ -> emptyList() },
-    jumpToResults: Int = 0
+    jumpToResults: Int = 0,
+    onPostpone: (fixtureId: Int, on: Boolean) -> Unit = { _, _ -> }
 ) {
     var section by rememberSaveable { mutableIntStateOf(0) }
     // Worked out here (not inside each sub-tab) and only when their inputs change, so opening a sub-tab is cheap.
@@ -132,7 +134,7 @@ fun FixturesScreen(
             Countdown.anyToday(state.trendPicks.map { it.date to it.time }, now)
         )
     }
-    val waitingResults = remember(state.fixtures, state.scores, now) { missingResults(state).size }
+    val waitingResults = remember(state.fixtures, state.scores, state.postponed, now) { missingResults(state).size }
     // The "games need results" prompt asks for the Results sub-tab.
     androidx.compose.runtime.LaunchedEffect(jumpToResults) { if (jumpToResults > 0) section = 1 }
     if (state.openFixtureId != null) {
@@ -177,8 +179,8 @@ fun FixturesScreen(
             })
         }
         Box(Modifier.weight(1f)) {
-            if (section == 0) LeagueFixtures(state, parts, leagueListState, onOpen, onGoToData, onMark, onLink, onSaveScore, onRemoveScore, scoreHints)
-            else if (section == 1) ResultsEntry(state, onSaveScore, scoreHints)
+            if (section == 0) LeagueFixtures(state, parts, leagueListState, onOpen, onGoToData, onMark, onLink, onSaveScore, onRemoveScore, scoreHints, onPostpone)
+            else if (section == 1) ResultsEntry(state, onSaveScore, scoreHints, onPostpone)
             else if (section == 2) TopPicksList(state, onOpenTopPick)
             else if (section == 3) TopPicksList(
                 state, onOpenTopPick, picks = state.handicapPicks, prefix = "h", source = "Handicap", showBest = false,
@@ -509,7 +511,8 @@ internal fun missingResults(state: AppUiState): List<FixtureItem> {
     return state.fixtures.filter { fx ->
         fx.home != null && fx.away != null && fx.fixture.date.isNotBlank() &&
             DateUtils.isPlayed(fx.fixture.date, fx.fixture.time, now) &&
-            !state.scores.containsKey(scoreKey(fx.fixture.date, fx.home, fx.away))
+            !state.scores.containsKey(scoreKey(fx.fixture.date, fx.home, fx.away)) &&
+            !fx.isPostponed(state.selected?.id.orEmpty(), state.postponed)
     }.sortedByDescending { DateUtils.sortKey(it.fixture.date, it.fixture.time) }
 }
 
@@ -521,7 +524,8 @@ internal fun missingResults(state: AppUiState): List<FixtureItem> {
 private fun ResultsEntry(
     state: AppUiState,
     onSaveScore: (Int, Int, Int, MatchExtras?) -> Unit,
-    scoreHints: (home: String, away: String) -> List<ScoreCell>
+    scoreHints: (home: String, away: String) -> List<ScoreCell>,
+    onPostpone: (Int, Boolean) -> Unit
 ) {
     val missing = missingResults(state)
     var flipped by rememberSaveable { mutableStateOf(emptySet<String>()) }
@@ -537,7 +541,8 @@ private fun ResultsEntry(
     if (missing.isEmpty()) {
         Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
             Text(
-                "No played games are waiting for a result in ${state.selected?.name.orEmpty()}.",
+                "No played games are waiting for a result in ${state.selected?.name.orEmpty()}." +
+                    if (state.fixtures.any { it.isPostponed(state.selected?.id.orEmpty(), state.postponed) }) " Postponed games are listed on the This league tab." else "",
                 style = MaterialTheme.typography.bodyMedium, color = TextMuted
             )
         }
@@ -582,6 +587,7 @@ private fun ResultsEntry(
                     )
                     Spacer(Modifier.height(10.dp))
                     PrimaryButton(text = "Add result", onClick = { scoring = fx }, color = WinGreen)
+                    TextButton(onClick = { onPostpone(fx.id, true) }) { Text("Mark postponed", color = DrawAmber) }
                 }
             }
         )
@@ -612,7 +618,8 @@ private fun LeagueFixtures(
     onLink: (name: String, target: String) -> Unit,
     onSaveScore: (fixtureId: Int, home: Int, away: Int, extras: MatchExtras?) -> Unit,
     onRemoveScore: (fixtureId: Int) -> Unit,
-    scoreHints: (home: String, away: String) -> List<ScoreCell>
+    scoreHints: (home: String, away: String) -> List<ScoreCell>,
+    onPostpone: (fixtureId: Int, on: Boolean) -> Unit
 ) {
     val leagueName = state.selected?.name.orEmpty()
     if (state.showLoader) {
@@ -679,6 +686,22 @@ private fun LeagueFixtures(
             ) {}
         }
 
+        if (parts.postponed.isNotEmpty()) {
+            item(key = "postponed") {
+                AppCard(title = "${parts.postponed.size} postponed", subtitle = "Left out of every list and not waiting for a result. A saved score brings a game back.", accentColor = DrawAmber) {
+                    parts.postponed.forEach { fx ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("${fx.fixture.homeTeam} v ${fx.fixture.awayTeam}", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+                                Text(DateUtils.kickoffLabelWithYear(fx.fixture.date, fx.fixture.time), style = MaterialTheme.typography.labelSmall, color = TextMuted)
+                            }
+                            TextButton(onClick = { onPostpone(fx.id, false) }) { Text("Undo", color = IndigoPrimary) }
+                        }
+                    }
+                }
+            }
+        }
+
         if (played.isNotEmpty() || notReady.isNotEmpty()) {
             item(key = "toggles") {
                 AppCard {
@@ -709,7 +732,9 @@ private fun LeagueFixtures(
             FixtureCard(
                 fx, state.marks, leagueId, showMarks = marksOn, onMark = onMark,
                 onLinkName = { linking = it }, onClick = { onOpen(fx.id) }, modifier = mod,
-                score = state.scores[sk], scoreEditable = sk in state.addedScoreKeys, onScore = { scoring = fx }
+                score = state.scores[sk], scoreEditable = sk in state.addedScoreKeys, onScore = { scoring = fx },
+                postponeLabel = if (fx.home != null && fx.away != null && state.scores[sk] == null) "Mark postponed" else null,
+                onPostpone = { onPostpone(fx.id, true) }
             )
         }
 
@@ -780,6 +805,8 @@ private class LeagueParts(
     val upcoming: List<FixtureItem>,
     val played: List<FixtureItem>,
     val notReady: List<FixtureItem>,
+    /** Games marked postponed (and with no score), kept out of the other lists. */
+    val postponed: List<FixtureItem>,
     val hiddenByKrypto: Int,
     /** Ids of upcoming fixtures a Kryptonite pushes to the bottom of their week. */
     val bottomIds: Set<Int>
@@ -787,12 +814,15 @@ private class LeagueParts(
 
 @Composable
 private fun rememberLeagueParts(state: AppUiState, now: LocalDateTime): LeagueParts =
-    remember(state.fixtures, state.kryptoModes, now) {
+    remember(state.fixtures, state.kryptoModes, state.postponed, state.scores, now) {
         val up = ArrayList<FixtureItem>()
         val pl = ArrayList<FixtureItem>()
         val nr = ArrayList<FixtureItem>()
+        val pp = ArrayList<FixtureItem>()
+        val lid = state.selected?.id.orEmpty()
         for (fx in state.fixtures) {
             when {
+                fx.isPostponed(lid, state.postponed) && !state.scores.containsKey(scoreKey(fx.fixture.date, fx.home.orEmpty(), fx.away.orEmpty())) -> pp.add(fx)
                 DateUtils.isPlayed(fx.fixture.date, fx.fixture.time, now) -> pl.add(fx)
                 fx.summary == null -> nr.add(fx)
                 else -> up.add(fx)
@@ -811,7 +841,7 @@ private fun rememberLeagueParts(state: AppUiState, now: LocalDateTime): LeaguePa
             }
         }
         pl.reverse() // most recent first
-        LeagueParts(up, pl, nr, hidden, bottom)
+        LeagueParts(up, pl, nr, pp, hidden, bottom)
     }
 
 private class WeekGroup(val week: LocalDate?, val ordered: List<FixtureItem>)
@@ -919,7 +949,9 @@ private fun FixtureCard(
     modifier: Modifier = Modifier,
     score: Match? = null,
     scoreEditable: Boolean = false,
-    onScore: () -> Unit = {}
+    onScore: () -> Unit = {},
+    postponeLabel: String? = null,
+    onPostpone: () -> Unit = {}
 ) {
     val summary = item.summary
     AppCard(modifier = modifier, onClick = if (summary != null) onClick else null) {
@@ -965,6 +997,10 @@ private fun FixtureCard(
                     TextButton(onClick = onScore) { Text("Add score", color = IndigoPrimary) }
                 }
             }
+        }
+
+        if (postponeLabel != null) {
+            TextButton(onClick = onPostpone) { Text(postponeLabel, color = DrawAmber) }
         }
 
         if (summary == null) {

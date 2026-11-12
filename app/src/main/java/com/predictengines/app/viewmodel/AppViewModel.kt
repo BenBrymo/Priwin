@@ -44,6 +44,7 @@ import com.predictengines.app.data.LeagueDiskCache
 import com.predictengines.app.data.BackupManager
 import com.predictengines.app.data.LoadedData
 import com.predictengines.app.data.fixtureKey
+import com.predictengines.app.data.isPostponed
 import com.predictengines.app.data.scoreKey
 import com.predictengines.app.engine.StatsUpdater
 import com.predictengines.app.engine.TopPicksEngine
@@ -136,6 +137,8 @@ data class AppUiState(
     /** Captain Planet: markets dropped (approved), proposals waiting for approval, and its settings. */
     val cpBans: Set<String> = emptySet(),
     val cpProposals: List<com.predictengines.app.data.CaptainPlanet.Proposal> = emptyList(),
+    /** Games marked postponed (fixture keys). They leave every list and are not waiting for a result. */
+    val postponed: Set<String> = emptySet(),
     val cpConfig: com.predictengines.app.data.CaptainPlanet.Config = com.predictengines.app.data.CaptainPlanet.Config(),
     val lokiConfig: com.predictengines.app.data.LokiConfig = com.predictengines.app.data.LokiConfig(),
 
@@ -270,7 +273,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // The user's name links must be in place before any file is read, so every file sees the same names.
         val links = linksStore.load()
         TeamMatcher.setUserLinks(links.map { it.a to it.b })
-        _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, news = savedPlayers.news, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), lokiConfig = repo.loadLokiConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList(), cpBans = repo.captainBans(), cpConfig = repo.loadCaptainConfig()) }
+        _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, news = savedPlayers.news, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), lokiConfig = repo.loadLokiConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList(), cpBans = repo.captainBans(), cpConfig = repo.loadCaptainConfig(), postponed = repo.postponed()) }
         // the last known counts show at once; they are refreshed straight away, without scoring anything
         _state.update { it.copy(missingByLeague = repo.loadMissingCounts().filterKeys { id -> leagues.any { l -> l.id == id } }) }
         val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
@@ -401,6 +404,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             var trendAll = emptyList<Pair<String?, List<TopPick>>>()
             var capHeld = emptyList<TopPick>()
             val banned = repo.captainBans()
+            var post = repo.postponed()
             val top = withContext(Dispatchers.Default) {
                 val all = ArrayList<TopPick>()
                 val hcp = ArrayList<TopPick>()
@@ -421,15 +425,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         // Uses (and fills) the same per-league cache, so the other leagues are ready before you open them.
                         val data = cache[league.id] ?: computeLeague(league)
                         if (data.fixtures.isEmpty()) continue
-                        missing[league.id] = countMissing(data)
+                        // a postponed game that now has a score is back to normal
+                        val mine = post.filter { it.startsWith(league.id + "|") }
+                        if (mine.isNotEmpty()) {
+                            val known = data.matches.mapTo(HashSet()) { scoreKey(it.date, it.homeTeam, it.awayTeam) }
+                            post = post - mine.filter { it.substringAfter('|') in known }.toSet()
+                        }
+                        val fxs = data.fixtures.filter { !it.isPostponed(league.id, post) }
+                        missing[league.id] = countMissing(fxs, data.matches)
                         if (data.matches.isEmpty()) continue
-                        if (banned.isNotEmpty()) dropped += TopPicksEngine.candidates(league, data.fixtures).filter { com.predictengines.app.data.CaptainPlanet.isBanned(it.pick.key, it.pick.group, banned, it.leagueId) }
-                        all += TopPicksEngine.candidates(league, data.fixtures, banned = banned)
-                        hcp += keep(TopPicksEngine.handicapCandidates(league, data.fixtures))
-                        o15 += keep(TopPicksEngine.over15Candidates(league, data.fixtures))
-                        lk += keep(TopPicksEngine.lokiCandidates(league, data.fixtures, data.matches))
-                        cr += keep(TopPicksEngine.cornerCandidates(league, data.fixtures))
-                        tr += TopPicksEngine.trendCandidates(league, data.fixtures).filter { !com.predictengines.app.data.CaptainPlanet.isBanned(it.pick.key, it.pick.group, banned, it.leagueId) }
+                        if (banned.isNotEmpty()) dropped += TopPicksEngine.candidates(league, fxs).filter { com.predictengines.app.data.CaptainPlanet.isBanned(it.pick.key, it.pick.group, banned, it.leagueId) }
+                        all += TopPicksEngine.candidates(league, fxs, banned = banned)
+                        hcp += keep(TopPicksEngine.handicapCandidates(league, fxs))
+                        o15 += keep(TopPicksEngine.over15Candidates(league, fxs))
+                        lk += keep(TopPicksEngine.lokiCandidates(league, fxs, data.matches))
+                        cr += keep(TopPicksEngine.cornerCandidates(league, fxs))
+                        tr += TopPicksEngine.trendCandidates(league, fxs).filter { !com.predictengines.app.data.CaptainPlanet.isBanned(it.pick.key, it.pick.group, banned, it.leagueId) }
                     } catch (e: Exception) {
                         // one unreadable league must not hide the others
                     }
@@ -456,6 +467,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (gen == cacheGen.get()) {
                 topCache = top.first; handicapCache = top.second; over15Cache = top.third; lokiCache = loki; cornerCache = corners
             }
+            if (post != _state.value.postponed) { repo.savePostponed(post); _state.update { it.copy(postponed = post) } }
             val lists = withContext(Dispatchers.IO) { composeLists(top.first, top.second, top.third) }
             val lokiShown = withContext(Dispatchers.IO) { composeLoki(loki) }
             val cornersShown = withContext(Dispatchers.IO) { composeCorners(corners) }
@@ -566,7 +578,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun mergePlayed(source: String, upcoming: List<TopPick>, perGame: Boolean): List<TopPick> {
         val visible = _state.value.leagues.map { it.id }.toSet()
-        val played = listPicks.load().values.filter { it.leagueId in visible && DateUtils.isPlayed(it.date, it.time) }
+        val postponedNow = _state.value.postponed
+        val played = listPicks.load().values.filter {
+            it.leagueId in visible && DateUtils.isPlayed(it.date, it.time) && fixtureKey(it.leagueId, it.date, it.home, it.away) !in postponedNow
+        }
         // one pick per game: the one that first made the list
         val past = played.filter { it.source == source }
                 .distinctBy { if (perGame) "${it.leagueId}|${it.date}|${it.home}|${it.away}" else it.id }.map { e ->
@@ -610,19 +625,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val teams = played.flatMap { listOf(it.homeTeam, it.awayTeam) }.distinct().sorted()
         val known = played.mapTo(HashSet()) { scoreKey(it.date, it.homeTeam, it.awayTeam) }
         val now = java.time.LocalDateTime.now()
+        val postponedNow = _state.value.postponed
         return fixtures.count { f ->
             val h = TeamMatcher.resolve(f.homeTeam, teams)
             val a = TeamMatcher.resolve(f.awayTeam, teams)
             h != null && a != null && f.date.isNotBlank() && DateUtils.isPlayed(f.date, f.time, now) &&
-                scoreKey(f.date, h, a) !in known
+                scoreKey(f.date, h, a) !in known && fixtureKey(league.id, f.date, h, a) !in postponedNow
         }
     }
 
     /** Played games of a league that have no score in the matches file or among your entries. */
-    private fun countMissing(data: LoadedData): Int {
+    private fun countMissing(fixtures: List<FixtureItem>, matches: List<Match>): Int {
         val now = java.time.LocalDateTime.now()
-        val known = data.matches.mapTo(HashSet()) { scoreKey(it.date, it.homeTeam, it.awayTeam) }
-        return data.fixtures.count { fx ->
+        val known = matches.mapTo(HashSet()) { scoreKey(it.date, it.homeTeam, it.awayTeam) }
+        return fixtures.count { fx ->
             val h = fx.home; val a = fx.away
             h != null && a != null && fx.fixture.date.isNotBlank() &&
                 DateUtils.isPlayed(fx.fixture.date, fx.fixture.time, now) &&
@@ -1283,9 +1299,35 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * Saves scores into this league's matches, then settles each game: every stat the score decides is updated,
      * and every pick the score (and extras) decide is ticked or crossed. Picks you ticked yourself are left alone.
      */
+    /** Marks a game of the open league postponed (or takes the mark back). Postponed games leave every list and stop waiting for a result. */
+    fun setPostponed(fixtureId: Int, on: Boolean) {
+        val league = _state.value.selected ?: return
+        val item = _state.value.fixtures.firstOrNull { it.id == fixtureId } ?: return
+        val home = item.home ?: return
+        val away = item.away ?: return
+        val key = fixtureKey(league.id, item.fixture.date, home, away)
+        val set = if (on) _state.value.postponed + key else _state.value.postponed - key
+        repo.savePostponed(set)
+        _state.update { it.copy(postponed = set) }
+        topCache = null
+        refreshTopPicks()
+        refreshMissing(league)
+    }
+
     fun saveScores(entries: List<ScoreEntry>) {
         val league = _state.value.selected ?: return
         if (entries.isEmpty()) return
+        // a score for a postponed game means it was played: the mark comes off
+        val back = entries.mapNotNull { e ->
+            _state.value.fixtures.firstOrNull { it.id == e.fixtureId }?.let { fx ->
+                if (fx.home != null && fx.away != null) fixtureKey(league.id, fx.fixture.date, fx.home, fx.away) else null
+            }
+        }.filter { it in _state.value.postponed }
+        if (back.isNotEmpty()) {
+            val set = _state.value.postponed - back.toSet()
+            repo.savePostponed(set)
+            _state.update { it.copy(postponed = set) }
+        }
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
                 val marks = _state.value.marks.toMutableMap()

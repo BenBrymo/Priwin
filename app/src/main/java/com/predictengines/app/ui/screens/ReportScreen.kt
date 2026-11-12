@@ -60,8 +60,8 @@ fun ReportScreen(state: AppUiState, onSetWindow: (com.predictengines.app.data.Pe
     // Ticks and reports of a hidden league are left out while it is hidden (they come back when it is shown again).
     val visible = remember(state.leagues) { state.leagues.map { it.id }.toSet() }
     val shownMarks = remember(state.marks, visible) { state.marks.filterValues { it.leagueId in visible } }
-    val weeks = remember(shownMarks, state.fixtures, leagueId) {
-        ReportBuilder.weeks(shownMarks.values, ReportBuilder.pending(state.fixtures, shownMarks, leagueId))
+    val weeks = remember(shownMarks, state.fixtures, leagueId, state.postponed) {
+        ReportBuilder.weeks(shownMarks.values, ReportBuilder.pending(state.fixtures, shownMarks, leagueId, postponed = state.postponed))
     }
 
     val lists = remember(shownMarks, state.listEntries, visible) {

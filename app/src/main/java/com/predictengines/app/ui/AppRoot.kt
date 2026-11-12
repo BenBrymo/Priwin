@@ -111,7 +111,7 @@ fun AppRoot(vm: AppViewModel) {
     val detailOpen = tab == Tab.FIXTURES && state.openFixtureId != null
 
     // Played games with no score, per league. The open league is counted live; the others come from the background load.
-    val missing: Map<String, Int> = remember(state.missingByLeague, state.fixtures, state.scores, state.selected, state.isLoading) {
+    val missing: Map<String, Int> = remember(state.missingByLeague, state.fixtures, state.scores, state.postponed, state.selected, state.isLoading) {
         val m = HashMap(state.missingByLeague)
         val sel = state.selected
         if (sel != null && !state.isLoading) m[sel.id] = com.predictengines.app.ui.screens.missingResults(state).size
@@ -367,7 +367,8 @@ fun AppRoot(vm: AppViewModel) {
                         onRemoveScore = vm::removeScore,
                         onSaveScores = vm::saveScores,
                         scoreHints = vm::scoreHints,
-                        jumpToResults = jumpToResults
+                        jumpToResults = jumpToResults,
+                        onPostpone = vm::setPostponed
                     )
                     Tab.MATCHUP -> MatchupScreen(
                         state = state,

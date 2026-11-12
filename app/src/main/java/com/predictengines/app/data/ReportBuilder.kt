@@ -44,7 +44,8 @@ object ReportBuilder {
         fixtures: List<FixtureItem>,
         marks: Map<String, PredictionRecord>,
         leagueId: String,
-        now: LocalDateTime = LocalDateTime.now()
+        now: LocalDateTime = LocalDateTime.now(),
+        postponed: Set<String> = emptySet()
     ): Map<LocalDate?, Int> {
         val out = HashMap<LocalDate?, Int>()
         for (fx in fixtures) {
@@ -52,6 +53,7 @@ object ReportBuilder {
             val home = fx.home ?: continue
             val away = fx.away ?: continue
             if (!DateUtils.isPlayed(fx.fixture.date, fx.fixture.time, now)) continue
+            if (fixtureKey(leagueId, fx.fixture.date, home, away) in postponed) continue
             val open = summary.consensus.picks.count {
                 PredictionRecord.idOf(leagueId, fx.fixture.date, home, away, "Consensus", it.key) !in marks
             }

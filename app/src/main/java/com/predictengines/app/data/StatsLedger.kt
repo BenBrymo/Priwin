@@ -10,4 +10,8 @@ data class StatDelta(val rowKey: String, val dv: Int, val dg: Int, val tag: Stri
 data class LedgerEntry(val fx: String, val rowKey: String, val dv: Int, val dg: Int, val tag: String)
 
 fun fixtureKey(leagueId: String, date: String, home: String, away: String) = "$leagueId|$date|$home|$away"
+/** True when the user marked this game postponed (and it has no score yet). [set] holds [fixtureKey]s. */
+fun FixtureItem.isPostponed(leagueId: String, set: Set<String>): Boolean =
+    set.isNotEmpty() && home != null && away != null && fixtureKey(leagueId, fixture.date, home, away) in set
+
 fun scoreKey(date: String, home: String, away: String) = "$date|$home|$away"
