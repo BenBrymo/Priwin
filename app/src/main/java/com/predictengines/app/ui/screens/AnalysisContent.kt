@@ -180,6 +180,13 @@ private fun ConsensusCard(analysis: Analysis, leagueId: String) {
     val votes = votes(analysis)
     val consensus = analysis.consensus
     if (votes.isEmpty() && consensus.picks.isEmpty()) return
+    if (com.predictengines.app.data.CaptainPlanet.gameBanned(LocalCaptainBans.current, leagueId, home, away)) {
+        androidx.compose.material3.Text(
+            "Captain Planet dropped this game (a team or league you approved dropping), so it has no consensus pick. Lift it on the Data tab to bring it back.",
+            style = androidx.compose.material3.MaterialTheme.typography.labelMedium, color = com.predictengines.app.ui.theme.DrawAmber
+        )
+        return
+    }
 
     val groups = votes.groupBy({ it.second }, { it.first })
     val leader = groups.entries.maxByOrNull { it.value.size }

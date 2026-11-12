@@ -992,6 +992,14 @@ private fun FixtureCard(
 
         val bans = LocalCaptainBans.current
         val bansLeague = LocalCaptainLeague.current
+        if (com.predictengines.app.data.CaptainPlanet.gameBanned(bans, leagueId, item.home.orEmpty(), item.away.orEmpty())) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "Captain Planet dropped this game (a team or league you approved dropping). Lift it on the Data tab to see its picks again.",
+                style = MaterialTheme.typography.labelMedium, color = DrawAmber
+            )
+            return@AppCard
+        }
         val picks = summary.consensus.picks.filter { !com.predictengines.app.data.CaptainPlanet.isBanned(it.key, it.group, bans, bansLeague) }
         val droppedNames = summary.consensus.picks.filter { com.predictengines.app.data.CaptainPlanet.isBanned(it.key, it.group, bans, bansLeague) }.map { it.label }
         Spacer(Modifier.height(12.dp))

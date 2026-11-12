@@ -434,15 +434,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             post = post - mine.filter { it.substringAfter('|') in known }.toSet()
                         }
                         val fxs = data.fixtures.filter { !it.isPostponed(league.id, post) }
+                        // games of a team or league Captain Planet dropped: no picks, but their picks are still recorded as hidden so a recovery can be spotted
+                        val heldFx = fxs.filter { com.predictengines.app.data.CaptainPlanet.gameBanned(banned, league.id, it.home.orEmpty(), it.away.orEmpty()) }
+                        val live = if (heldFx.isEmpty()) fxs else fxs.filter { it !in heldFx }
+                        if (heldFx.isNotEmpty()) dropped += TopPicksEngine.candidates(league, heldFx)
                         missing[league.id] = countMissing(fxs, data.matches)
                         if (data.matches.isEmpty()) continue
-                        if (banned.isNotEmpty()) dropped += TopPicksEngine.candidates(league, fxs).filter { com.predictengines.app.data.CaptainPlanet.isBanned(it.pick.key, it.pick.group, banned, it.leagueId) }
-                        all += TopPicksEngine.candidates(league, fxs, banned = banned)
-                        hcp += keep(TopPicksEngine.handicapCandidates(league, fxs))
-                        o15 += keep(TopPicksEngine.over15Candidates(league, fxs))
-                        lk += keep(TopPicksEngine.lokiCandidates(league, fxs, data.matches))
-                        cr += keep(TopPicksEngine.cornerCandidates(league, fxs))
-                        tr += TopPicksEngine.trendCandidates(league, fxs).filter { !com.predictengines.app.data.CaptainPlanet.isBanned(it.pick.key, it.pick.group, banned, it.leagueId) }
+                        if (banned.isNotEmpty()) dropped += TopPicksEngine.candidates(league, live).filter { com.predictengines.app.data.CaptainPlanet.isBanned(it.pick.key, it.pick.group, banned, it.leagueId) }
+                        all += TopPicksEngine.candidates(league, live, banned = banned)
+                        hcp += keep(TopPicksEngine.handicapCandidates(league, live))
+                        o15 += keep(TopPicksEngine.over15Candidates(league, live))
+                        lk += keep(TopPicksEngine.lokiCandidates(league, live, data.matches))
+                        cr += keep(TopPicksEngine.cornerCandidates(league, live))
+                        tr += TopPicksEngine.trendCandidates(league, live).filter { !com.predictengines.app.data.CaptainPlanet.isBanned(it.pick.key, it.pick.group, banned, it.leagueId) }
                     } catch (e: Exception) {
                         // one unreadable league must not hide the others
                     }
