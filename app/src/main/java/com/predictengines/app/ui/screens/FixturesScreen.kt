@@ -239,7 +239,8 @@ private fun TopPicksList(
     bySection: Map<String, List<TopPick>>? = null,
     sectionNote: (String) -> String? = { null }
 ) {
-    var folded by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    // every week card starts folded; the keys here are the ones the user has opened
+    var unfolded by rememberSaveable { mutableStateOf(emptySet<String>()) }
     // Cards on the other lists say when their league and market is a strong or cold spot in your data.
     val spotTags = remember(state.trendStrong, state.trendCold, source) {
         if (source == "Trends") emptyMap() else {
@@ -319,7 +320,7 @@ private fun TopPicksList(
         for ((week, list) in groups) {
             if (week in olderWeeks && !showOlder) continue
             val key = "$prefix|${week ?: "none"}"
-            val open = key !in folded
+            val open = key in unfolded
             val title = when {
                 week == null -> "Date TBC"
                 week == thisWeek -> "This week"
@@ -328,7 +329,7 @@ private fun TopPicksList(
             }
             val range = if (week != null) "${week.format(fmt)} - ${week.plusDays(6).format(fmt)}" else ""
             item(key = "wk_$key") {
-                AppCard(onClick = { folded = if (key in folded) folded - key else folded + key }) {
+                AppCard(onClick = { unfolded = if (key in unfolded) unfolded - key else unfolded + key }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(title, style = MaterialTheme.typography.titleMedium, color = TextPrimary)

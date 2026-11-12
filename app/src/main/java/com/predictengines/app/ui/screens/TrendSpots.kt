@@ -34,6 +34,7 @@ import com.predictengines.app.viewmodel.AppUiState
 @Composable
 fun TrendSpots(state: AppUiState) {
     var showCold by rememberSaveable { mutableStateOf(false) }
+    var open by rememberSaveable { mutableStateOf(false) }
     val strong = state.trendStrong
     val cold = state.trendCold
     val upcoming = state.trendPicks.groupingBy { it.leagueId }.eachCount()
@@ -42,8 +43,13 @@ fun TrendSpots(state: AppUiState) {
         subtitle = if (strong.isEmpty())
             "No league or market is Strong in the Report yet (65%+ right, enough settled picks). Settle more picks, or change the Trend settings on the Data tab."
         else "${strong.size} strong places, as the Report judges them \u00b7 the picks below come from these",
-        accentColor = WinGreen
+        accentColor = WinGreen,
+        onClick = { open = !open }
     ) {
+        if (!open) {
+            Text("Tap to open", style = MaterialTheme.typography.labelMedium, color = IndigoPrimary)
+            return@AppCard
+        }
         val bandsOn = strong.filter { it.scope == "band" }.groupBy { it.leagueName.substringBefore(',') }
             .map { (list, rows) -> "$list: " + rows.joinToString(" and ") { it.name } }
         Text(
