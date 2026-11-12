@@ -166,12 +166,57 @@ object Trends {
                     else -> "${s.leagueName} ${s.name} ${s.shortText}"
                 }
             }
-            val made = tp.copy(pick = tp.pick.copy(label = "${tp.pick.label} \u00b7 $why", strength = spots.maxOf { it.score } + 3.0 * (spots.size - 1) + 0.1 * tp.pick.strength))
+            // the place with the most settled picks behind it is the best evidence of how often this kind of pick lands
+            val best = spots.maxByOrNull { it.tally.total }!!
+            val made = tp.copy(pick = tp.pick.copy(
+                label = "${tp.pick.label} \u00b7 $why", strength = spots.maxOf { it.score } + 3.0 * (spots.size - 1) + 0.1 * tp.pick.strength,
+                hit = best.rate, hitSafe = best.score
+            ))
             val id = "${tp.leagueId}|${tp.date}|${tp.home}|${tp.away}|${tp.pick.key}"
             val old = out[id]
             if (old == null || made.pick.strength > old.pick.strength) out[id] = made
         }
         return out.values.toList()
+    }
+
+    /** One leg of the weekly slip: the list it came from and the pick. */
+    data class Leg(val list: String, val pick: TopPick)
+
+    /** [chance] is every leg landing (hit rates multiplied), [cautious] the same with each rate corrected for few picks, [expected] legs likely to land. */
+    data class Slip(val week: LocalDate, val legs: List<Leg>, val chance: Double, val cautious: Double, val expected: Double)
+
+    /**
+     * The week's combined slip: from the first week that still has enough coming Trend picks, the strongest ones, one per game,
+     * taken in turn from each list so the slip is spread across lists. Chances come from your own settled picks, assuming the legs are independent.
+     */
+    fun slip(byList: Map<String, List<TopPick>>, size: Int = 10, minLegs: Int = 3): Slip? {
+        val cands = byList.flatMap { (l, ps) ->
+            ps.filter { it.pick.hit > 0 && !DateUtils.isPlayed(it.date, it.time) }.map { l to it }
+        }
+        fun game(tp: TopPick) = "${tp.leagueId}|${tp.date}|${tp.home}|${tp.away}"
+        val weeks = cands.mapNotNull { ReportBuilder.weekStartOf(it.second.date) }.toSortedSet()
+        val week = weeks.firstOrNull { w -> cands.filter { ReportBuilder.weekStartOf(it.second.date) == w }.map { game(it.second) }.toSet().size >= minLegs }
+            ?: return null
+        val queues = byList.keys.associateWith { l ->
+            ArrayDeque(cands.filter { it.first == l && ReportBuilder.weekStartOf(it.second.date) == week }.map { it.second }
+                .sortedWith(compareByDescending<TopPick> { it.pick.hitSafe }.thenByDescending { it.pick.strength }))
+        }
+        val used = HashSet<String>(); val legs = ArrayList<Leg>()
+        while (legs.size < size && queues.values.any { it.isNotEmpty() }) {
+            for ((l, q) in queues) {
+                while (q.isNotEmpty() && game(q.first()) in used) q.removeFirst()
+                if (q.isEmpty() || legs.size >= size) continue
+                val tp = q.removeFirst(); used += game(tp); legs += Leg(l, tp)
+            }
+        }
+        if (legs.size < minLegs) return null
+        val sorted = legs.sortedBy { DateUtils.sortKey(it.pick.date, it.pick.time) }
+        return Slip(
+            week, sorted,
+            sorted.fold(1.0) { a, l -> a * l.pick.pick.hit / 100.0 } * 100.0,
+            sorted.fold(1.0) { a, l -> a * l.pick.pick.hitSafe / 100.0 } * 100.0,
+            sorted.sumOf { it.pick.pick.hit / 100.0 }
+        )
     }
 
     fun backtest(records: Collection<PredictionRecord>, visible: Set<String>, cfg: Config): Backtest {

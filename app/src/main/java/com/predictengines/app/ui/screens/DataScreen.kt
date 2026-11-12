@@ -93,6 +93,7 @@ fun DataScreen(
     onSetLokiParam: (String, Int) -> Unit,
     onCheckKrypto: () -> Unit,
     onSetTrend: (com.predictengines.app.data.Trends.Config) -> Unit,
+    onSetWindow: (com.predictengines.app.data.PerformanceReport.Window) -> Unit,
     onCaptainDecide: (com.predictengines.app.data.CaptainPlanet.Proposal, Boolean) -> Unit,
     onCaptainLift: (String) -> Unit,
     onSetCaptain: (com.predictengines.app.data.CaptainPlanet.Config) -> Unit,
@@ -313,6 +314,14 @@ fun DataScreen(
             accentColor = IndigoPrimary
         ) {
             LokiSettings(state, onSetLokiOn, onSetLokiParam)
+        }
+
+        AppCard(
+            title = "Results counted",
+            subtitle = "One setting for the Report, Trends and Captain Planet",
+            accentColor = IndigoPrimary
+        ) {
+            ResultsWindowRow(state, onSetWindow)
         }
 
         AppCard(

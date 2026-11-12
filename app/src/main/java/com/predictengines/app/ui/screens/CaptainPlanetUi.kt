@@ -82,10 +82,7 @@ fun CaptainPlanetCard(
                 Text("+", color = IndigoPrimary, style = MaterialTheme.typography.titleLarge)
             }
         }
-        val windows = PerformanceReport.Window.entries
-        TextButton(onClick = { onSet(c.copy(window = windows[(windows.indexOf(c.window) + 1) % windows.size])) }) {
-            Text("Results counted: ${c.window.label} (tap to change)", color = IndigoPrimary)
-        }
+        Text("Results counted: ${c.window.label} (the shared setting above, same as the Report and Trends)", style = MaterialTheme.typography.labelMedium, color = TextMuted)
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Phone notification for a new proposal", style = MaterialTheme.typography.bodyMedium, color = TextPrimary, modifier = Modifier.weight(1f))
             Switch(checked = c.notify, onCheckedChange = { onSet(c.copy(notify = it)) })

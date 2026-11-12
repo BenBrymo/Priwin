@@ -209,7 +209,7 @@ fun FixturesScreen(
                 title = "Trend picks of each week",
                 subtitle = "each week split by list (Top 20, Handicap, Over 1.5, Loki, Corners): the models' own picks in the markets, confidence bands and leagues that list's Report calls Strong · best 20 per list per week · tap a card to open the analysis",
                 emptyText = "Nothing the models picked for upcoming games is in a Strong league or market yet. Strong needs 65%+ right over enough settled picks in the Report.",
-                header = { TrendSpots(state) },
+                header = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { TrendSpots(state); SlipCard(state) } },
                 bySection = state.trendByList,
                 sectionNote = { name ->
                     val rows = state.trendStrong.filter { it.isGlobal && it.leagueName.substringBefore(',') == name }

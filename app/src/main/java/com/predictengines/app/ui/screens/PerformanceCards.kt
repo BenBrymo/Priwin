@@ -92,10 +92,14 @@ private fun FoldCard(
  * leagues, and the Kryptonite effect. All follow the same time window and list chosen on the first card.
  */
 @Composable
-fun PerformanceCards(state: AppUiState, shownMarks: Map<String, PredictionRecord>, visible: Set<String>) {
-    var windowIdx by rememberSaveable { mutableIntStateOf(0) }
+fun PerformanceCards(
+    state: AppUiState, shownMarks: Map<String, PredictionRecord>, visible: Set<String>,
+    onSetWindow: (PerformanceReport.Window) -> Unit = {}
+) {
     var sourceIdx by rememberSaveable { mutableIntStateOf(0) }
     val windows = PerformanceReport.Window.entries
+    // the window is the one shared setting (also used by Trends and Captain Planet)
+    val windowIdx = windows.indexOf(state.trendConfig.window).coerceAtLeast(0)
     val sources = PerformanceReport.LISTS + PerformanceReport.ALL_LISTS
     val window = windows[windowIdx]
 
@@ -130,7 +134,7 @@ fun PerformanceCards(state: AppUiState, shownMarks: Map<String, PredictionRecord
         IndigoPrimary, startOpen = true
     ) {
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            windows.forEachIndexed { i, w -> PillChip(w.label, selected = i == windowIdx, onClick = { windowIdx = i }) }
+            windows.forEachIndexed { i, w -> PillChip(w.label, selected = i == windowIdx, onClick = { onSetWindow(w) }) }
         }
         Spacer(Modifier.height(8.dp))
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

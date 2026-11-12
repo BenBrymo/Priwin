@@ -15,7 +15,10 @@ data class ConsensusPick(
     val against: List<String>,
     val abstain: List<String>,
     val modelCount: Int,
-    val strength: Double
+    val strength: Double,
+    /** Trend picks: how often the strongest place behind the pick has hit (0-100, 0 = unknown), and that rate corrected for few picks. */
+    val hit: Double = 0.0,
+    val hitSafe: Double = 0.0
 ) {
     val averageConfidence: Double get() = backers.map { it.confidence }.average()
     val isSingleModel: Boolean get() = backers.size == 1

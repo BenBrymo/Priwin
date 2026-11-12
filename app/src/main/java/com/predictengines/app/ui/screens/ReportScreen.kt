@@ -55,7 +55,7 @@ import com.predictengines.app.viewmodel.AppUiState
 
 /** Weekly (Monday to Sunday) summary of the predictions the user ticked or crossed. */
 @Composable
-fun ReportScreen(state: AppUiState) {
+fun ReportScreen(state: AppUiState, onSetWindow: (com.predictengines.app.data.PerformanceReport.Window) -> Unit = {}) {
     val leagueId = state.selected?.id.orEmpty()
     // Ticks and reports of a hidden league are left out while it is hidden (they come back when it is shown again).
     val visible = remember(state.leagues) { state.leagues.map { it.id }.toSet() }
@@ -89,7 +89,7 @@ fun ReportScreen(state: AppUiState) {
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item(key = "performance") { PerformanceCards(state, shownMarks, visible) }
+        item(key = "performance") { PerformanceCards(state, shownMarks, visible, onSetWindow) }
         items(lists, key = { "list_${it.first}" }) { (src, listWeeks) -> ListReportCard(src, listWeeks) }
         items(weeks, key = { it.weekStart?.toString() ?: "no_date" }) { week -> WeekCard(week) }
     }

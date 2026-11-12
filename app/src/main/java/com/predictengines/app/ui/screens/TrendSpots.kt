@@ -1,5 +1,6 @@
 package com.predictengines.app.ui.screens
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -132,10 +133,7 @@ fun TrendSettings(state: AppUiState, onSet: (Trends.Config) -> Unit) {
             }
             Switch(checked = c.bandGate, onCheckedChange = { onSet(c.copy(bandGate = it)) })
         }
-        val windows = PerformanceReport.Window.entries
-        TextButton(onClick = { onSet(c.copy(window = windows[(windows.indexOf(c.window) + 1) % windows.size])) }) {
-            Text("Results counted: ${c.window.label} (tap to change)", color = IndigoPrimary)
-        }
+        Text("Results counted: ${c.window.label} (the shared setting above)", style = MaterialTheme.typography.labelMedium, color = TextMuted)
         Stepper("Fewest models behind a pick", c.minBackers, 1, 1, 3) { onSet(c.copy(minBackers = it)) }
         Stepper("Lowest average confidence %", c.minConfidence, 5, 50, 90) { onSet(c.copy(minConfidence = it)) }
         Text(
@@ -153,5 +151,21 @@ fun TrendSettings(state: AppUiState, onSet: (Trends.Config) -> Unit) {
                 style = MaterialTheme.typography.labelSmall, color = TextMuted
             )
         }
+    }
+}
+
+/** The one "Results counted" window the Report, Trends and Captain Planet all use. */
+@Composable
+fun ResultsWindowRow(state: AppUiState, onSet: (PerformanceReport.Window) -> Unit) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PerformanceReport.Window.entries.forEach { w ->
+                com.predictengines.app.ui.components.PillChip(w.label, selected = w == state.trendConfig.window, onClick = { onSet(w) })
+            }
+        }
+        Text(
+            "Used by the Report, the Trends tab and Captain Planet, so they always judge the same results. Changing it on the Report changes it here too.",
+            style = MaterialTheme.typography.bodySmall, color = TextMuted, modifier = Modifier.padding(top = 6.dp)
+        )
     }
 }

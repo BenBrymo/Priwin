@@ -101,12 +101,12 @@ class LeagueRepository(context: Context) {
 
     fun loadCaptainConfig(): CaptainPlanet.Config = CaptainPlanet.Config(
         minPicks = prefs.getString("cp_min", null)?.toIntOrNull()?.coerceIn(5, 60) ?: PerformanceReport.MIN_MARKET,
-        window = PerformanceReport.Window.entries.firstOrNull { it.name == prefs.getString("cp_window", "") } ?: PerformanceReport.Window.ALL,
+        window = loadWindow(),
         notify = prefs.getString("cp_notify", "1") != "0"
     )
 
     fun saveCaptainConfig(c: CaptainPlanet.Config) {
-        prefs.edit().putString("cp_min", c.minPicks.toString()).putString("cp_window", c.window.name)
+        prefs.edit().putString("cp_min", c.minPicks.toString())
             .putString("cp_notify", if (c.notify) "1" else "0").apply()
     }
 
@@ -175,9 +175,17 @@ class LeagueRepository(context: Context) {
 
     // ---- Loki switches ---------------------------------------------------------------------
 
+    /** The one "Results counted" window shared by the Report, Trends and Captain Planet (older installs start from the Trends choice). */
+    fun loadWindow(): PerformanceReport.Window {
+        val saved = prefs.getString("results_window", null) ?: prefs.getString("trend_window", "")
+        return PerformanceReport.Window.entries.firstOrNull { it.name == saved } ?: PerformanceReport.Window.ALL
+    }
+
+    fun saveWindow(w: PerformanceReport.Window) { prefs.edit().putString("results_window", w.name).apply() }
+
     /** Trends: which results count, how much model support a Trend pick needs, and whether strong leagues count too. */
     fun loadTrendConfig(): Trends.Config = Trends.Config(
-        window = PerformanceReport.Window.entries.firstOrNull { it.name == prefs.getString("trend_window", "") } ?: PerformanceReport.Window.ALL,
+        window = loadWindow(),
         minBackers = prefs.getString("trend_backers", null)?.toIntOrNull()?.coerceIn(1, 3) ?: 1,
         minConfidence = prefs.getString("trend_conf", null)?.toIntOrNull()?.coerceIn(50, 90) ?: 60,
         leagueSpots = prefs.getString("trend_leagues", "1") != "0",
@@ -186,7 +194,6 @@ class LeagueRepository(context: Context) {
 
     fun saveTrendConfig(c: Trends.Config) {
         prefs.edit()
-            .putString("trend_window", c.window.name)
             .putString("trend_backers", c.minBackers.toString()).putString("trend_conf", c.minConfidence.toString())
             .putString("trend_leagues", if (c.leagueSpots) "1" else "0")
             .putString("trend_band", if (c.bandGate) "1" else "0")

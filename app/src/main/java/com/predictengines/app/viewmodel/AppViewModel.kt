@@ -1203,6 +1203,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         checkCaptain()
     }
 
+    /** The one "Results counted" window: the Report, Trends and Captain Planet all follow it. */
+    fun setWindow(w: com.predictengines.app.data.PerformanceReport.Window) {
+        repo.saveWindow(w)
+        _state.update { it.copy(trendConfig = repo.loadTrendConfig(), cpConfig = repo.loadCaptainConfig()) }
+        refreshTopPicks()
+        checkCaptain()
+    }
+
     /** Trends: which results count and how much model support a Trend pick needs. */
     fun setTrend(config: com.predictengines.app.data.Trends.Config) {
         repo.saveTrendConfig(config)

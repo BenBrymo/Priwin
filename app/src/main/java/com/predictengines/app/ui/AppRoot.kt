@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.SportsSoccer
 import androidx.compose.material.icons.filled.Edit
@@ -81,6 +82,7 @@ import com.predictengines.app.ui.theme.TextSecondary
 import com.predictengines.app.viewmodel.AppViewModel
 
 private enum class Tab(val label: String, val icon: ImageVector) {
+    HOME("Home", Icons.Filled.Home),
     FIXTURES("Fixtures", Icons.Filled.SportsSoccer),
     MATCHUP("Matchup", Icons.Filled.Insights),
     REPORTS("Reports", Icons.Filled.Assessment),
@@ -347,6 +349,12 @@ fun AppRoot(vm: AppViewModel) {
 
             Box(modifier = Modifier.fillMaxSize()) {
                 when (tab) {
+                    Tab.HOME -> com.predictengines.app.ui.screens.HomeScreen(
+                        state = state,
+                        onOpenPick = { vm.openTopPick(it); tabIndex = Tab.FIXTURES.ordinal },
+                        onGoToTrends = { tabIndex = Tab.FIXTURES.ordinal },
+                        onGoToData = { tabIndex = Tab.DATA.ordinal }
+                    )
                     Tab.FIXTURES -> FixturesScreen(
                         state = state,
                         onOpen = vm::openFixture,
@@ -369,7 +377,7 @@ fun AppRoot(vm: AppViewModel) {
                         onRun = vm::runManual,
                         onLink = vm::linkNames
                     )
-                    Tab.REPORTS -> ReportScreen(state)
+                    Tab.REPORTS -> ReportScreen(state, onSetWindow = vm::setWindow)
                     Tab.PLAYERS -> PlayersScreen(state, onSave = vm::savePlayer, onDelete = vm::deletePlayer, onSaveNews = vm::saveNews, onDeleteNews = vm::deleteNews)
                     Tab.STATS -> StatsEditorScreen(
                         state = state,
@@ -396,6 +404,7 @@ fun AppRoot(vm: AppViewModel) {
                         onSetLokiParam = vm::setLokiParam,
                         onCheckKrypto = vm::checkKryptonites,
                         onSetTrend = vm::setTrend,
+                        onSetWindow = vm::setWindow,
                         onCaptainDecide = vm::captainDecide,
                         onCaptainLift = vm::captainLift,
                         onSetCaptain = vm::setCaptainConfig,
