@@ -95,8 +95,18 @@ fun PlayersScreen(
     onSave: (KeyPlayer, Uri?) -> Unit,
     onDelete: (String) -> Unit,
     onSaveNews: (TeamNews) -> Unit,
-    onDeleteNews: (String) -> Unit
+    onDeleteNews: (String) -> Unit,
+    onImportCsv: (Uri) -> Unit = {},
+    onExportCsv: (Uri) -> Unit = {},
+    onConfirmImport: (Boolean) -> Unit = {},
+    onCancelImport: () -> Unit = {}
 ) {
+    val importPicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) onImportCsv(uri)
+    }
+    val exporter = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/csv")) { uri: Uri? ->
+        if (uri != null) onExportCsv(uri)
+    }
     val league = state.selected
     var newsEditing by remember { mutableStateOf<TeamNews?>(null) }
     var newsAdding by remember { mutableStateOf(false) }
@@ -120,6 +130,30 @@ fun PlayersScreen(
     val mine = state.players.filter { it.leagueId == league.id }
     val team = openTeam
 
+    state.playersPreview?.let { pv ->
+        AlertDialog(
+            onDismissRequest = onCancelImport,
+            title = { Text("Import key players") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("${pv.rows} players in ${pv.teams} ${if (pv.teams == 1) "team" else "teams"} found: ${pv.added} new, ${pv.updated} to update.")
+                    if (pv.removedIfReplace > 0) Text("\"Replace\" would also remove ${pv.removedIfReplace} saved players of those teams that are not in the file.", color = DrawAmber)
+                    if (pv.unmatchedTeams.isNotEmpty()) Text("Teams not found (skipped): " + pv.unmatchedTeams.take(8).joinToString() + if (pv.unmatchedTeams.size > 8) " and ${pv.unmatchedTeams.size - 8} more" else "", color = LossRed)
+                    if (pv.unknownLeagues.isNotEmpty()) Text("Leagues not found (skipped): " + pv.unknownLeagues.joinToString(), color = LossRed)
+                    if (pv.skipped > 0) Text("${pv.skipped} rows had no team or player and were skipped.", color = TextMuted)
+                    Text("Photos are kept. Nothing is saved until you choose.", color = TextMuted)
+                }
+            },
+            confirmButton = {
+                Column {
+                    TextButton(onClick = { onConfirmImport(false) }, enabled = pv.rows > 0) { Text("Add and update") }
+                    TextButton(onClick = { onConfirmImport(true) }, enabled = pv.rows > 0) { Text("Replace these teams' lists", color = DrawAmber) }
+                }
+            },
+            dismissButton = { TextButton(onClick = onCancelImport) { Text("Cancel") } }
+        )
+    }
+
     if (team == null) {
         LazyColumn(
             contentPadding = PaddingValues(16.dp),
@@ -127,6 +161,17 @@ fun PlayersScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             item {
+                AppCard(
+                    title = "Key players CSV",
+                    subtitle = "Columns: league, team, player, position, status, return_date (only team and player are needed). Import updates and adds players; you can choose to replace a team's list.",
+                    accentColor = IndigoPrimary
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SecondaryButton(text = "Import CSV", onClick = { importPicker.launch(arrayOf("*/*")) })
+                        SecondaryButton(text = "Export CSV", onClick = { exporter.launch("key_players.csv") })
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
                 Text("Key players · ${league.name}", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
                 Text(
                     "Pick a team and add the players that matter most. When one is injured, suspended or doubtful, that team's fixtures get a Kryptonite warning.",

@@ -388,6 +388,9 @@ object CsvParser {
     private fun indexOfAny(header: List<String>, keys: Set<String>): Int =
         header.indexOfFirst { it in keys }
 
+    /** The file as rows of cells (delimiter, quotes and BOM handled), for readers outside this object. */
+    fun table(text: String): List<List<String>> = readTable(text)
+
     private fun readTable(text: String): List<List<String>> {
         val clean = text.removePrefix("\uFEFF")
         val lines = clean.lineSequence()

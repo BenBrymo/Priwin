@@ -522,6 +522,9 @@ class LeagueRepository(context: Context) {
     // ---- importing from phone storage ------------------------------------------------------
 
     /** Reads a picked file as text (UTF-8, falling back to Latin-1), or returns an error message. */
+    /** A picked file as text, or an error message (for the key players CSV). */
+    fun readPickedText(uri: Uri): Pair<String?, String?> = readImportText(uri)
+
     private fun readImportText(uri: Uri): Pair<String?, String?> {
         val bytes: ByteArray? = try {
             appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }

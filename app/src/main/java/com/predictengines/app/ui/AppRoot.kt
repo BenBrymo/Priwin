@@ -379,7 +379,11 @@ fun AppRoot(vm: AppViewModel) {
                         onLink = vm::linkNames
                     )
                     Tab.REPORTS -> ReportScreen(state, onSetWindow = vm::setWindow)
-                    Tab.PLAYERS -> PlayersScreen(state, onSave = vm::savePlayer, onDelete = vm::deletePlayer, onSaveNews = vm::saveNews, onDeleteNews = vm::deleteNews)
+                    Tab.PLAYERS -> PlayersScreen(
+                        state, onSave = vm::savePlayer, onDelete = vm::deletePlayer, onSaveNews = vm::saveNews, onDeleteNews = vm::deleteNews,
+                        onImportCsv = vm::previewPlayersCsv, onExportCsv = vm::exportPlayers,
+                        onConfirmImport = vm::confirmPlayersImport, onCancelImport = vm::cancelPlayersImport
+                    )
                     Tab.STATS -> StatsEditorScreen(
                         state = state,
                         onRepair = vm::repairStatsChanges,

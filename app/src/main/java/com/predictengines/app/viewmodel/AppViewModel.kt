@@ -141,6 +141,8 @@ data class AppUiState(
     val cpProposals: List<com.predictengines.app.data.CaptainPlanet.Proposal> = emptyList(),
     /** Games marked postponed (fixture keys). They leave every list and are not waiting for a result. */
     val postponed: Set<String> = emptySet(),
+    /** A key players CSV that was read and is waiting for you to confirm (add and update, or replace the teams in it). */
+    val playersPreview: com.predictengines.app.data.PlayersCsv.Preview? = null,
     val cpConfig: com.predictengines.app.data.CaptainPlanet.Config = com.predictengines.app.data.CaptainPlanet.Config(),
     val lokiConfig: com.predictengines.app.data.LokiConfig = com.predictengines.app.data.LokiConfig(),
 
@@ -1119,6 +1121,71 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             postMessage("Saved ${player.name}")
         }
     }
+
+    private var pendingPlayerRows: List<com.predictengines.app.data.PlayersCsv.Resolved> = emptyList()
+
+    /** Reads a key players CSV, matches its leagues and teams to the app's names and shows what an import would do. Nothing is saved yet. */
+    fun previewPlayersCsv(uri: Uri) {
+        viewModelScope.launch {
+            val preview = withContext(Dispatchers.IO) {
+                val (text, err) = repo.readPickedText(uri)
+                if (text == null) { postMessage(err ?: "Couldn't read that file"); return@withContext null }
+                val parsed = com.predictengines.app.data.PlayersCsv.parse(text)
+                if (parsed.error != null) { postMessage(parsed.error); return@withContext null }
+                val leagues = _state.value.leagues
+                val open = _state.value.selected
+                fun norm(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
+                val teamCache = HashMap<String, List<String>>()
+                fun teamsOf(l: League): List<String> = teamCache.getOrPut(l.id) {
+                    if (l.id == open?.id && _state.value.teams.isNotEmpty()) _state.value.teams
+                    else repo.loadMatches(l).flatMap { listOf(it.homeTeam, it.awayTeam) }.distinct().sorted()
+                }
+                val resolved = ArrayList<com.predictengines.app.data.PlayersCsv.Resolved>()
+                val unmatched = LinkedHashSet<String>(); val unknown = LinkedHashSet<String>()
+                for (r in parsed.rows) {
+                    val league = if (r.league.isBlank()) open else leagues.firstOrNull { norm(it.id) == norm(r.league) || norm(it.name) == norm(r.league) }
+                    if (league == null) { unknown += r.league.ifBlank { "(no league open)" }; continue }
+                    val team = TeamMatcher.resolve(r.team, teamsOf(league))
+                    if (team == null) { unmatched += "${r.team} (${league.name})"; continue }
+                    resolved += com.predictengines.app.data.PlayersCsv.Resolved(league.id, team, r.player, r.position, r.status, r.returnDate)
+                }
+                pendingPlayerRows = resolved
+                val keep = com.predictengines.app.data.PlayersCsv.merge(savedPlayers.players, resolved, false)
+                val repl = com.predictengines.app.data.PlayersCsv.merge(savedPlayers.players, resolved, true)
+                com.predictengines.app.data.PlayersCsv.Preview(
+                    resolved.size, resolved.map { it.leagueId to it.team }.distinct().size, keep.added, keep.updated, repl.removed.size,
+                    unmatched.toList(), unknown.toList(), parsed.skipped
+                )
+            }
+            if (preview != null) _state.update { it.copy(playersPreview = preview) }
+        }
+    }
+
+    fun cancelPlayersImport() {
+        pendingPlayerRows = emptyList()
+        _state.update { it.copy(playersPreview = null) }
+    }
+
+    /** Saves the CSV that was previewed: new players added, existing ones updated, and with [replace] the other players of the teams in the file removed. */
+    fun confirmPlayersImport(replace: Boolean) {
+        val rows = pendingPlayerRows
+        _state.update { it.copy(playersPreview = null) }
+        pendingPlayerRows = emptyList()
+        if (rows.isEmpty()) return
+        viewModelScope.launch {
+            val m = withContext(Dispatchers.IO) {
+                val m = com.predictengines.app.data.PlayersCsv.merge(savedPlayers.players, rows, replace)
+                m.removed.forEach { playersStore.deletePhoto(it.id) }
+                persistPlayers(savedPlayers.copy(players = m.players))
+                m
+            }
+            afterPlayersChanged()
+            postMessage("Key players: ${m.added} added, ${m.updated} updated" + if (m.removed.isNotEmpty()) ", ${m.removed.size} removed" else "")
+        }
+    }
+
+    /** Writes every key player (all leagues) to a CSV the import reads back. */
+    fun exportPlayers(uri: Uri) = export(uri) { com.predictengines.app.data.PlayersCsv.export(savedPlayers.players) }
 
     fun deletePlayer(id: String) {
         viewModelScope.launch {
