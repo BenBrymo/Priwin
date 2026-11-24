@@ -141,6 +141,9 @@ data class AppUiState(
     val cpProposals: List<com.predictengines.app.data.CaptainPlanet.Proposal> = emptyList(),
     /** Games marked postponed (fixture keys). They leave every list and are not waiting for a result. */
     val postponed: Set<String> = emptySet(),
+    /** Priwin Picks: a data pack check is running, and when the installed pack was made (0 = built-in data only). */
+    val packChecking: Boolean = false,
+    val packAt: Long = 0L,
     /** A key players CSV that was read and is waiting for you to confirm (add and update, or replace the teams in it). */
     val playersPreview: com.predictengines.app.data.PlayersCsv.Preview? = null,
     val cpConfig: com.predictengines.app.data.CaptainPlanet.Config = com.predictengines.app.data.CaptainPlanet.Config(),
@@ -188,6 +191,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val repo = LeagueRepository(application)
     private val disk = LeagueDiskCache(application)
     private val backup = BackupManager(application)
+    private val packUpdater = com.predictengines.app.data.PackUpdater(application, backup)
     private val extrasStore = ResultExtrasStore(application)
     private val listPicks = ListPicksStore(application)
     private val playersStore = PlayersStore(application)
@@ -277,7 +281,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // The user's name links must be in place before any file is read, so every file sees the same names.
         val links = linksStore.load()
         TeamMatcher.setUserLinks(links.map { it.a to it.b })
-        _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, news = savedPlayers.news, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), lokiConfig = repo.loadLokiConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList(), cpBans = repo.captainBans(), cpConfig = repo.loadCaptainConfig(), postponed = repo.postponed()) }
+        _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, news = savedPlayers.news, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), lokiConfig = repo.loadLokiConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = results.load(), nameLinks = links, extras = extrasStore.loadExtras(), autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList(), cpBans = repo.captainBans(), cpConfig = repo.loadCaptainConfig(), postponed = repo.postponed(), packAt = backup.packTime()) }
         // the last known counts show at once; they are refreshed straight away, without scoring anything
         _state.update { it.copy(missingByLeague = repo.loadMissingCounts().filterKeys { id -> leagues.any { l -> l.id == id } }) }
         val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
@@ -1644,6 +1648,42 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Re-reads everything a restore (or a data pack) replaced, then reopens the last league. */
+    private suspend fun reloadAfterRestore() {
+                    val links = withContext(Dispatchers.IO) { linksStore.load() }
+                    TeamMatcher.setUserLinks(links.map { it.a to it.b })
+                    val leagues = repo.leagues()
+                    val marks = withContext(Dispatchers.IO) { results.load() }
+                    val extras = withContext(Dispatchers.IO) { extrasStore.loadExtras() }
+                    savedPlayers = withContext(Dispatchers.IO) { playersStore.load() }
+                    invalidateCache()
+                    _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, news = savedPlayers.news, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), lokiConfig = repo.loadLokiConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = marks, nameLinks = links, extras = extras, autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList(), cpBans = repo.captainBans(), cpConfig = repo.loadCaptainConfig(), trendConfig = repo.loadTrendConfig(), postponed = repo.postponed(), packAt = backup.packTime()) }
+                    val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
+                    selectLeague(start.id)
+    }
+
+    /** Priwin Picks: checks the data pack link and installs a newer pack. [force] downloads even if nothing seems to have changed. */
+    fun updatePack(force: Boolean = false) {
+        if (_state.value.packChecking) return
+        viewModelScope.launch {
+            _state.update { it.copy(packChecking = true) }
+            // first launch: the pack bundled with the app, then the newest one online
+            if (withContext(Dispatchers.IO) { packUpdater.installStarter() }) reloadAfterRestore()
+            val r = withContext(Dispatchers.IO) { packUpdater.update(com.predictengines.app.BuildConfig.PACK_URL, force) }
+            when (r) {
+                is com.predictengines.app.data.PackUpdater.Result.Updated -> {
+                    reloadAfterRestore()
+                    postMessage("Picks updated")
+                }
+                is com.predictengines.app.data.PackUpdater.Result.UpToDate -> if (force) postMessage("You already have the latest data")
+                is com.predictengines.app.data.PackUpdater.Result.NoSource -> if (force) postMessage("No data link is set in this build")
+                is com.predictengines.app.data.PackUpdater.Result.Failed -> postMessage(r.message)
+                is com.predictengines.app.data.PackUpdater.Result.Skipped -> {}
+            }
+            _state.update { it.copy(packChecking = false, packAt = backup.packTime()) }
+        }
+    }
+
     fun restoreFrom(uri: Uri) {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
@@ -1657,17 +1697,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             when (result) {
                 is BackupManager.Restored.Failed -> postMessage(result.message)
                 is BackupManager.Restored.Ok -> {
-                    // re-read everything the backup replaced
-                    val links = withContext(Dispatchers.IO) { linksStore.load() }
-                    TeamMatcher.setUserLinks(links.map { it.a to it.b })
-                    val leagues = repo.leagues()
-                    val marks = withContext(Dispatchers.IO) { results.load() }
-                    val extras = withContext(Dispatchers.IO) { extrasStore.loadExtras() }
-                    savedPlayers = withContext(Dispatchers.IO) { playersStore.load() }
-                    invalidateCache()
-                    _state.update { it.copy(players = savedPlayers.players, answeredReds = savedPlayers.answered, news = savedPlayers.news, leagues = leagues, kryptoModes = repo.kryptoModes(), kryptoConfig = repo.loadKryptoConfig(), lokiConfig = repo.loadLokiConfig(), hiddenLeagues = repo.hiddenLeagues(), duplicateLeagues = repo.duplicateLeagues(), marks = marks, nameLinks = links, extras = extras, autoSettleFrom = repo.autoSettleFrom(), listEntries = listPicks.load().values.toList(), cpBans = repo.captainBans(), cpConfig = repo.loadCaptainConfig()) }
-                    val start = leagues.firstOrNull { it.id == repo.lastLeagueId() } ?: leagues.first()
-                    selectLeague(start.id)
+                    reloadAfterRestore()
                     postMessage("Backup restored (${result.files} files)")
                 }
             }

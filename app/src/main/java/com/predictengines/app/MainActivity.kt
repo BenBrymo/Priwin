@@ -26,7 +26,7 @@ class MainActivity : ComponentActivity() {
         com.predictengines.app.reminders.ReminderScheduler.sync(this)
         setContent {
             PredictEnginesTheme {
-                AppRoot(viewModel)
+                if (BuildConfig.LITE) com.predictengines.app.ui.lite.LiteRoot(viewModel) else AppRoot(viewModel)
             }
         }
     }

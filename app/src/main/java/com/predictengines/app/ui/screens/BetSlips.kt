@@ -100,7 +100,8 @@ private fun BetSlipCard(slip: Slips.Slip, source: String, state: AppUiState, onO
                 style = MaterialTheme.typography.labelMedium, color = TextPrimary
             )
             Text(
-                "Each % is how often that kind of pick has landed in your Report; they are multiplied as if the games do not affect each other. One pick per game. Tap a pick for its analysis.",
+                (if (com.predictengines.app.BuildConfig.LITE) "Each % is how often that kind of pick has landed in our record; they are multiplied as if the games do not affect each other. One pick per game. Tap a pick for its analysis."
+                else "Each % is how often that kind of pick has landed in your Report; they are multiplied as if the games do not affect each other. One pick per game. Tap a pick for its analysis."),
                 style = MaterialTheme.typography.labelSmall, color = TextMuted
             )
         }

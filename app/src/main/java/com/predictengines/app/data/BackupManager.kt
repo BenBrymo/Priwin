@@ -26,6 +26,9 @@ class BackupManager(context: Context) {
         data class Failed(val message: String) : Restored()
     }
 
+    /** When the backup or data pack that was last restored was made (0 if none). */
+    fun packTime(): Long = prefs.getLong("backup_at", 0L)
+
     /** Writes the backup zip to [out]; returns how many files it holds. */
     fun write(out: OutputStream): Int {
         var count = 0
@@ -104,6 +107,8 @@ class BackupManager(context: Context) {
                 for (k in p.keys()) if (k == KEY_CUSTOM || (k.startsWith("krypto_") || (k.startsWith("loki_") || k.startsWith("trend_") || k.startsWith("cp_") || k.startsWith("results_") || k.startsWith("post_"))) || k == KEY_HIDDEN || k == KEY_LAST || k == KEY_AUTO || k.startsWith("info_")) edit.putString(k, p.getString(k))
                 edit.commit()
             }
+            // when this pack was made (shown as "data updated" in Priwin Picks)
+            try { prefs.edit().putLong("backup_at", JSONObject(String(entries.getValue(MARKER))).optLong("at")).commit() } catch (e: Exception) { }
             return Restored.Ok(count)
         } catch (ex: Exception) {
             return Restored.Failed("Couldn't restore the backup: ${ex.message}")

@@ -142,8 +142,9 @@ fun FixturesScreen(
         FixtureDetail(state, onClose, onMark, onLink)
         return
     }
+    val lite = com.predictengines.app.BuildConfig.LITE
     Column(modifier = Modifier.fillMaxSize()) {
-        ScrollableTabRow(
+        if (!lite) ScrollableTabRow(
             selectedTabIndex = section, containerColor = Color.Transparent, contentColor = IndigoPrimary,
             edgePadding = 8.dp
         ) {
@@ -699,8 +700,8 @@ private fun LeagueFixtures(
             FixtureCard(
                 fx, state.marks, leagueId, showMarks = marksOn, onMark = onMark,
                 onLinkName = { linking = it }, onClick = { onOpen(fx.id) }, modifier = mod,
-                score = state.scores[sk], scoreEditable = sk in state.addedScoreKeys, onScore = { scoring = fx },
-                postponeLabel = if (fx.home != null && fx.away != null && state.scores[sk] == null) "Mark postponed" else null,
+                score = state.scores[sk], scoreEditable = sk in state.addedScoreKeys && !com.predictengines.app.BuildConfig.LITE, onScore = { scoring = fx },
+                postponeLabel = if (!com.predictengines.app.BuildConfig.LITE && fx.home != null && fx.away != null && state.scores[sk] == null) "Mark postponed" else null,
                 onPostpone = { onPostpone(fx.id, true) }
             )
         }

@@ -344,7 +344,7 @@ fun DataScreen(
 
         AppCard(
             title = "Backup & restore",
-            subtitle = "Ticks and reports, name links, added scores, stats edits and loaded files in one file. Make one before uninstalling or changing phone.",
+            subtitle = "Ticks and reports, name links, added scores, stats edits and loaded files in one file. Make one before uninstalling or changing phone. \"Publish data pack\" makes the same file for Priwin Picks: upload it to the pack link the Priwin Picks app reads.",
             accentColor = WinGreen
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -365,6 +365,12 @@ fun DataScreen(
                     modifier = Modifier.weight(1f)
                 )
             }
+            SecondaryButton(
+                text = "Publish data pack (for Priwin Picks)",
+                onClick = { backupMaker.launch("pack.zip") },
+                icon = Icons.Filled.Download,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
 
         AppCard(
