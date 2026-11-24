@@ -19,19 +19,30 @@ jobs:
         with:
           gradle-version: 8.7
 
-      - name: Build debug APK
-        run: gradle assembleDebug --stacktrace
+      # Two apps from one project: Priwin (pro) and Priwin Picks (lite, for normal bettors).
+      - name: Build debug APKs
+        run: gradle assembleProDebug assembleLiteDebug --stacktrace
 
       - uses: actions/upload-artifact@v4
         with:
           name: Priwin-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/pro/debug/app-pro-debug.apk
 
-      # Release build: optimised and much smoother than debug. Signed with the same key, so it installs over the debug app.
-      - name: Build release APK
-        run: gradle assembleRelease --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PriwinPicks-debug-apk
+          path: app/build/outputs/apk/lite/debug/app-lite-debug.apk
+
+      # Release builds: optimised and much smoother than debug. Signed with the same key, so they install over the debug apps.
+      - name: Build release APKs
+        run: gradle assembleProRelease assembleLiteRelease --stacktrace
 
       - uses: actions/upload-artifact@v4
         with:
           name: Priwin-release-apk
-          path: app/build/outputs/apk/release/app-release.apk
+          path: app/build/outputs/apk/pro/release/app-pro-release.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PriwinPicks-release-apk
+          path: app/build/outputs/apk/lite/release/app-lite-release.apk
