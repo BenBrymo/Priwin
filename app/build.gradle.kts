@@ -12,8 +12,8 @@ android {
         applicationId = "com.predictengines.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 85
-        versionName = "12.0"
+        versionCode = 87
+        versionName = "12.2"
 
         // Priwin (pro) is the power-user app; the lite flavor is "Priwin Picks" for normal bettors.
         buildConfigField("boolean", "LITE", "false")
@@ -76,7 +76,7 @@ android {
             buildConfigField("boolean", "LITE", "true")
             // The https link of the data pack (the zip made by "Publish data pack" in Priwin). Put it between the quotes.
             // Hosts that send an ETag (GitHub Pages, raw.githubusercontent.com) let the app skip downloads when nothing changed.
-            buildConfigField("String", "PACK_URL", "\"https://raw.githubusercontent.com/BenBrymo/priwin-picks-data/refs/heads/main/pack24thNOV2026.zip\"")
+            buildConfigField("String", "PACK_URL", "\"https://raw.githubusercontent.com/BenBrymo/priwin-picks-data/refs/heads/main/pack.zip\"")
         }
     }
 
