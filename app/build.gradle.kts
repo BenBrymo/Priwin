@@ -76,7 +76,7 @@ android {
             buildConfigField("boolean", "LITE", "true")
             // The https link of the data pack (the zip made by "Publish data pack" in Priwin). Put it between the quotes.
             // Hosts that send an ETag (GitHub Pages, raw.githubusercontent.com) let the app skip downloads when nothing changed.
-            buildConfigField("String", "PACK_URL", "\"\"")
+            buildConfigField("String", "PACK_URL", "\"https://raw.githubusercontent.com/BenBrymo/priwin-picks-data/refs/heads/main/pack24thNOV2026.zip\"")
         }
     }
 
